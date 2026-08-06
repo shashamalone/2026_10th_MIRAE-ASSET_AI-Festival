@@ -29,6 +29,8 @@ feature/*, fix/*  →  dev  →  main
 ## 3. 커밋 메시지
 
 `타입: 설명` (한국어), 타입은 `feat`·`fix`·`docs`·`chore`·`refactor`·`test` 중 하나.
+
+
 예) `feat: 스트레스 시나리오 금리 충격 추가`
 
 작업 흐름: Issue 생성 → `dev`에서 브랜치 생성 → 작업/검증 → PR → `dev` 병합 → 필요 시 `main` 반영.
@@ -58,7 +60,7 @@ feature/*, fix/*  →  dev  →  main
 
 예: `pytest backend/tests` - pass / `Not run: e2e tests - frontend 화면 없음`
 
-## 6. Review & Merge
+## 6. Review &amp; Merge
 
 - 작성자가 PR 설명·검증 내용을 먼저 채우고, 리뷰어는 목적/범위/검증/위험도를 함께 확인합니다.
 - 리뷰 코멘트는 병합 전 반영하거나 사유를 남깁니다.
