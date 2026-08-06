@@ -1,4 +1,4 @@
-# 🌊 금융상품 Agent (Financial Product Analyst)
+# 🏆 금융상품 Agent (Financial Product Analyst)
 
 > 정형 금융상품 데이터를 Agent가 스스로 탐색·연산하고, 근거에 기반해 답변하는 Agent RAG·QA 구현
 
@@ -7,7 +7,7 @@
 
 * **프로젝트명:** 금융상품 Agent (Financial Product Analyst)
 * **개발기간:** [YYYY.MM.DD] ~ [YYYY.MM.DD] ([총 N주/개월])
-* **팀원 구성:** [총 N명] ([역할 1 N인, 역할 2 N인, ...])
+* **팀원 구성:** [총 3명] (BE 1인, Agent 2인)
 * **주최:** 제10회 미래에셋증권 AI Festival
 * **필수 사항:** 🔒 LLM은 **HyperCLOVA X만 사용 가능** (다른 LLM 사용 시 평가대상 제외)
 
