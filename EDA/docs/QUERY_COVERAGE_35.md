@@ -10,7 +10,7 @@
 | 원본 | `data/csv/PRBD01N001_bond_kr_master_20260711.csv` | 42,394 |
 | 원본 | `data/csv/PREF01N001_etf_kr_master_20260711.csv` | 1,734 (ETF 1,202 / ETN 532) |
 | 원본 | `data/csv/PREF02N001_etf_gl_master_20260711.csv` | 5,646 |
-| 원본(파생) | `data/csv/PRFD01N001_fund_pub_dedup_20260711.csv` | 11,138 |
+| 파생 | `data/enriched/fund_pub_dedup.csv` | 11,138 |
 | 보강 | `data/enriched/etf_kr_enriched.csv` | 1,734 (LSEG 값 1,099 = ETF의 91.4%) |
 | 관계 | `data/relations/etf_theme.csv` | 5,646행 / ETF 1,099종 / 테마 176종 |
 

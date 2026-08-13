@@ -21,8 +21,9 @@ enr["charge_rt_source"] = ""
 enr.loc[enr["charge_rt_final"].notna(), "charge_rt_source"] = "LSEG"
 enr.loc[rdb > 0, "charge_rt_source"] = "RDB"
 
+# as_of는 LSEG 파일의 수집 시점이 미확인이라 공란. 추정 날짜를 채우면 근거 표시에서 거짓 기준일이 된다.
 theme_rows = [
-    {"pd_itm_no": r.pd_itm_no, "theme": t, "source": "LSEG"}
+    {"pd_itm_no": r.pd_itm_no, "theme": t, "source": "LSEG", "as_of": ""}
     for r in enr.itertuples()
     for t in lseg.get(r.lseg_key, {}).get("themes", [])
 ]
