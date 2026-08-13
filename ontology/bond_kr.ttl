@@ -1,0 +1,346 @@
+@prefix fp:      <http://mafest.ai/product#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+################################################################################
+# fp-bond-kr — 국내채권 (PRBD01N001, 42,394종, 그레인 = PD_NO 1종)
+#
+# 이 파일은 fp:Bond에만 붙는 속성과 주최측 분류축 8종을 정의한다.
+# 공통 클래스·관계(fp:Product, fp:issuedBy, fp:CreditRating, fp:RiskGrade 등)는
+# fp-common에 있고 여기서 owl:imports 한다.
+#
+# Q35 도메인 위반 판정 근거
+#   fp:issuedBy는 fp-common에서 rdfs:domain fp:Bond로 선언되어 있고,
+#   fp:Bond owl:disjointWith fp:ETF / fp:ETN / fp:PublicFund가 선언되어 있다.
+#   따라서 "VOO(fp:ETF)가 직접 발행한 회사채" 질의는 fp:issuedBy의 주어 자리에
+#   fp:ETF 개체를 놓게 되어 도메인 위반이 확정되고 ABSTAIN 처리된다.
+#   (데이터 측 교차 확인: 채권 마스터에 'VOO' 문자열 0건)
+#
+# 신용등급 용법 (fp-common의 fp:CreditRating 개체 19개)
+#   "AA- 이상"  → fp:hasCreditRating/fp:ratingRank <= 4  (AAA·AA+·AA·AA-)
+#                 문자열 사전순 비교로 처리하면 AA-와 A+의 순서가 뒤집힌다.
+#                 원본 CRD_GRD의 'AA0'은 등급 내 중위 표기이므로 AA로 정규화한다.
+#   "AAAA 등급" → 해당 CreditRating 개체가 존재하지 않음
+#                 → ABSTAIN_INVALID_TAXONOMY (허용 분류체계 부재)
+#   무등급 처리  → 등급 부재는 fp:ratingStatus로 두 가지를 구분한다.
+#                 fp:UnratedByDesign : 평가 대상 아님(국공채·개인투자용국채,
+#                   결측률 100%). 등급 필터에서는 빼되 '미평가(국채)'로 표기한다.
+#                 fp:RatingUnknown   : 평가 대상인데 정보 없음(회사채 45.3%,
+#                   특수채 13.9%). 이때만 '등급 확인 불가'로 답한다.
+#                 **AAAA(개체 부재, 질의 자체가 성립하지 않음)와 미평가(유효한
+#                 상태값)는 전혀 다른 판정이다.**
+#
+# 데이터 실태 요약
+#   - 실질 기준일 2026-02-24(PD_STD_INFO_UPDATE 최빈 20,160건)
+#   - 만기 경과 종목이 파일명 날짜(2026-07-11) 기준 16,180건(38.2%) 섞여 있다.
+#     "지금 살 수 있는 채권" 질의는 fp:isSellable(254건)로 걸러야 한다.
+#   - 판매 관련 8컬럼은 결측 패턴이 완전히 일치(881행)한다. 개별 속성으로 풀지 않고
+#     fp:hasSaleInfo 불리언 1개 + 실제 필터축(fp:buyableQuantity·fp:buyYield)만 남긴다.
+#   - 시세성 컬럼(EVAL_PRICE·DIRTY·NDY_* 등)과 전량 0인 AVG_ANNUAL_TAX_YIELD는
+#     온톨로지에 올리지 않는다.
+################################################################################
+
+<http://mafest.ai/ontology/fp-bond-kr> a owl:Ontology ;
+    owl:imports <http://mafest.ai/ontology/fp-common> ;
+    rdfs:label "국내채권 온톨로지"@ko, "Korean Domestic Bond Ontology"@en ;
+    rdfs:comment "국내채권 마스터(PRBD01N001) 기반 채권 도메인 스키마. fp:Bond의 속성, 신용등급 서열 판정, 잔존만기·판매가능 파생축, 주최측 분류축 8종을 정의한다."@ko ;
+    dcterms:source "PRBD01N001_bond_kr_master_20260711.csv, data/enriched/bond_kr_enriched.csv" .
+
+################################################################################
+# 1. 채권 하위 클래스 — 발행주체별 (신용등급 미평가가 정상인 범위를 가르는 축)
+#
+#   원본 STD_PD_MCLS_NM 6종을 4개 하위 클래스로 접는다.
+#   (외화채권-회사채·외화채권-금융채 6건은 fp:CorporateBond로 접고 통화로 구분)
+#   주최측 axis_issuerType 개체(fp:IssuerType_*)와 1:1 대응하며, 클래스는 인스턴스
+#   타입 판정에, 개체는 분류축 표기에 쓴다.
+#
+#   **미평가가 정상인 범위**: fp:GovernmentBond(국공채 2,137건 + 개인투자용국채
+#   49건)는 CRD_GRD 결측률이 100%다. 국가가 신용의 기준이라 신용평가 대상이 아니며
+#   데이터 누락이 아니다. 이 범위의 등급 결측은 fp:ratingStatus = fp:UnratedByDesign
+#   으로 표기한다. 반면 fp:CorporateBond(결측 45.3%)·fp:SpecialBond(13.9%)의 결측은
+#   실제 결손이므로 fp:RatingUnknown이다.
+################################################################################
+
+fp:GovernmentBond a owl:Class ;
+    rdfs:subClassOf fp:Bond ;
+    rdfs:label "국공채"@ko, "Government Bond"@en ;
+    rdfs:comment "국채·지방채·통안채 등 정부·중앙은행 발행 채권(국공채 2,137건 + 개인투자용국채 49건). **CRD_GRD 결측률 100%이며 이는 미평가가 정상인 상태**다(fp:ratingStatus = fp:UnratedByDesign). 'AA- 이상' 등 등급 조건검색에서는 등급 필터 대상에서 제외하되 결과에 '미평가(국채)'로 표기해야 하며, '등급 정보가 없어 확인 불가'로 답하면 오답이다. 판매 가능 채권 254건 중 등급 결측 204건이 전부 이 클래스다. axis 개체 fp:IssuerType_Government에 대응한다."@ko .
+
+fp:CorporateBond a owl:Class ;
+    rdfs:subClassOf fp:Bond ;
+    rdfs:label "회사채"@ko, "Corporate Bond"@en ;
+    rdfs:comment "일반 기업·금융회사 발행 채권(31,447건). 신용평가 대상이므로 **등급 결측 14,241건(45.3%)은 실제 데이터 결손**이며 fp:ratingStatus = fp:RatingUnknown으로 표기한다. 판매 가능한 회사채 42건은 등급 결측 0건이다. axis 개체 fp:IssuerType_Corporate에 대응한다."@ko .
+
+fp:SpecialBond a owl:Class ;
+    rdfs:subClassOf fp:Bond ;
+    rdfs:label "특수채"@ko, "Special Bond"@en ;
+    rdfs:comment "특별법에 따라 설립된 법인이 발행하는 채권(8,755건). 신용평가 대상이며 **등급 결측 1,214건(13.9%)은 데이터 결손**이다(fp:RatingUnknown). 판매 가능한 특수채 8건은 등급 결측 0건이다. axis 개체 fp:IssuerType_Special에 대응한다."@ko .
+
+fp:MunicipalBond a owl:Class ;
+    rdfs:subClassOf fp:GovernmentBond ;
+    rdfs:label "지방채"@ko, "Municipal Bond"@en ;
+    rdfs:comment "지방자치단체 발행 채권(공모지방채·지역개발 계열). 국공채의 하위이므로 등급 미평가가 정상인 범위에 포함된다. axis 개체 fp:IssuerType_Municipal에 대응한다."@ko .
+
+################################################################################
+# 2. 분류축 클래스 — 주최측 axis_* 라벨 8종
+################################################################################
+
+fp:BondIssuerType a owl:Class ;
+    rdfs:label "채권 발행주체 유형"@ko, "Bond Issuer Type"@en ;
+    rdfs:comment "주최측 axis_issuerType. 원본 STD_PD_MCLS_NM(회사채·특수채·국공채 등 6종)에서 재현 가능하다."@ko .
+
+fp:MaturityClass a owl:Class ;
+    rdfs:label "만기 구분"@ko, "Maturity Class"@en ;
+    rdfs:comment "주최측 axis_maturityClass. fp:remainingDays(파생)에서 재현 가능하다."@ko .
+
+fp:CouponType a owl:Class ;
+    rdfs:label "이표 유형"@ko, "Coupon Type"@en ;
+    rdfs:comment "주최측 axis_couponType. SRFC_IRT=0(무이표)과 BD_KND의 전환·변동금리 표기로 대부분 재현 가능하다."@ko .
+
+fp:RatingBand a owl:Class ;
+    rdfs:label "신용등급 대역"@ko, "Credit Rating Band"@en ;
+    rdfs:comment "주최측 axis_creditRating(AAAGrade·AAGrade·AGrade·NotRated). fp:CreditRating 19단계를 묶은 **거친 대역**이다. 'AA- 이상' 질의는 이 대역만으로 처리하면 안 되고 반드시 fp:ratingRank 서열로 판정해야 한다(AAGrade에는 AA+·AA·AA-가 섞여 있다)."@ko .
+
+fp:CollateralType a owl:Class ;
+    rdfs:label "담보 유형"@ko, "Collateral Type"@en ;
+    rdfs:comment "주최측 axis_collateralType. **현재 데이터로는 전면 재현이 불가하다** — BD_KND 39종·STD_PD_MCLS_NM·STD_PD_SCLS_NM 어디에도 '담보'·'보증' 값이 0건이다. BD_KND의 후순위·유동화 표기로 일부만 추정 가능하며, 담보·보증 조건검색 질의는 근거 부족으로 답변 불가다."@ko .
+
+fp:IssuanceMarket a owl:Class ;
+    rdfs:label "발행시장"@ko, "Issuance Market"@en ;
+    rdfs:comment "주최측 axis_issuanceMarket. PD_CTRY_CD(KR 42,393 / XS 1)로 재현되나 사실상 전량 국내라 필터로서의 변별력은 없다."@ko .
+
+fp:IssuerCategory a owl:Class ;
+    rdfs:label "발행사 업종 구분"@ko, "Issuer Category"@en ;
+    rdfs:comment "주최측 axis_issuerCategory(금융/비금융/국가/지방/공기업). **현재 데이터로 값을 채울 수 없다** — 발행사명(PD_PBCM) 문자열만 있고 업종 분류 컬럼이 없다. 값 부여에는 DART 기업개황 등 외부 기업 마스터가 필요하다. 클래스·속성은 선언해 두되 인스턴스에 값을 넣지 않는다."@ko .
+
+fp:TradingMarket a owl:Class ;
+    rdfs:label "유통시장 구분"@ko, "Trading Market"@en ;
+    rdfs:comment "장내(거래소)·장외(장외중개) 유통 구분. 원본 PD_EXG_MKT(장내 24,749 / 장외 17,645)에서 그대로 온다. '장내채권만' 질의의 필터축이다."@ko .
+
+################################################################################
+# 3. 분류축 개체
+################################################################################
+
+fp:IssuerType_Corporate  a fp:BondIssuerType ; rdfs:label "회사채"@ko, "CorporateBond"@en .
+fp:IssuerType_Special    a fp:BondIssuerType ; rdfs:label "특수채"@ko, "SpecialBond"@en .
+fp:IssuerType_Government a fp:BondIssuerType ; rdfs:label "국공채"@ko, "GovernmentBond"@en .
+fp:IssuerType_Municipal  a fp:BondIssuerType ; rdfs:label "지방채"@ko, "MunicipalBond"@en .
+
+fp:Maturity_ShortTerm a fp:MaturityClass ; rdfs:label "단기"@ko, "ShortTerm"@en ;
+    skos:altLabel "1년미만"@ko .
+fp:Maturity_MidTerm   a fp:MaturityClass ; rdfs:label "중기"@ko, "MidTerm"@en ;
+    skos:altLabel "1-3년"@ko, "3-5년"@ko .
+fp:Maturity_LongTerm  a fp:MaturityClass ; rdfs:label "장기"@ko, "LongTerm"@en ;
+    skos:altLabel "5-10년"@ko, "10년이상"@ko .
+fp:Maturity_Matured   a fp:MaturityClass ; rdfs:label "만기경과"@ko, "Matured"@en ;
+    skos:altLabel "만기경과"@ko .
+
+fp:Coupon_Fixed       a fp:CouponType ; rdfs:label "고정금리"@ko, "FixedCoupon"@en .
+fp:Coupon_Floating    a fp:CouponType ; rdfs:label "변동금리"@ko, "FloatingCoupon"@en .
+fp:Coupon_Zero        a fp:CouponType ; rdfs:label "무이표(할인채)"@ko, "ZeroCoupon"@en .
+fp:Coupon_Convertible a fp:CouponType ; rdfs:label "전환형"@ko, "ConvertibleCoupon"@en .
+
+fp:RatingBand_AAA      a fp:RatingBand ; rdfs:label "AAA등급"@ko, "AAAGrade"@en .
+fp:RatingBand_AA       a fp:RatingBand ; rdfs:label "AA등급"@ko, "AAGrade"@en .
+fp:RatingBand_A        a fp:RatingBand ; rdfs:label "A등급"@ko, "AGrade"@en .
+fp:RatingBand_BBB      a fp:RatingBand ; rdfs:label "BBB등급"@ko, "BBBGrade"@en .
+fp:RatingBand_Specul   a fp:RatingBand ; rdfs:label "투기등급"@ko, "SpeculativeGrade"@en .
+# NotRated 대역은 '등급 없음'을 한 덩어리로 묶은 주최측 축이다.
+# 미평가(국채)와 데이터 결손을 구분하지 못하므로, 답변 시에는 반드시
+# fp:ratingStatus(fp:UnratedByDesign / fp:RatingUnknown)를 함께 확인한다.
+fp:RatingBand_NotRated a fp:RatingBand ; rdfs:label "무등급"@ko, "NotRated"@en ;
+    skos:altLabel "등급 미부여"@ko .
+
+fp:Collateral_Unsecured   a fp:CollateralType ; rdfs:label "무담보"@ko, "Unsecured"@en .
+fp:Collateral_Secured     a fp:CollateralType ; rdfs:label "담보부"@ko, "Secured"@en .
+fp:Collateral_Guaranteed  a fp:CollateralType ; rdfs:label "보증"@ko, "Guaranteed"@en .
+fp:Collateral_Subordinated a fp:CollateralType ; rdfs:label "후순위"@ko, "Subordinated"@en .
+
+fp:Market_Domestic a fp:IssuanceMarket ; rdfs:label "국내 발행"@ko, "DomesticMarket"@en .
+fp:Market_Foreign  a fp:IssuanceMarket ; rdfs:label "해외 발행"@ko, "ForeignMarket"@en .
+
+fp:IssuerCat_Financial       a fp:IssuerCategory ; rdfs:label "금융 회사"@ko, "FinancialCorporateIssuer"@en .
+fp:IssuerCat_NonFinancial    a fp:IssuerCategory ; rdfs:label "비금융 회사"@ko, "NonFinancialCorporateIssuer"@en .
+fp:IssuerCat_Sovereign       a fp:IssuerCategory ; rdfs:label "국가"@ko, "SovereignIssuer"@en .
+fp:IssuerCat_SubSovereign    a fp:IssuerCategory ; rdfs:label "지방정부"@ko, "SubSovereignIssuer"@en .
+fp:IssuerCat_SovereignAgency a fp:IssuerCategory ; rdfs:label "공공기관"@ko, "SovereignAgencyIssuer"@en .
+fp:IssuerCat_Other           a fp:IssuerCategory ; rdfs:label "기타"@ko, "OtherIssuerCategory"@en .
+
+fp:TradingMarket_Exchange a fp:TradingMarket ; rdfs:label "장내"@ko, "Exchange"@en .
+fp:TradingMarket_OTC      a fp:TradingMarket ; rdfs:label "장외"@ko, "Over the Counter"@en .
+
+################################################################################
+# 4. 분류축 관계 (owl:ObjectProperty) — domain은 모두 fp:Bond
+################################################################################
+
+fp:hasBondIssuerType a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:BondIssuerType ;
+    rdfs:label "발행주체 유형"@ko, "has bond issuer type"@en ;
+    rdfs:comment "채권 → 발행주체 유형 개체. STD_PD_MCLS_NM 6종을 4개 축 개체로 매핑한다(외화채권-회사채·외화채권-금융채는 회사채로 접는다)."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "STD_PD_MCLS_NM" .
+
+fp:hasMaturityClass a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:MaturityClass ;
+    rdfs:label "만기 구분"@ko, "has maturity class"@en ;
+    rdfs:comment "채권 → 만기 구분 개체. fp:maturityBucket(파생)에서 매핑한다. **만기경과 개체가 별도로 필요하다** — 파일명 날짜 기준 16,180건(38.2%)이 이미 만기가 지났기 때문이다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.maturity_bucket" .
+
+fp:hasCouponType a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:CouponType ;
+    rdfs:label "이표 유형"@ko, "has coupon type"@en ;
+    rdfs:comment "채권 → 이표 유형 개체. SRFC_IRT=0은 결측이 아니라 무이표(할인채)를 뜻한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "SRFC_IRT", "BD_KND" .
+
+fp:hasRatingBand a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:RatingBand ;
+    rdfs:label "신용등급 대역"@ko, "has rating band"@en ;
+    rdfs:comment "채권 → 등급 대역 개체(주최측 axis). 조건검색은 이 대역이 아니라 fp:hasCreditRating + fp:ratingRank로 판정한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "CRD_GRD" .
+
+fp:hasCollateralType a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:CollateralType ;
+    rdfs:label "담보 유형"@ko, "has collateral type"@en ;
+    rdfs:comment "채권 → 담보 유형 개체. **현재 데이터에 담보·보증 분류축이 없어 대부분의 종목에 값을 넣을 수 없다.** 담보·보증 조건검색은 답변 불가로 처리한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "BD_KND" .
+
+fp:hasIssuanceMarket a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:IssuanceMarket ;
+    rdfs:label "발행시장"@ko, "has issuance market"@en ;
+    rdfs:comment "채권 → 발행시장 개체. PD_CTRY_CD 기준이며 사실상 전량 국내(KR 42,393)다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "PD_CTRY_CD" .
+
+fp:hasIssuerCategory a owl:ObjectProperty ;
+    rdfs:domain fp:Issuer ; rdfs:range fp:IssuerCategory ;
+    rdfs:label "발행사 업종 구분"@ko, "has issuer category"@en ;
+    rdfs:comment "발행사 → 업종 구분 개체. **현재 데이터로 값을 채울 수 없다**(발행사명 문자열만 존재). 외부 기업 마스터 수집 전까지 인스턴스에 값을 부여하지 않는다."@ko .
+
+fp:hasTradingMarket a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ; rdfs:range fp:TradingMarket ;
+    rdfs:label "유통시장 구분"@ko, "has trading market"@en ;
+    rdfs:comment "채권 → 장내·장외 개체. 원본 PD_EXG_MKT를 그대로 매핑한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "PD_EXG_MKT" .
+
+################################################################################
+# 5. 채권 데이터 속성 (owl:DatatypeProperty)
+#    COLUMN_GUIDE의 필수-식별 / 필수-조건 / 필수-관계 등급만 싣는다.
+#    보조·제외 21컬럼(시세성·익일계열·내부메타·전량 0)은 의도적으로 제외했다.
+################################################################################
+
+fp:bondMajorClass a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "표준상품 대분류"@ko, "bond major class"@en ;
+    rdfs:comment "채권 1차 분류 6종(회사채 31,447 / 특수채 8,755 / 국공채 2,137 / 개인투자용국채 49 / 외화채권 6). fp:bondMinorClass의 상위 계층이다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "STD_PD_MCLS_NM" .
+
+fp:bondMinorClass a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "표준상품 소분류"@ko, "bond minor class"@en ;
+    rdfs:comment "대분류 하위 2차 분류 16종(일반사채·공사채·특수은행채·국고채 등). 대분류와 계층 관계를 이룬다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "STD_PD_SCLS_NM" .
+
+fp:bondKind a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "채권종류"@ko, "bond kind"@en ;
+    rdfs:comment "상환구조·발행주체 기준 세분류 39종(일반회사채·할부금융채·유동화회사채·MBS·Conduit회사채 등). 구조화 상품 식별의 유일 축이며 결측 924건이다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "BD_KND" .
+
+fp:issuedAmount a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "발행잔액"@ko, "issued balance"@en ;
+    rdfs:comment "발행 잔존 원금(원). 규모 필터축. 0 값이 다수 존재하며 상환 완료 잔재일 가능성이 있어 0은 별도 취급한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "ISU_BAL_AMT" .
+
+fp:issueDate a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:date ;
+    rdfs:label "발행일"@ko, "issue date"@en ;
+    rdfs:comment "YYYYMMDD 원본. **sentinel '0' 336건을 결측으로 제외한 뒤 파싱**한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "ISU_DT" .
+
+fp:maturityDate a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:date ;
+    rdfs:label "만기일"@ko, "maturity date"@en ;
+    rdfs:comment "잔존만기 계산의 기준. **sentinel '0' 316건과 '99991231' 4건(영구채)을 제외**하고 파싱한다. 만기 경과 종목이 38.2% 섞여 있어 '지금 살 수 있는' 질의에는 만기 필터가 선행되어야 한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "MAT_DT" .
+
+fp:remainingDays a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:integer ;
+    rdfs:label "잔존일수"@ko, "remaining days"@en ;
+    rdfs:comment "기준일 대비 만기까지 일수(파생). '잔존 3년 이내' 질의축이며 3년 = 1,095일로 환산한다. **음수는 만기 경과를 뜻하므로 필터에서 배제**한다. 원본 REMAINING_DAYS는 25.1% 결측이라 MAT_DT에서 2026-07-11 기준으로 재계산한 파생값을 정본으로 쓴다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ;
+    fp:sourceColumn "derived:bond_kr_enriched.remaining_days", "REMAINING_DAYS" .
+
+fp:maturityBucket a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "잔존만기 구간"@ko, "maturity bucket"@en ;
+    rdfs:comment "만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.maturity_bucket" .
+
+fp:couponRate a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "표면금리"@ko, "coupon rate"@en ;
+    rdfs:comment "액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "SRFC_IRT" .
+
+fp:appliedYield a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "적용수익률"@ko, "applied yield"@en ;
+    rdfs:comment "평가에 적용된 시장수익률(%). '수익률 몇 % 이상' 질의의 실질 근거다. 0은 미산출(1,289건)이므로 제외한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "APPLIED_YIELD" .
+
+fp:duration a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "듀레이션"@ko, "duration"@en ;
+    rdfs:comment "금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "DUR" .
+
+fp:agencyRatings a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "평가사 신용등급(원문)"@ko, "credit rating agency ratings"@en ;
+    rdfs:comment "여러 평가사 등급을 콤마로 이어 붙인 원문('AAA, AAA, AAA'). 유효 24,966행 중 22,605행이 다중값이고 **286건은 평가사 간 등급이 불일치**한다. 단일 등급으로 축약하면 정보가 손실되므로 원문을 보존하고, 일치 여부는 fp:ratingAgreement로 별도 표기한다. **평가기관명 자체가 데이터에 없어 (채권, 평가기관, 등급) 3항 관계로 완전 분해하지는 못한다.**"@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "PD_EVCO_CRD_GRD" .
+
+fp:ratingAgencyCount a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:integer ;
+    rdfs:label "평가사 등급 개수"@ko, "rating agency count"@en ;
+    rdfs:comment "PD_EVCO_CRD_GRD에 담긴 등급 개수(파생). 1개 이하면 일치 판정이 불가능하다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.evco_grd_count" .
+
+fp:ratingAgreement a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "평가사 등급 일치 여부"@ko, "rating agreement"@en ;
+    rdfs:comment "복수 평가사 등급이 모두 같으면 Y, 다르면 N, 판정 불가면 공란(파생). 등급 불일치 286건은 답변 시 함께 표기해야 한다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.evco_grd_agree" .
+
+fp:buyableQuantity a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "매수가능수량"@ko, "buyable quantity"@en ;
+    rdfs:comment "당사 판매 채널의 매수 가능 잔량. **값의 존재 자체가 '판매 채널 취급' 플래그**이며 유효 881건(2.1%)뿐이다. '매수가능수량 0 초과' 조건검색의 직접 축이다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "BUYABLE_QUANTITY" .
+
+fp:buyYield a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:decimal ;
+    rdfs:label "매수수익률"@ko, "buy yield"@en ;
+    rdfs:comment "판매 대상 채권의 매수 기준 수익률(%). 유효 881행(2.1%)뿐이며 나머지는 참조용 아카이브다. 세후·세금우대·예금환산 계열 6컬럼은 결측 패턴이 동일하고 AVG_ANNUAL_TAX_YIELD는 유효행 전량이 0이라 온톨로지에 싣지 않았다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "BUY_YIELD" .
+
+fp:hasSaleInfo a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:boolean ;
+    rdfs:label "판매정보 보유 여부"@ko, "has sale info"@en ;
+    rdfs:comment "판매 관련 8컬럼이 모두 채워졌는지 여부(파생, 881건 Y). 8컬럼의 결측 패턴이 완전 이분법이라 개별 속성 8개 대신 이 불리언 1개로 축약했다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.has_sale_info" .
+
+fp:isSellable a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:boolean ;
+    rdfs:label "현재 매수 가능 여부"@ko, "is sellable"@en ;
+    rdfs:comment "판매정보 보유 ∧ 매수가능수량>0 ∧ 원화 ∧ 잔존일수>0 을 모두 만족하는 종목(파생, **254건**). 만기 경과분 38.2%가 섞인 아카이브에서 '지금 살 수 있는 채권'을 골라내는 유일한 축이다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.is_sellable" .
+
+fp:creditRatingLabel a owl:DatatypeProperty ;
+    rdfs:domain fp:Bond ; rdfs:range xsd:string ;
+    rdfs:label "신용등급 표기"@ko, "credit rating label"@en ;
+    rdfs:comment "정규화된 대표 신용등급 문자열(AA0→AA, C0→C). 결측 17,644건(41.6%)은 **fp:ratingStatus로 미평가(국공채·개인투자용국채, 결측률 100%)와 데이터 결손(회사채 45.3%·특수채 13.9%)을 반드시 구분**해 답한다. 서열 비교는 이 문자열이 아니라 fp:hasCreditRating 개체의 fp:ratingRank로 한다."@ko ;
+    fp:sourceTable "PRBD01N001", "derived:bond_kr_enriched" ;
+    fp:sourceColumn "CRD_GRD", "derived:bond_kr_enriched.crd_grd_norm" .
