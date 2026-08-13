@@ -90,6 +90,7 @@ python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 �
 | `EDA/docs/EDA_REPORT.md` | 4개 도메인 실측 분석, 답변 가능/불가 질의 |
 | `EDA/docs/COLUMN_GUIDE.md` | 207컬럼 설명서 + 온톨로지 등급 + enum 값 |
 | `EDA/docs/DATA_LAYER_PLAN.md` | 계층·파일명·출처 규칙의 **단일 기준** |
+| `EDA/docs/DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
 | `EDA/docs/EXTERNAL_DATA_PLAN.md` | 외부데이터 우선순위(35문항 blocking 기준) |
 | `EDA/docs/QUERY_COVERAGE_35.md` | 35문항 커버리지 매트릭스 |
 | `EDA/docs/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교 |
