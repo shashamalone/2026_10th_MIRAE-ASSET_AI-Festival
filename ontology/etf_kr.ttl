@@ -1,0 +1,401 @@
+@prefix fp:      <http://mafest.ai/product#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+################################################################################
+# fp-etf-kr — 국내 ETF·ETN (PREF01N001, 1,734종 = ETF 1,202 / ETN 532)
+#
+# ETF와 ETN의 분리
+#   fp-common에서 fp:ETN owl:disjointWith fp:ETF로 선언했다. 한 파일에 혼재하므로
+#   pd_grp_no로 분리해 적재하지 않으면 'ETF 몇 개' 류 집계가 44% 부풀려진다.
+#   ETN은 발행 증권사의 채무증권이라 **편입종목·NAV·총보수 개념이 없어**
+#   fp:hasHolding의 domain에서 제외되어 있다(fp-common 참조).
+#
+# Q35 도메인 위반 판정
+#   fp:issuedBy의 domain은 fp:Bond 하나이고 fp:ETF는 fp:Bond와 disjoint다.
+#   따라서 ETF를 발행 주체로 놓는 질의는 형식적으로 도메인 위반이 되어 ABSTAIN된다.
+#   ETF의 '발행'을 묻는 질의는 fp:managedBy(운용사)로 유도한다.
+#
+# 데이터 실태 (온톨로지에서 뺀 컬럼의 근거)
+#   - 괴리율 du_diff_rt·추적오차율 du_chas_errt: 전 종목 0.00 미계산 → **제외**
+#   - 배당 3컬럼(pd_dvid_cycl 전량 결측, pd_divd_amt_pshr·pd_dvid_yield 전량 0) → **제외**
+#     배당·분배금 질의는 현재 데이터로 답변 불가다.
+#   - 실시간·시세성 컬럼(du_clpr·du_bpr·du_lpr·ru_mkt_* 등) → **제외**
+#     du_lpr은 스키마 한글 설명과 통상 의미가 충돌해 시가 질의에 쓰지 않는다.
+#   - 상수 컬럼(거래소·시장·통화·SPAC 등) → **제외**
+#   위 컬럼을 온톨로지에 올리면 "값이 있다"는 잘못된 신호가 된다.
+#
+# 기준일: 시세·주간 모두 2026-06-15(du_upt_dt·wu_upt_dt 상수).
+################################################################################
+
+<http://mafest.ai/ontology/fp-etf-kr> a owl:Ontology ;
+    owl:imports <http://mafest.ai/ontology/fp-common> ;
+    rdfs:label "국내 ETF·ETN 온톨로지"@ko, "Korean Domestic ETF/ETN Ontology"@en ;
+    rdfs:comment "국내 ETF·ETN 마스터(PREF01N001)와 LSEG 보강 테이블 기반 스키마. ETF/ETN 분리, 총보수 보완 경로, 레버리지·연금·판매 축, 테마 개체 176종을 정의한다."@ko ;
+    dcterms:source "PREF01N001_etf_kr_master_20260711.csv, data/enriched/etf_kr_enriched.csv, data/relations/etf_theme.csv" .
+
+################################################################################
+# 1. 분류축 클래스 — 주최측 axis_* 라벨 7종
+#    assetType·region·strategy·replicationMethod는 fp-common의 공통 개체를 재사용하고,
+#    ETF 고유 축(leverageType·underlyingScope·distributionType)만 여기서 선언한다.
+################################################################################
+
+fp:LeverageType a owl:Class ;
+    rdfs:label "레버리지 유형"@ko, "Leverage Type"@en ;
+    rdfs:comment "주최측 axis_leverageType. 원본 cu_lev_fector(배수, 음수=인버스)에서 완전히 재현된다. 레버리지·인버스 질의의 유일한 정형축이다."@ko .
+
+fp:UnderlyingScope a owl:Class ;
+    rdfs:label "기초자산 범위"@ko, "Underlying Scope"@en ;
+    rdfs:comment "주최측 axis_underlyingScope(시장대표/섹터·테마/개별종목). **현재 데이터로 값을 채울 수 없다** — 기초지수 cu_base_index가 ETF 기준 95.2% 결측이고 pd_sect_nm은 전량 결측이다. LSEG 테마(fp:relatedToTheme)는 섹터·테마 여부의 부분 신호일 뿐 시장대표/개별종목 구분을 대체하지 못한다. 클래스·속성은 선언하되 값을 부여하지 않는다."@ko .
+
+fp:DistributionType a owl:Class ;
+    rdfs:label "분배 유형"@ko, "Distribution Type"@en ;
+    rdfs:comment "주최측 axis_distributionType(분배형/TR형). **배당 관련 3컬럼이 전량 무효**라 원본에서 재현 불가하며, 상품명의 'TR' 토큰 파싱으로만 부분 추정된다. 추정값은 근거가 약하므로 답변 시 추정임을 명시한다."@ko .
+
+fp:ManagementStrategy a owl:Class ;
+    rdfs:label "운용전략"@ko, "Management Strategy"@en ;
+    rdfs:comment "주최측 axis_strategy(패시브/액티브). 원본 cu_strtegy 한 컬럼이 이 축과 복제방식(fp:ReplicationMethod) 두 축을 동시에 공급한다 — '액티브'는 Active, '실물복제'·'합성복제'는 Passive로 매핑한다. **'C' 409건은 전부 ETN**(ETN에 ETF 전략코드 미적용)이라 ETF 필터 후 자동 소거된다."@ko .
+
+fp:Strategy_Passive a fp:ManagementStrategy ; rdfs:label "패시브"@ko, "Passive"@en ;
+    skos:altLabel "실물복제"@ko, "합성복제"@ko .
+fp:Strategy_Active  a fp:ManagementStrategy ; rdfs:label "액티브"@ko, "Active"@en .
+
+fp:hasManagementStrategy a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
+    rdfs:range fp:ManagementStrategy ;
+    rdfs:label "운용전략"@ko, "has management strategy"@en ;
+    rdfs:comment "상품 → 패시브/액티브 개체. 국내ETF는 cu_strtegy에서, 해외ETF는 cu_index_repl_mthd 결측 여부(결측 58.2% = 액티브·비추종)에서 추정한다."@ko ;
+    fp:sourceTable "PREF01N001", "derived:etf_kr_enriched" ;
+    fp:sourceColumn "cu_strtegy", "derived:etf_kr_enriched.replication" .
+
+fp:Brand a owl:Class ;
+    rdfs:label "ETF 브랜드"@ko, "ETF Brand"@en ;
+    rdfs:comment "KODEX·TIGER·RISE·ACE·PLUS·SOL·KIWOOM 등 상품 브랜드. 'TIGER ETF' 같은 자연어 질의의 대응축이며 pd_abrv_nm의 선두 토큰이 유일 소재다. ETF는 영문 브랜드, ETN은 한글 증권사명으로 배타적으로 갈린다."@ko .
+
+fp:Leverage_Standard   a fp:LeverageType ; rdfs:label "일반(1배)"@ko, "Standard"@en .
+fp:Leverage_2X         a fp:LeverageType ; rdfs:label "레버리지 2배"@ko, "Leveraged2X"@en .
+fp:Leverage_3X         a fp:LeverageType ; rdfs:label "레버리지 3배"@ko, "Leveraged3X"@en .
+fp:Leverage_Inverse1X  a fp:LeverageType ; rdfs:label "인버스 1배"@ko, "Inverse1X"@en .
+fp:Leverage_Inverse2X  a fp:LeverageType ; rdfs:label "인버스 2배"@ko, "Inverse2X"@en .
+fp:Leverage_Inverse3X  a fp:LeverageType ; rdfs:label "인버스 3배"@ko, "Inverse3X"@en .
+
+fp:Scope_MarketRepresentative a fp:UnderlyingScope ; rdfs:label "시장대표"@ko, "MarketRepresentative"@en .
+fp:Scope_SectorTheme          a fp:UnderlyingScope ; rdfs:label "섹터·테마"@ko, "SectorTheme"@en .
+fp:Scope_SingleStock          a fp:UnderlyingScope ; rdfs:label "개별종목"@ko, "SingleStock"@en .
+
+fp:Distribution_Distributing a fp:DistributionType ; rdfs:label "분배형"@ko, "Distributing"@en .
+fp:Distribution_TotalReturn  a fp:DistributionType ; rdfs:label "토탈리턴(TR)"@ko, "TotalReturn"@en .
+
+################################################################################
+# 2. 국내 ETF 관계 (owl:ObjectProperty)
+################################################################################
+
+fp:hasLeverageType a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range fp:LeverageType ;
+    rdfs:label "레버리지 유형"@ko, "has leverage type"@en ;
+    rdfs:comment "상품 → 레버리지 유형 개체. cu_lev_fector 배수값(1/2/-2/-1/3/-3/-0.5/1.5/-1.5)에서 매핑한다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "cu_lev_fector" .
+
+fp:hasUnderlyingScope a owl:ObjectProperty ;
+    rdfs:domain fp:ETF ;
+    rdfs:range fp:UnderlyingScope ;
+    rdfs:label "기초자산 범위"@ko, "has underlying scope"@en ;
+    rdfs:comment "ETF → 기초자산 범위 개체. **현재 데이터로 값을 채울 수 없다**(기초지수 95.2% 결측, 섹터명 전량 결측). 간이투자설명서 수집 이후 부여한다."@ko .
+
+fp:hasDistributionType a owl:ObjectProperty ;
+    rdfs:domain fp:ETF ;
+    rdfs:range fp:DistributionType ;
+    rdfs:label "분배 유형"@ko, "has distribution type"@en ;
+    rdfs:comment "ETF → 분배 유형 개체. **배당 컬럼 전량 무효**라 상품명 'TR' 토큰 추정 외에는 근거가 없다. '월배당 ETF' 질의는 답변 불가다."@ko .
+
+fp:hasBrand a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range fp:Brand ;
+    rdfs:label "브랜드"@ko, "has brand"@en ;
+    rdfs:comment "상품 → 브랜드 개체. pd_abrv_nm 선두 토큰에서 파생하며, 운용사 문자열 오염 55건(운용사 자리에 상품 전체 명칭이 들어간 행)을 교차검증·복구하는 수단이기도 하다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_abrv_nm" .
+
+################################################################################
+# 3. 국내 ETF 데이터 속성
+#    필수-식별 4 / 필수-조건 21 / 필수-관계 2 등급 컬럼만 싣는다.
+#    공통 속성(fp:netAssets·fp:expenseRatio·fp:return*·fp:listingDate·fp:onSale)은
+#    fp-common에 선언되어 있으므로 여기서 중복 선언하지 않는다.
+################################################################################
+
+fp:internalCode a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:label "사내 단축코드"@ko, "internal short code"@en ;
+    rdfs:comment "미래에셋 사내 코드(A305080·Q760014 형식). 앞 한 글자를 뗀 값이 LSEG 메타 조인키(lseg_key)라 외부 보완 데이터 결합의 실무 키다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_itm_no_ma" .
+
+fp:productGroup a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:label "상품군 종류"@ko, "product group"@en ;
+    rdfs:comment "ETF / ETN 판별의 **유일 신뢰축**. 이 값으로 fp:ETF·fp:ETN 클래스를 확정한 뒤 모든 집계를 수행한다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001" ; fp:sourceColumn "pd_grp_no" .
+
+fp:leverageFactor a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "레버리지 배수"@ko, "leverage factor"@en ;
+    rdfs:comment "지수 대비 배수. **음수는 인버스**를 뜻한다(-2 = 인버스 2배). 해외ETF는 이 컬럼이 전량 결측이라 국내ETF에서만 정형 필터가 가능하다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "cu_lev_fector" .
+
+fp:hedgeType a owl:DatatypeProperty ;
+    rdfs:domain fp:ETF ; rdfs:range xsd:string ;
+    rdfs:label "환헤지 유형"@ko, "hedge type"@en ;
+    rdfs:comment "환헤지·환노출 구분(LSEG 보강). 원본에는 대응 컬럼이 없어 외부 보완값이며 fp:sourceId로 출처를 함께 표시한다."@ko ;
+    fp:sourceTable "derived:etf_kr_enriched" ; fp:sourceColumn "derived:etf_kr_enriched.hedge_type" .
+
+fp:baseMarket a owl:DatatypeProperty ;
+    rdfs:domain fp:ETF ; rdfs:range xsd:string ;
+    rdfs:label "기초 시장"@ko, "base market"@en ;
+    rdfs:comment "기초자산이 속한 시장(국내·해외 등, LSEG 보강). 국내ETF 기초지수가 95.2% 결측인 상황의 대체 축이다."@ko ;
+    fp:sourceTable "derived:etf_kr_enriched" ; fp:sourceColumn "derived:etf_kr_enriched.base_market" .
+
+fp:baseAsset a owl:DatatypeProperty ;
+    rdfs:domain fp:ETF ; rdfs:range xsd:string ;
+    rdfs:label "기초 자산"@ko, "base asset"@en ;
+    rdfs:comment "기초자산 종류(LSEG 보강). wu_inv_ast_type과 교차검증용으로 함께 제시한다."@ko ;
+    fp:sourceTable "derived:etf_kr_enriched" ; fp:sourceColumn "derived:etf_kr_enriched.base_asset" .
+
+fp:delistingDate a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "거래종료일"@ko, "delisting date"@en ;
+    rdfs:comment "상장폐지·만기일. **sentinel '99991231' 1,521건은 '만기 없음/존속'을 뜻하므로 날짜로 파싱하지 않는다.** ETN 만기 구분에 유효하다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_lste_dt" .
+
+fp:tradingSuspended a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "거래정지 여부"@ko, "trading suspended"@en ;
+    rdfs:comment "1=정지(72건). 매수 가능 상품 조건검색에서 제외 필터로 쓴다. 해외ETF는 전량 0이라 이 축이 없다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_tr_yn" .
+
+fp:pensionTradable a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "연금계좌 거래 가능"@ko, "pension tradable"@en ;
+    rdfs:comment "연금저축·IRP 계좌 매매 가능 여부(Y 1,002 / N 732). '연금저축으로 살 수 있는' 질의의 직접 축이다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_pen_tr_yn" .
+
+fp:pensionRiskCategory a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:label "연금 위험자산 구분"@ko, "pension risk category"@en ;
+    rdfs:comment "연금계좌 편입 시 위험자산 한도(70%) 판정 구분(위험자산 788 / 안전자산 214). **'N' 732건은 구분값이 아니라 '연금거래 불가'**이며 fp:pensionTradable=false와 정확히 대응하므로 분류값으로 해석하면 안 된다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_pen_risk_nm" .
+
+fp:coreProduct a owl:DatatypeProperty ;
+    rdfs:domain fp:ETF ; rdfs:range xsd:boolean ;
+    rdfs:label "핵심상품 선정 여부"@ko, "core product"@en ;
+    rdfs:comment "당사 선정 핵심 ETF(Y 88건, 전부 ETF). '추천 ETF' 질의의 유일한 내부 근거다. 해외ETF는 Y가 0건이라 같은 필터를 적용할 수 없다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "wu_core_yn" .
+
+fp:brandName a owl:DatatypeProperty ;
+    rdfs:domain fp:Brand ; rdfs:range xsd:string ;
+    rdfs:label "브랜드명"@ko, "brand name"@en ;
+    rdfs:comment "브랜드 개체의 명칭. pd_abrv_nm 선두 토큰에서 파생한다."@ko ;
+    fp:sourceTable "derived:etf_kr_brand" ; fp:sourceColumn "derived:etf_kr_brand.brand" .
+
+################################################################################
+# 4. 테마 개체 — 176종
+#
+#   원천: data/relations/etf_theme.csv (LSEG themes, 국내ETF 1,099종 × 176테마)
+#   fp:relatedToTheme(fp-common)의 range 개체다.
+#
+#   **as_of 공란 주의**: 원천 관계 테이블의 as_of 컬럼이 비어 있다. LSEG 수집 시점이
+#   확인되지 않아 추정 날짜를 채워 넣지 않았다(근거 표시에서 거짓 기준일이 되기 때문).
+#   따라서 '특정 기간에 새로 연결된 테마' 류 시그널 질의는 이 관계만으로 답할 수 없다.
+#
+#   테마명이 슬래시로 결합된 경우('우주항공/방산', '미디어/엔터')는 원표기를 그대로
+#   유지한다. '우주' 단독 테마는 존재하지 않으므로 부분 문자열 검색으로 새 테마를
+#   만들어내면 안 된다.
+#
+#   개체 IRI는 테마명을 그대로 쓰되 공백만 '_'로 치환했다(추적성 유지).
+#   본 절은 label만 부여해 간결하게 유지한다.
+################################################################################
+
+<http://mafest.ai/product#Theme_2차전지> a fp:Theme ; rdfs:label "2차전지"@ko ; fp:themeName "2차전지" .
+<http://mafest.ai/product#Theme_5G> a fp:Theme ; rdfs:label "5G"@ko ; fp:themeName "5G" .
+<http://mafest.ai/product#Theme_AI> a fp:Theme ; rdfs:label "AI"@ko ; fp:themeName "AI" .
+<http://mafest.ai/product#Theme_AI(인공지능)_운용> a fp:Theme ; rdfs:label "AI(인공지능) 운용"@ko ; fp:themeName "AI(인공지능) 운용" .
+<http://mafest.ai/product#Theme_AI전력> a fp:Theme ; rdfs:label "AI전력"@ko ; fp:themeName "AI전력" .
+<http://mafest.ai/product#Theme_All_Weather> a fp:Theme ; rdfs:label "All Weather"@ko ; fp:themeName "All Weather" .
+<http://mafest.ai/product#Theme_CSI> a fp:Theme ; rdfs:label "CSI"@ko ; fp:themeName "CSI" .
+<http://mafest.ai/product#Theme_Cash_Cows> a fp:Theme ; rdfs:label "Cash Cows"@ko ; fp:themeName "Cash Cows" .
+<http://mafest.ai/product#Theme_ChiNext> a fp:Theme ; rdfs:label "ChiNext"@ko ; fp:themeName "ChiNext" .
+<http://mafest.ai/product#Theme_DowJones> a fp:Theme ; rdfs:label "DowJones"@ko ; fp:themeName "DowJones" .
+<http://mafest.ai/product#Theme_ESG종합> a fp:Theme ; rdfs:label "ESG종합"@ko ; fp:themeName "ESG종합" .
+<http://mafest.ai/product#Theme_EuroStoxx50> a fp:Theme ; rdfs:label "EuroStoxx50"@ko ; fp:themeName "EuroStoxx50" .
+<http://mafest.ai/product#Theme_FTSE_China_A50> a fp:Theme ; rdfs:label "FTSE China A50"@ko ; fp:themeName "FTSE China A50" .
+<http://mafest.ai/product#Theme_IPO/M&A> a fp:Theme ; rdfs:label "IPO/M&A"@ko ; fp:themeName "IPO/M&A" .
+<http://mafest.ai/product#Theme_IT섹터> a fp:Theme ; rdfs:label "IT섹터"@ko ; fp:themeName "IT섹터" .
+<http://mafest.ai/product#Theme_K-뉴딜> a fp:Theme ; rdfs:label "K-뉴딜"@ko ; fp:themeName "K-뉴딜" .
+<http://mafest.ai/product#Theme_K-반도체> a fp:Theme ; rdfs:label "K-반도체"@ko ; fp:themeName "K-반도체" .
+<http://mafest.ai/product#Theme_KOSDAQ> a fp:Theme ; rdfs:label "KOSDAQ"@ko ; fp:themeName "KOSDAQ" .
+<http://mafest.ai/product#Theme_KOSDAQ150> a fp:Theme ; rdfs:label "KOSDAQ150"@ko ; fp:themeName "KOSDAQ150" .
+<http://mafest.ai/product#Theme_KOSDAQ글로벌> a fp:Theme ; rdfs:label "KOSDAQ글로벌"@ko ; fp:themeName "KOSDAQ글로벌" .
+<http://mafest.ai/product#Theme_KOSPI> a fp:Theme ; rdfs:label "KOSPI"@ko ; fp:themeName "KOSPI" .
+<http://mafest.ai/product#Theme_KOSPI200> a fp:Theme ; rdfs:label "KOSPI200"@ko ; fp:themeName "KOSPI200" .
+<http://mafest.ai/product#Theme_KRX300> a fp:Theme ; rdfs:label "KRX300"@ko ; fp:themeName "KRX300" .
+<http://mafest.ai/product#Theme_MMF> a fp:Theme ; rdfs:label "MMF"@ko ; fp:themeName "MMF" .
+<http://mafest.ai/product#Theme_MSCI_Korea> a fp:Theme ; rdfs:label "MSCI Korea"@ko ; fp:themeName "MSCI Korea" .
+<http://mafest.ai/product#Theme_Moat(경제적해자)> a fp:Theme ; rdfs:label "Moat(경제적해자)"@ko ; fp:themeName "Moat(경제적해자)" .
+<http://mafest.ai/product#Theme_Nifty50> a fp:Theme ; rdfs:label "Nifty50"@ko ; fp:themeName "Nifty50" .
+<http://mafest.ai/product#Theme_Nikkei225> a fp:Theme ; rdfs:label "Nikkei225"@ko ; fp:themeName "Nikkei225" .
+<http://mafest.ai/product#Theme_S&P500> a fp:Theme ; rdfs:label "S&P500"@ko ; fp:themeName "S&P500" .
+<http://mafest.ai/product#Theme_TDF> a fp:Theme ; rdfs:label "TDF"@ko ; fp:themeName "TDF" .
+<http://mafest.ai/product#Theme_TRF> a fp:Theme ; rdfs:label "TRF"@ko ; fp:themeName "TRF" .
+<http://mafest.ai/product#Theme_e커머스> a fp:Theme ; rdfs:label "e커머스"@ko ; fp:themeName "e커머스" .
+<http://mafest.ai/product#Theme_美인기주식> a fp:Theme ; rdfs:label "美인기주식"@ko ; fp:themeName "美인기주식" .
+<http://mafest.ai/product#Theme_가치주> a fp:Theme ; rdfs:label "가치주"@ko ; fp:themeName "가치주" .
+<http://mafest.ai/product#Theme_건설> a fp:Theme ; rdfs:label "건설"@ko ; fp:themeName "건설" .
+<http://mafest.ai/product#Theme_게임> a fp:Theme ; rdfs:label "게임"@ko ; fp:themeName "게임" .
+<http://mafest.ai/product#Theme_경기소비재섹터> a fp:Theme ; rdfs:label "경기소비재섹터"@ko ; fp:themeName "경기소비재섹터" .
+<http://mafest.ai/product#Theme_고배당> a fp:Theme ; rdfs:label "고배당"@ko ; fp:themeName "고배당" .
+<http://mafest.ai/product#Theme_고수익채권> a fp:Theme ; rdfs:label "고수익채권"@ko ; fp:themeName "고수익채권" .
+<http://mafest.ai/product#Theme_구리> a fp:Theme ; rdfs:label "구리"@ko ; fp:themeName "구리" .
+<http://mafest.ai/product#Theme_구조화> a fp:Theme ; rdfs:label "구조화"@ko ; fp:themeName "구조화" .
+<http://mafest.ai/product#Theme_국공채> a fp:Theme ; rdfs:label "국공채"@ko ; fp:themeName "국공채" .
+<http://mafest.ai/product#Theme_그룹주> a fp:Theme ; rdfs:label "그룹주"@ko ; fp:themeName "그룹주" .
+<http://mafest.ai/product#Theme_글로벌> a fp:Theme ; rdfs:label "글로벌"@ko ; fp:themeName "글로벌" .
+<http://mafest.ai/product#Theme_글로벌반도체> a fp:Theme ; rdfs:label "글로벌반도체"@ko ; fp:themeName "글로벌반도체" .
+<http://mafest.ai/product#Theme_금> a fp:Theme ; rdfs:label "금"@ko ; fp:themeName "금" .
+<http://mafest.ai/product#Theme_금융> a fp:Theme ; rdfs:label "금융"@ko ; fp:themeName "금융" .
+<http://mafest.ai/product#Theme_금융섹터> a fp:Theme ; rdfs:label "금융섹터"@ko ; fp:themeName "금융섹터" .
+<http://mafest.ai/product#Theme_금채굴기업> a fp:Theme ; rdfs:label "금채굴기업"@ko ; fp:themeName "금채굴기업" .
+<http://mafest.ai/product#Theme_기타_귀금속> a fp:Theme ; rdfs:label "기타 귀금속"@ko ; fp:themeName "기타 귀금속" .
+<http://mafest.ai/product#Theme_기타_대표지수> a fp:Theme ; rdfs:label "기타 대표지수"@ko ; fp:themeName "기타 대표지수" .
+<http://mafest.ai/product#Theme_기타_아시아> a fp:Theme ; rdfs:label "기타 아시아"@ko ; fp:themeName "기타 아시아" .
+<http://mafest.ai/product#Theme_기후변화솔루션> a fp:Theme ; rdfs:label "기후변화솔루션"@ko ; fp:themeName "기후변화솔루션" .
+<http://mafest.ai/product#Theme_나스닥100> a fp:Theme ; rdfs:label "나스닥100"@ko ; fp:themeName "나스닥100" .
+<http://mafest.ai/product#Theme_농산물> a fp:Theme ; rdfs:label "농산물"@ko ; fp:themeName "농산물" .
+<http://mafest.ai/product#Theme_농업> a fp:Theme ; rdfs:label "농업"@ko ; fp:themeName "농업" .
+<http://mafest.ai/product#Theme_단기금리> a fp:Theme ; rdfs:label "단기금리"@ko ; fp:themeName "단기금리" .
+<http://mafest.ai/product#Theme_단기채> a fp:Theme ; rdfs:label "단기채"@ko ; fp:themeName "단기채" .
+<http://mafest.ai/product#Theme_대만> a fp:Theme ; rdfs:label "대만"@ko ; fp:themeName "대만" .
+<http://mafest.ai/product#Theme_대형주> a fp:Theme ; rdfs:label "대형주"@ko ; fp:themeName "대형주" .
+<http://mafest.ai/product#Theme_독일> a fp:Theme ; rdfs:label "독일"@ko ; fp:themeName "독일" .
+<http://mafest.ai/product#Theme_동일가중> a fp:Theme ; rdfs:label "동일가중"@ko ; fp:themeName "동일가중" .
+<http://mafest.ai/product#Theme_러셀2000> a fp:Theme ; rdfs:label "러셀2000"@ko ; fp:themeName "러셀2000" .
+<http://mafest.ai/product#Theme_러시아> a fp:Theme ; rdfs:label "러시아"@ko ; fp:themeName "러시아" .
+<http://mafest.ai/product#Theme_레버리지2X> a fp:Theme ; rdfs:label "레버리지2X"@ko ; fp:themeName "레버리지2X" .
+<http://mafest.ai/product#Theme_로봇> a fp:Theme ; rdfs:label "로봇"@ko ; fp:themeName "로봇" .
+<http://mafest.ai/product#Theme_리쇼어링> a fp:Theme ; rdfs:label "리쇼어링"@ko ; fp:themeName "리쇼어링" .
+<http://mafest.ai/product#Theme_리츠> a fp:Theme ; rdfs:label "리츠"@ko ; fp:themeName "리츠" .
+<http://mafest.ai/product#Theme_리튬> a fp:Theme ; rdfs:label "리튬"@ko ; fp:themeName "리튬" .
+<http://mafest.ai/product#Theme_만기매칭형채권> a fp:Theme ; rdfs:label "만기매칭형채권"@ko ; fp:themeName "만기매칭형채권" .
+<http://mafest.ai/product#Theme_멀티팩터> a fp:Theme ; rdfs:label "멀티팩터"@ko ; fp:themeName "멀티팩터" .
+<http://mafest.ai/product#Theme_메타버스> a fp:Theme ; rdfs:label "메타버스"@ko ; fp:themeName "메타버스" .
+<http://mafest.ai/product#Theme_멕시코> a fp:Theme ; rdfs:label "멕시코"@ko ; fp:themeName "멕시코" .
+<http://mafest.ai/product#Theme_명품> a fp:Theme ; rdfs:label "명품"@ko ; fp:themeName "명품" .
+<http://mafest.ai/product#Theme_모멘텀> a fp:Theme ; rdfs:label "모멘텀"@ko ; fp:themeName "모멘텀" .
+<http://mafest.ai/product#Theme_모빌리티> a fp:Theme ; rdfs:label "모빌리티"@ko ; fp:themeName "모빌리티" .
+<http://mafest.ai/product#Theme_물> a fp:Theme ; rdfs:label "물"@ko ; fp:themeName "물" .
+<http://mafest.ai/product#Theme_물가연동채권> a fp:Theme ; rdfs:label "물가연동채권"@ko ; fp:themeName "물가연동채권" .
+<http://mafest.ai/product#Theme_미국> a fp:Theme ; rdfs:label "미국"@ko ; fp:themeName "미국" .
+<http://mafest.ai/product#Theme_미국달러> a fp:Theme ; rdfs:label "미국달러"@ko ; fp:themeName "미국달러" .
+<http://mafest.ai/product#Theme_미디어/엔터> a fp:Theme ; rdfs:label "미디어/엔터"@ko ; fp:themeName "미디어/엔터" .
+<http://mafest.ai/product#Theme_바이오테크> a fp:Theme ; rdfs:label "바이오테크"@ko ; fp:themeName "바이오테크" .
+<http://mafest.ai/product#Theme_밸류체인> a fp:Theme ; rdfs:label "밸류체인"@ko ; fp:themeName "밸류체인" .
+<http://mafest.ai/product#Theme_버퍼형> a fp:Theme ; rdfs:label "버퍼형"@ko ; fp:themeName "버퍼형" .
+<http://mafest.ai/product#Theme_베타전략> a fp:Theme ; rdfs:label "베타전략"@ko ; fp:themeName "베타전략" .
+<http://mafest.ai/product#Theme_베트남> a fp:Theme ; rdfs:label "베트남"@ko ; fp:themeName "베트남" .
+<http://mafest.ai/product#Theme_변동금리채> a fp:Theme ; rdfs:label "변동금리채"@ko ; fp:themeName "변동금리채" .
+<http://mafest.ai/product#Theme_변동성> a fp:Theme ; rdfs:label "변동성"@ko ; fp:themeName "변동성" .
+<http://mafest.ai/product#Theme_부동산섹터> a fp:Theme ; rdfs:label "부동산섹터"@ko ; fp:themeName "부동산섹터" .
+<http://mafest.ai/product#Theme_비만치료> a fp:Theme ; rdfs:label "비만치료"@ko ; fp:themeName "비만치료" .
+<http://mafest.ai/product#Theme_빅데이터> a fp:Theme ; rdfs:label "빅데이터"@ko ; fp:themeName "빅데이터" .
+<http://mafest.ai/product#Theme_빅테크> a fp:Theme ; rdfs:label "빅테크"@ko ; fp:themeName "빅테크" .
+<http://mafest.ai/product#Theme_사이버보안> a fp:Theme ; rdfs:label "사이버보안"@ko ; fp:themeName "사이버보안" .
+<http://mafest.ai/product#Theme_사회책임> a fp:Theme ; rdfs:label "사회책임"@ko ; fp:themeName "사회책임" .
+<http://mafest.ai/product#Theme_산업재섹터> a fp:Theme ; rdfs:label "산업재섹터"@ko ; fp:themeName "산업재섹터" .
+<http://mafest.ai/product#Theme_삼성전자> a fp:Theme ; rdfs:label "삼성전자"@ko ; fp:themeName "삼성전자" .
+<http://mafest.ai/product#Theme_선진국> a fp:Theme ; rdfs:label "선진국"@ko ; fp:themeName "선진국" .
+<http://mafest.ai/product#Theme_성장주> a fp:Theme ; rdfs:label "성장주"@ko ; fp:themeName "성장주" .
+<http://mafest.ai/product#Theme_소부장> a fp:Theme ; rdfs:label "소부장"@ko ; fp:themeName "소부장" .
+<http://mafest.ai/product#Theme_소비> a fp:Theme ; rdfs:label "소비"@ko ; fp:themeName "소비" .
+<http://mafest.ai/product#Theme_소재섹터> a fp:Theme ; rdfs:label "소재섹터"@ko ; fp:themeName "소재섹터" .
+<http://mafest.ai/product#Theme_소프트웨어> a fp:Theme ; rdfs:label "소프트웨어"@ko ; fp:themeName "소프트웨어" .
+<http://mafest.ai/product#Theme_소형주> a fp:Theme ; rdfs:label "소형주"@ko ; fp:themeName "소형주" .
+<http://mafest.ai/product#Theme_손실제한> a fp:Theme ; rdfs:label "손실제한"@ko ; fp:themeName "손실제한" .
+<http://mafest.ai/product#Theme_수소> a fp:Theme ; rdfs:label "수소"@ko ; fp:themeName "수소" .
+<http://mafest.ai/product#Theme_신흥국> a fp:Theme ; rdfs:label "신흥국"@ko ; fp:themeName "신흥국" .
+<http://mafest.ai/product#Theme_아메리카> a fp:Theme ; rdfs:label "아메리카"@ko ; fp:themeName "아메리카" .
+<http://mafest.ai/product#Theme_아시아퍼시픽> a fp:Theme ; rdfs:label "아시아퍼시픽"@ko ; fp:themeName "아시아퍼시픽" .
+<http://mafest.ai/product#Theme_알리바바> a fp:Theme ; rdfs:label "알리바바"@ko ; fp:themeName "알리바바" .
+<http://mafest.ai/product#Theme_애플> a fp:Theme ; rdfs:label "애플"@ko ; fp:themeName "애플" .
+<http://mafest.ai/product#Theme_액티브> a fp:Theme ; rdfs:label "액티브"@ko ; fp:themeName "액티브" .
+<http://mafest.ai/product#Theme_양자컴퓨터> a fp:Theme ; rdfs:label "양자컴퓨터"@ko ; fp:themeName "양자컴퓨터" .
+<http://mafest.ai/product#Theme_에너지섹터> a fp:Theme ; rdfs:label "에너지섹터"@ko ; fp:themeName "에너지섹터" .
+<http://mafest.ai/product#Theme_엔> a fp:Theme ; rdfs:label "엔"@ko ; fp:themeName "엔" .
+<http://mafest.ai/product#Theme_엔비디아> a fp:Theme ; rdfs:label "엔비디아"@ko ; fp:themeName "엔비디아" .
+<http://mafest.ai/product#Theme_여행/레저> a fp:Theme ; rdfs:label "여행/레저"@ko ; fp:themeName "여행/레저" .
+<http://mafest.ai/product#Theme_우선주> a fp:Theme ; rdfs:label "우선주"@ko ; fp:themeName "우선주" .
+<http://mafest.ai/product#Theme_우주항공/방산> a fp:Theme ; rdfs:label "우주항공/방산"@ko ; fp:themeName "우주항공/방산" .
+<http://mafest.ai/product#Theme_운송> a fp:Theme ; rdfs:label "운송"@ko ; fp:themeName "운송" .
+<http://mafest.ai/product#Theme_원유> a fp:Theme ; rdfs:label "원유"@ko ; fp:themeName "원유" .
+<http://mafest.ai/product#Theme_원유/가스기업> a fp:Theme ; rdfs:label "원유/가스기업"@ko ; fp:themeName "원유/가스기업" .
+<http://mafest.ai/product#Theme_원자력> a fp:Theme ; rdfs:label "원자력"@ko ; fp:themeName "원자력" .
+<http://mafest.ai/product#Theme_월배당> a fp:Theme ; rdfs:label "월배당"@ko ; fp:themeName "월배당" .
+<http://mafest.ai/product#Theme_유럽> a fp:Theme ; rdfs:label "유럽"@ko ; fp:themeName "유럽" .
+<http://mafest.ai/product#Theme_유틸리티섹터> a fp:Theme ; rdfs:label "유틸리티섹터"@ko ; fp:themeName "유틸리티섹터" .
+<http://mafest.ai/product#Theme_은> a fp:Theme ; rdfs:label "은"@ko ; fp:themeName "은" .
+<http://mafest.ai/product#Theme_인도> a fp:Theme ; rdfs:label "인도"@ko ; fp:themeName "인도" .
+<http://mafest.ai/product#Theme_인도네시아> a fp:Theme ; rdfs:label "인도네시아"@ko ; fp:themeName "인도네시아" .
+<http://mafest.ai/product#Theme_인버스> a fp:Theme ; rdfs:label "인버스"@ko ; fp:themeName "인버스" .
+<http://mafest.ai/product#Theme_인버스2X> a fp:Theme ; rdfs:label "인버스2X"@ko ; fp:themeName "인버스2X" .
+<http://mafest.ai/product#Theme_인터넷> a fp:Theme ; rdfs:label "인터넷"@ko ; fp:themeName "인터넷" .
+<http://mafest.ai/product#Theme_인프라> a fp:Theme ; rdfs:label "인프라"@ko ; fp:themeName "인프라" .
+<http://mafest.ai/product#Theme_일본> a fp:Theme ; rdfs:label "일본"@ko ; fp:themeName "일본" .
+<http://mafest.ai/product#Theme_자산배분> a fp:Theme ; rdfs:label "자산배분"@ko ; fp:themeName "자산배분" .
+<http://mafest.ai/product#Theme_장기채> a fp:Theme ; rdfs:label "장기채"@ko ; fp:themeName "장기채" .
+<http://mafest.ai/product#Theme_재간접> a fp:Theme ; rdfs:label "재간접"@ko ; fp:themeName "재간접" .
+<http://mafest.ai/product#Theme_저탄소> a fp:Theme ; rdfs:label "저탄소"@ko ; fp:themeName "저탄소" .
+<http://mafest.ai/product#Theme_전기> a fp:Theme ; rdfs:label "전기"@ko ; fp:themeName "전기" .
+<http://mafest.ai/product#Theme_정방향> a fp:Theme ; rdfs:label "정방향"@ko ; fp:themeName "정방향" .
+<http://mafest.ai/product#Theme_조선/해운> a fp:Theme ; rdfs:label "조선/해운"@ko ; fp:themeName "조선/해운" .
+<http://mafest.ai/product#Theme_종합_멀티에셋> a fp:Theme ; rdfs:label "종합 멀티에셋"@ko ; fp:themeName "종합 멀티에셋" .
+<http://mafest.ai/product#Theme_종합주식> a fp:Theme ; rdfs:label "종합주식"@ko ; fp:themeName "종합주식" .
+<http://mafest.ai/product#Theme_종합채권> a fp:Theme ; rdfs:label "종합채권"@ko ; fp:themeName "종합채권" .
+<http://mafest.ai/product#Theme_주식+채권> a fp:Theme ; rdfs:label "주식+채권"@ko ; fp:themeName "주식+채권" .
+<http://mafest.ai/product#Theme_주주가치> a fp:Theme ; rdfs:label "주주가치"@ko ; fp:themeName "주주가치" .
+<http://mafest.ai/product#Theme_중국> a fp:Theme ; rdfs:label "중국"@ko ; fp:themeName "중국" .
+<http://mafest.ai/product#Theme_중기채> a fp:Theme ; rdfs:label "중기채"@ko ; fp:themeName "중기채" .
+<http://mafest.ai/product#Theme_중형주> a fp:Theme ; rdfs:label "중형주"@ko ; fp:themeName "중형주" .
+<http://mafest.ai/product#Theme_지배구조> a fp:Theme ; rdfs:label "지배구조"@ko ; fp:themeName "지배구조" .
+<http://mafest.ai/product#Theme_차이나H> a fp:Theme ; rdfs:label "차이나H"@ko ; fp:themeName "차이나H" .
+<http://mafest.ai/product#Theme_차이나과창판> a fp:Theme ; rdfs:label "차이나과창판"@ko ; fp:themeName "차이나과창판" .
+<http://mafest.ai/product#Theme_채권+리츠> a fp:Theme ; rdfs:label "채권+리츠"@ko ; fp:themeName "채권+리츠" .
+<http://mafest.ai/product#Theme_철강> a fp:Theme ; rdfs:label "철강"@ko ; fp:themeName "철강" .
+<http://mafest.ai/product#Theme_초단기채권> a fp:Theme ; rdfs:label "초단기채권"@ko ; fp:themeName "초단기채권" .
+<http://mafest.ai/product#Theme_친환경> a fp:Theme ; rdfs:label "친환경"@ko ; fp:themeName "친환경" .
+<http://mafest.ai/product#Theme_친환경에너지> a fp:Theme ; rdfs:label "친환경에너지"@ko ; fp:themeName "친환경에너지" .
+<http://mafest.ai/product#Theme_커버드콜> a fp:Theme ; rdfs:label "커버드콜"@ko ; fp:themeName "커버드콜" .
+<http://mafest.ai/product#Theme_코리아밸류업> a fp:Theme ; rdfs:label "코리아밸류업"@ko ; fp:themeName "코리아밸류업" .
+<http://mafest.ai/product#Theme_퀄리티> a fp:Theme ; rdfs:label "퀄리티"@ko ; fp:themeName "퀄리티" .
+<http://mafest.ai/product#Theme_클라우드컴퓨팅> a fp:Theme ; rdfs:label "클라우드컴퓨팅"@ko ; fp:themeName "클라우드컴퓨팅" .
+<http://mafest.ai/product#Theme_탄소배출권> a fp:Theme ; rdfs:label "탄소배출권"@ko ; fp:themeName "탄소배출권" .
+<http://mafest.ai/product#Theme_태양광> a fp:Theme ; rdfs:label "태양광"@ko ; fp:themeName "태양광" .
+<http://mafest.ai/product#Theme_테슬라> a fp:Theme ; rdfs:label "테슬라"@ko ; fp:themeName "테슬라" .
+<http://mafest.ai/product#Theme_토탈리턴> a fp:Theme ; rdfs:label "토탈리턴"@ko ; fp:themeName "토탈리턴" .
+<http://mafest.ai/product#Theme_통신서비스섹터> a fp:Theme ; rdfs:label "통신서비스섹터"@ko ; fp:themeName "통신서비스섹터" .
+<http://mafest.ai/product#Theme_팔란티어> a fp:Theme ; rdfs:label "팔란티어"@ko ; fp:themeName "팔란티어" .
+<http://mafest.ai/product#Theme_핀테크> a fp:Theme ; rdfs:label "핀테크"@ko ; fp:themeName "핀테크" .
+<http://mafest.ai/product#Theme_필수소비재섹터> a fp:Theme ; rdfs:label "필수소비재섹터"@ko ; fp:themeName "필수소비재섹터" .
+<http://mafest.ai/product#Theme_한국> a fp:Theme ; rdfs:label "한국"@ko ; fp:themeName "한국" .
+<http://mafest.ai/product#Theme_항셍> a fp:Theme ; rdfs:label "항셍"@ko ; fp:themeName "항셍" .
+<http://mafest.ai/product#Theme_항셍테크> a fp:Theme ; rdfs:label "항셍테크"@ko ; fp:themeName "항셍테크" .
+<http://mafest.ai/product#Theme_헬스케어섹터> a fp:Theme ; rdfs:label "헬스케어섹터"@ko ; fp:themeName "헬스케어섹터" .
+<http://mafest.ai/product#Theme_혁신기업> a fp:Theme ; rdfs:label "혁신기업"@ko ; fp:themeName "혁신기업" .
+<http://mafest.ai/product#Theme_화장품> a fp:Theme ; rdfs:label "화장품"@ko ; fp:themeName "화장품" .
+<http://mafest.ai/product#Theme_환헤지> a fp:Theme ; rdfs:label "환헤지"@ko ; fp:themeName "환헤지" .
+<http://mafest.ai/product#Theme_회사채> a fp:Theme ; rdfs:label "회사채"@ko ; fp:themeName "회사채" .

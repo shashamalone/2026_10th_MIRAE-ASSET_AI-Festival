@@ -1,0 +1,665 @@
+@prefix fp:      <http://mafest.ai/product#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+################################################################################
+# fp-common — 4개 상품 도메인(국내채권·국내ETF·해외ETF·공모펀드)의 공통 상위 스키마
+#
+# 설계 원칙
+#  1) 루트는 fp:Product 하나다. 모든 상품 클래스는 fp:Product의 하위 클래스다.
+#  2) 편입관계·시점 가변 수치는 단순 object property로 표현하지 않는다.
+#     비중(fp:weight)·기준일(fp:asOf)·근거문서(fp:supportedBy)를 달아야 하므로
+#     fp:Holding / fp:MetricSnapshot 중간 클래스(n-ary 패턴)를 쓴다.
+#  3) 모든 property에 rdfs:domain·rdfs:range를 명시 선언한다.
+#     35문항 Q35("VOO가 직접 발행한 회사채")는 fp:issuedBy의 domain이 fp:Bond로
+#     한정되어 있어 주어가 fp:ETF인 질의를 **도메인 위반**으로 판정하고 ABSTAIN한다.
+#     (fp:ETF는 fp:Bond와 owl:disjointWith이므로 추론상 모순이 확정된다.)
+#  4) 모든 owl:DatatypeProperty에 fp:sourceTable·fp:sourceColumn 애노테이션으로
+#     원본 테이블코드와 컬럼명을 박는다. 답변 evidence가 이 값을 그대로 인용한다.
+#     원본 컬럼이 아니라 파생 산출물이면 "derived:파일.컬럼" 형태로 표기한다.
+#  5) 전량 더미·전량 결측 컬럼(괴리율 du_diff_rt, 추적오차율 du_chas_errt,
+#     배당 3컬럼 등)은 온톨로지에 올리지 않는다. 올리면 "값이 있다"는 잘못된
+#     신호가 되어 답변 근거 계약을 위반한다.
+#
+# 데이터 기준일: 도메인별로 다르다 (bond 2026-02-24 / etf_kr 2026-06-15 /
+#   etf_gl 2026-06-14 / fund_pub 미표기, 스냅샷 2026-07-11).
+#   도메인 간 수치 비교 시 fp:asOf를 각각 표기해야 한다.
+################################################################################
+
+<http://mafest.ai/ontology/fp-common> a owl:Ontology ;
+    rdfs:label "금융상품 공통 온톨로지"@ko, "Financial Product Common Ontology"@en ;
+    rdfs:comment "국내채권·국내ETF·해외ETF·공모펀드 4개 도메인이 공유하는 상위 클래스, 관계, 코드리스트(신용등급·위험등급·자산군·투자지역·통화·복제방식)를 정의한다. 도메인 4파일은 이 온톨로지를 owl:imports 한다."@ko ;
+    dcterms:created "2026-08-13"^^xsd:date ;
+    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-07-11 스냅샷)" .
+
+################################################################################
+# 0. 출처 추적 애노테이션
+################################################################################
+
+fp:sourceTable a owl:AnnotationProperty ;
+    rdfs:label "원본 테이블코드"@ko, "source table"@en ;
+    rdfs:comment "속성값의 원천 테이블코드(PRBD01N001·PREF01N001·PREF02N001·PRFD01N001). 파생 산출물이면 derived: 접두를 쓴다. 답변 evidence의 '사용 컬럼' 항목이 이 값을 인용한다."@ko .
+
+fp:sourceColumn a owl:AnnotationProperty ;
+    rdfs:label "원본 컬럼명"@ko, "source column"@en ;
+    rdfs:comment "속성값의 원천 컬럼명. 파생 컬럼은 derived:파일명.컬럼명 형태로 표기해 주최측 원본값과 자체 계산값을 구분한다."@ko .
+
+################################################################################
+# 1. 클래스 계층 — 루트 fp:Product
+################################################################################
+
+fp:Product a owl:Class ;
+    rdfs:label "금융상품"@ko, "Financial Product"@en ;
+    rdfs:comment "판매·거래 가능한 금융상품의 최상위 클래스. 채권·ETF·ETN·공모펀드가 모두 이 클래스의 하위다. 상품번호(fp:productCode)로 식별한다."@ko .
+
+fp:Security a owl:Class ;
+    rdfs:label "증권"@ko, "Security"@en ;
+    rdfs:comment "ETF·펀드가 편입할 수 있는 증권(주식·채권 등). fp:Holding의 대상이며, fp:issuedByCompany로 발행 기업에 연결된다. 현재 보유 데이터에 편입종목이 전무하므로 인스턴스는 외부 수집(N-PORT·투자설명서) 이후 적재된다."@ko .
+
+fp:Bond a owl:Class ;
+    rdfs:subClassOf fp:Product, fp:Security ;
+    rdfs:label "채권"@ko, "Bond"@en ;
+    rdfs:comment "국내채권(PRBD01N001) 종목. 상품이자 편입 대상 증권이므로 fp:Product와 fp:Security를 동시에 상속한다. fp:issuedBy의 유일한 domain이다."@ko .
+
+fp:ETF a owl:Class ;
+    rdfs:subClassOf fp:Product, fp:Security ;
+    owl:disjointWith fp:Bond ;
+    rdfs:label "상장지수펀드"@ko, "Exchange Traded Fund"@en ;
+    rdfs:comment "거래소 상장 지수연동 펀드. 국내(PREF01N001 pd_grp_no='ETF' 1,202건)·해외(PREF02N001 5,587건) 모두 이 클래스다. 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
+
+fp:ETN a owl:Class ;
+    rdfs:subClassOf fp:Product, fp:Security ;
+    owl:disjointWith fp:ETF, fp:Bond ;
+    rdfs:label "상장지수증권"@ko, "Exchange Traded Note"@en ;
+    rdfs:comment "발행 증권사의 채무증권. 국내 532건·해외 59건이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소(owl:disjointWith)다. 'ETF 몇 개' 류 질의에서 ETN을 세면 국내 기준 44% 부풀려진다."@ko .
+
+fp:PublicFund a owl:Class ;
+    rdfs:subClassOf fp:Product ;
+    owl:disjointWith fp:Bond, fp:ETF, fp:ETN ;
+    rdfs:label "공모펀드"@ko, "Public Offering Fund"@en ;
+    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위, 11,139종). **공모 한정 클래스다** — 원본에는 사모 102행(prvo_pbff_desc='사모')이 혼재하므로 적재 시 공모만 이 클래스로 선언하고 사모는 제외한다. 원본은 (itm_no, prfd_attr_cd) 롱포맷이라 펀드 단위 집계는 itm_no dedup(8.58배 축소)이 선행되어야 한다."@ko .
+
+fp:ShareClass a owl:Class ;
+    rdfs:subClassOf fp:PublicFund ;
+    rdfs:label "펀드 클래스"@ko, "Fund Share Class"@en ;
+    rdfs:comment "동일 모(母)펀드의 판매보수 체계별 종류(A/C/C-P/C-Pe/F 등). 클래스도 개별 종목번호로 판매되는 상품이므로 fp:PublicFund의 하위다. 그룹핑 키는 fp:managerItemCode(mtco_itm_no, 11,139종→4,661그룹)이며 fp:representativeKsdCode는 sentinel 2.6%가 섞여 신뢰도가 낮다."@ko .
+
+fp:Organization a owl:Class ;
+    rdfs:label "기관"@ko, "Organization"@en ;
+    rdfs:comment "법인·기관의 상위 클래스. 발행사·운용사·수탁사·일반 기업이 하위다. 원본은 기관명 문자열이라 법인격 표기 흔들림(한국투자/한국투자증권(주), BlackRock Fund Advisors/LP)이 있어 skos:altLabel로 별칭을 흡수한다."@ko .
+
+fp:Company a owl:Class ;
+    rdfs:subClassOf fp:Organization ;
+    rdfs:label "기업"@ko, "Company"@en ;
+    rdfs:comment "일반 사업회사. 편입증권의 발행 주체이며 자회사·산업·테마 탐색의 허브다. 현재 데이터에는 기업 식별자 마스터가 없어 채권 발행사명 외에는 인스턴스를 만들 수 없다."@ko .
+
+fp:Issuer a owl:Class ;
+    rdfs:subClassOf fp:Organization ;
+    rdfs:label "발행기관"@ko, "Issuer"@en ;
+    rdfs:comment "채권 발행 주체(PRBD01N001.PD_PBCM, 8,018종). fp:issuedBy의 range다. 상품명은 'LG에너지솔루션'인데 발행사명은 '(주)엘지에너지솔루션'처럼 음차·법인격 표기가 흔들리므로 정규화 사전이 필요하다."@ko .
+
+fp:AssetManager a owl:Class ;
+    rdfs:subClassOf fp:Organization ;
+    rdfs:label "운용사"@ko, "Asset Manager"@en ;
+    rdfs:comment "ETF·펀드의 집합투자업자(ETN은 발행 증권사). fp:managedBy의 range다. 국내ETF는 문자열(97종, 오염 55건), 공모펀드는 기관코드(or_co_xtn_itt_cd 67종)라 코드↔사명 매핑표가 있어야 레이블을 붙일 수 있다."@ko .
+
+fp:Custodian a owl:Class ;
+    rdfs:subClassOf fp:Organization ;
+    rdfs:label "수탁회사"@ko, "Custodian"@en ;
+    rdfs:comment "펀드 재산을 보관·관리하는 신탁업자(trusc_xtn_itt_cd 18종, 시중은행 중심). 코드↔사명 매핑표 미확보 상태다."@ko .
+
+fp:Index a owl:Class ;
+    rdfs:label "지수"@ko, "Index"@en ;
+    rdfs:comment "ETF의 기초지수 또는 펀드의 벤치마크. 지수명 표기가 도메인마다 달라(국내ETF cu_base_index와 펀드 bmrk_nm의 교집합 17종뿐) 별칭은 skos:altLabel로 묶는다. 펀드 벤치마크(391종)에는 'MSCI ACWI CR 50% + 종합채권01Y 50%' 같은 복합 벤치마크가 있어 지수 노드 다대다 연결이 필요하다."@ko .
+
+fp:Industry a owl:Class ;
+    rdfs:label "산업"@ko, "Industry"@en ;
+    rdfs:comment "기업이 속한 산업 분류. fp:belongsToIndustry의 range. 현재 데이터에 산업 분류축이 없어 인스턴스는 외부 수집 대상이다."@ko .
+
+fp:Theme a owl:Class ;
+    rdfs:label "테마"@ko, "Theme"@en ;
+    rdfs:comment "투자 테마(반도체·AI·방산 등). 상품·기업이 fp:relatedToTheme로 연결된다. 현재 유일한 원천은 data/relations/etf_theme.csv(국내ETF 1,099종 × 176테마, LSEG)이며 테마 개체는 etf_kr.ttl에 선언한다."@ko .
+
+fp:Risk a owl:Class ;
+    rdfs:label "위험요인"@ko, "Risk Factor"@en ;
+    rdfs:comment "상품·기업·산업에 결부된 위험요인. 반드시 fp:supportedBy로 근거 문서를 동반해야 하며, 근거 없는 위험 주장은 답변에 포함하지 않는다. 현재 근거 문서가 0건이라 인스턴스 없음."@ko .
+
+fp:Document a owl:Class ;
+    rdfs:label "근거문서"@ko, "Evidence Document"@en ;
+    rdfs:comment "공시·투자설명서·운용보고서·정책자료 등 관계와 주장을 지지하는 문서. fp:supportedBy의 range다. 문서명·발행기관·발행일·근거 문장이 답변 근거 계약의 필수 항목이다."@ko .
+
+fp:Holding a owl:Class ;
+    rdfs:label "편입관계"@ko, "Holding"@en ;
+    rdfs:comment "상품이 특정 증권을 편입한 사실을 나타내는 **n-ary 중간 노드**. 편입비중(fp:weight)과 편입기준일(fp:asOf), 근거문서(fp:supportedBy)를 동반해야 하므로 상품→증권 단순 관계로 표현하지 않는다. 현재 국내·해외ETF·펀드 모두 편입종목 데이터가 0건이라 인스턴스는 외부 수집 이후 생성된다."@ko .
+
+fp:MetricSnapshot a owl:Class ;
+    rdfs:label "수치 스냅샷"@ko, "Metric Snapshot"@en ;
+    rdfs:comment "특정 시점의 가변 수치(NAV·AUM·수익률·가격) 1건. 도메인별 기준일이 4개월 이상 벌어져 있어 값과 기준일을 한 노드로 묶어야 비교 질의에서 시점 혼동이 없다. 시점 불변 속성은 상품 노드에 직접 붙이고, 시점 가변 수치만 이 클래스로 뺀다."@ko .
+
+fp:CreditRating a owl:Class ;
+    rdfs:label "신용등급"@ko, "Credit Rating"@en ;
+    rdfs:comment "AAA~C 19단계 신용등급 **개체**. fp:ratingRank(1=AAA … 19=C)로 서열을 준다. 용법 두 가지: ① 'AA- 이상' 조건검색은 fp:ratingRank <= 4 비교로 처리한다(문자열 사전순 비교 금지). ② 'AAAA 등급' 같은 질의는 해당 **개체가 부재**하므로 ABSTAIN_INVALID_TAXONOMY로 판정한다. rank 체계는 data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일하다. **개체 부재(AAAA)와 미평가 상태(fp:UnratedByDesign)는 전혀 다르다** — 전자는 허용 분류체계에 없는 값이라 질의 자체가 성립하지 않고(ABSTAIN), 후자는 유효한 상태값이라 '미평가(국채)'로 표기해 답변한다. 등급 조건 질의에서 국채는 등급 필터에서 제외하되 결과 표기에는 '미평가'로 남긴다."@ko .
+
+fp:RatingStatus a owl:Class ;
+    rdfs:label "신용등급 상태"@ko, "Credit Rating Status"@en ;
+    rdfs:comment "신용등급이 **없는 이유**를 구분하는 상태 개체. 등급 개체(fp:CreditRating)가 아니므로 fp:ratingRank를 부여하지 않으며 서열 비교에 끼어들지 않는다. 실측상 CRD_GRD 결측 17,644건(41.6%)은 성격이 둘로 갈린다: ① 미평가(평가 대상 아님) — 국공채 2,137건·개인투자용국채 49건은 결측률 100%로, 국가가 신용의 기준이라 애초에 평가 대상이 아니다. ② 등급 정보 없음 — 회사채 14,241건(45.3%)·특수채 1,214건(13.9%)의 실제 결손. 이 구분이 없으면 '등급 정보가 없어 확인 불가'라는 잘못된 답변이 나온다."@ko .
+
+fp:RiskGrade a owl:Class ;
+    rdfs:label "투자위험등급"@ko, "Investment Risk Grade"@en ;
+    rdfs:comment "1(최고위험)~6(최저위험) 공통 위험등급 개체. 채권 PD_RISK_GCD, 국내ETF pd_risk_cd(PD_RISK_GCD_1x 접두 제거), 공모펀드 zrin_fd_ivst_risk_gcd(제로인)는 **명칭 체계는 다르나 코드 서열이 모두 '1=최고위험'으로 일치**하므로 단일 개체 6개로 통합한다."@ko .
+
+fp:AssetType a owl:Class ;
+    rdfs:label "투자자산군"@ko, "Asset Type"@en ;
+    rdfs:comment "주식·채권·원자재 등 자산군 개체. 국내ETF는 한글 8종, 해외ETF는 영문 6종이라 값 체계가 달라 개체를 통합하고 원본 표기는 skos:altLabel로 흡수한다."@ko .
+
+fp:InvestmentRegion a owl:Class ;
+    rdfs:label "투자지역"@ko, "Investment Region"@en ;
+    rdfs:comment "투자 대상 지역 개체. 국내ETF wu_inv_rgn 11종·공모펀드 fd_ivst_rgn_desc 7종은 값 체계가 거의 같아 통합했다. 해외ETF wu_inv_rgn은 59종으로 국가 단위까지 세분되어 별도 국가→지역 매핑이 필요하다."@ko .
+
+fp:ReplicationMethod a owl:Class ;
+    rdfs:label "복제방식"@ko, "Replication Method"@en ;
+    rdfs:comment "지수 복제 방식 개체. 국내ETF cu_strtegy(실물복제/합성복제/액티브)와 해외ETF cu_index_repl_mthd(Full/Optimized/Swap/Other)를 통합한다. Swap=합성복제 대응."@ko .
+
+fp:Currency a owl:Class ;
+    rdfs:label "통화"@ko, "Currency"@en ;
+    rdfs:comment "표시·거래 통화 개체(ISO 4217). 채권 CURR_CD, 펀드 curr_cd, 해외ETF pd_trd_ccy의 공통 range다."@ko .
+
+################################################################################
+# 2. 코드리스트 개체 — 신용등급 (fp:ratingRank 1=AAA … 19=C)
+#   "AA- 이상"  → fp:ratingRank <= 4
+#   "AAAA"      → 개체 부재 → ABSTAIN_INVALID_TAXONOMY
+#   원본 CRD_GRD의 접미 '0'은 등급 내 중위(플랫) 표기이므로 skos:altLabel로 흡수한다(AA0 = AA).
+################################################################################
+
+fp:Rating_AAA  a fp:CreditRating ; rdfs:label "AAA"@ko, "AAA"@en ; fp:ratingRank 1 .
+fp:Rating_AAp  a fp:CreditRating ; rdfs:label "AA+"@ko, "AA+"@en ; fp:ratingRank 2 .
+fp:Rating_AA   a fp:CreditRating ; rdfs:label "AA"@ko, "AA"@en ; skos:altLabel "AA0"@ko ; fp:ratingRank 3 .
+fp:Rating_AAm  a fp:CreditRating ; rdfs:label "AA-"@ko, "AA-"@en ; fp:ratingRank 4 .
+fp:Rating_Ap   a fp:CreditRating ; rdfs:label "A+"@ko, "A+"@en ; fp:ratingRank 5 .
+fp:Rating_A    a fp:CreditRating ; rdfs:label "A"@ko, "A"@en ; skos:altLabel "A0"@ko ; fp:ratingRank 6 .
+fp:Rating_Am   a fp:CreditRating ; rdfs:label "A-"@ko, "A-"@en ; fp:ratingRank 7 .
+fp:Rating_BBBp a fp:CreditRating ; rdfs:label "BBB+"@ko, "BBB+"@en ; fp:ratingRank 8 .
+fp:Rating_BBB  a fp:CreditRating ; rdfs:label "BBB"@ko, "BBB"@en ; skos:altLabel "BBB0"@ko ; fp:ratingRank 9 .
+fp:Rating_BBBm a fp:CreditRating ; rdfs:label "BBB-"@ko, "BBB-"@en ; fp:ratingRank 10 .
+fp:Rating_BBp  a fp:CreditRating ; rdfs:label "BB+"@ko, "BB+"@en ; fp:ratingRank 11 .
+fp:Rating_BB   a fp:CreditRating ; rdfs:label "BB"@ko, "BB"@en ; skos:altLabel "BB0"@ko ; fp:ratingRank 12 .
+fp:Rating_BBm  a fp:CreditRating ; rdfs:label "BB-"@ko, "BB-"@en ; fp:ratingRank 13 .
+fp:Rating_Bp   a fp:CreditRating ; rdfs:label "B+"@ko, "B+"@en ; fp:ratingRank 14 .
+fp:Rating_B    a fp:CreditRating ; rdfs:label "B"@ko, "B"@en ; skos:altLabel "B0"@ko ; fp:ratingRank 15 .
+fp:Rating_Bm   a fp:CreditRating ; rdfs:label "B-"@ko, "B-"@en ; fp:ratingRank 16 .
+fp:Rating_CCC  a fp:CreditRating ; rdfs:label "CCC"@ko, "CCC"@en ; fp:ratingRank 17 .
+fp:Rating_CC   a fp:CreditRating ; rdfs:label "CC"@ko, "CC"@en ; skos:altLabel "CC0"@ko ; fp:ratingRank 18 .
+fp:Rating_C    a fp:CreditRating ; rdfs:label "C"@ko, "C"@en ; skos:altLabel "C0"@ko ; fp:ratingRank 19 .
+
+################################################################################
+# 2-1. 신용등급 상태 개체 — 등급이 '없는 이유'의 구분 (fp:ratingRank 없음)
+#   Rated            : 등급 개체가 연결되어 있음
+#   UnratedByDesign  : 평가 대상이 아님(국공채·개인투자용국채). 정상 상태.
+#   RatingUnknown    : 평가 대상인데 등급 정보가 없음(회사채·특수채의 실제 결손).
+################################################################################
+
+fp:Rated a fp:RatingStatus ;
+    rdfs:label "등급 보유"@ko, "Rated"@en ;
+    skos:altLabel "평가등급 있음"@ko .
+
+fp:UnratedByDesign a fp:RatingStatus ;
+    rdfs:label "미평가(평가 대상 아님)"@ko, "Unrated by design"@en ;
+    skos:altLabel "국채 미평가"@ko .
+
+fp:RatingUnknown a fp:RatingStatus ;
+    rdfs:label "등급 정보 없음"@ko, "Rating unknown"@en ;
+    skos:altLabel "등급 미수집"@ko .
+
+fp:ratingStatus a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Bond fp:Issuer ) ] ;
+    rdfs:range fp:RatingStatus ;
+    rdfs:label "신용등급 상태"@ko, "rating status"@en ;
+    rdfs:comment "등급이 없을 때 그 이유를 구분한다. **판정 규칙: STD_PD_MCLS_NM이 '국공채' 또는 '개인투자용국채'이면서 CRD_GRD가 결측이면 fp:UnratedByDesign(미평가가 정상), '회사채'·'특수채'이면서 결측이면 fp:RatingUnknown(데이터 없음), 등급이 있으면 fp:Rated.** 실측 근거: 국공채 2,137건·개인투자용국채 49건은 결측률 100%, 회사채 14,241건(45.3%)·특수채 1,214건(13.9%)이 결측. 판매 가능 채권 254건 중 등급 결측 204건은 **전부 국공채**이고 판매 가능한 회사채 42건·특수채 8건은 결측 0건이다. 답변 규칙: 'AA- 이상' 등 등급 조건 질의에서 fp:UnratedByDesign 종목은 등급 필터에서 제외하되 결과에 '미평가(국채)'로 표기하고, fp:RatingUnknown 종목만 '등급 정보 확인 불가'로 답한다. 이 상태값은 유효한 값이므로 존재하지 않는 등급 문자열(AAAA)에 대한 ABSTAIN_INVALID_TAXONOMY 판정과 혼동하지 않는다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "CRD_GRD", "STD_PD_MCLS_NM" .
+
+################################################################################
+# 3. 코드리스트 개체 — 투자위험등급 (1=최고위험 … 6=최저위험)
+################################################################################
+
+fp:RiskGrade_1 a fp:RiskGrade ; rdfs:label "매우 높은 위험(1등급)"@ko, "Very High Risk (Grade 1)"@en ;
+    skos:altLabel "매우높은위험(1등급)"@ko, "PD_RISK_GCD_11"@en ; fp:riskGradeLevel 1 .
+fp:RiskGrade_2 a fp:RiskGrade ; rdfs:label "높은 위험(2등급)"@ko, "High Risk (Grade 2)"@en ;
+    skos:altLabel "높은위험(2등급)"@ko, "PD_RISK_GCD_12"@en ; fp:riskGradeLevel 2 .
+fp:RiskGrade_3 a fp:RiskGrade ; rdfs:label "다소 높은 위험(3등급)"@ko, "Moderately High Risk (Grade 3)"@en ;
+    skos:altLabel "다소높은위험(3등급)"@ko, "PD_RISK_GCD_13"@en ; fp:riskGradeLevel 3 .
+fp:RiskGrade_4 a fp:RiskGrade ; rdfs:label "보통 위험(4등급)"@ko, "Moderate Risk (Grade 4)"@en ;
+    skos:altLabel "보통위험(4등급)"@ko, "PD_RISK_GCD_14"@en ; fp:riskGradeLevel 4 .
+fp:RiskGrade_5 a fp:RiskGrade ; rdfs:label "낮은 위험(5등급)"@ko, "Low Risk (Grade 5)"@en ;
+    skos:altLabel "낮은위험(5등급)"@ko, "PD_RISK_GCD_15"@en ; fp:riskGradeLevel 5 .
+fp:RiskGrade_6 a fp:RiskGrade ; rdfs:label "매우 낮은 위험(6등급)"@ko, "Very Low Risk (Grade 6)"@en ;
+    skos:altLabel "매우낮은위험(6등급)"@ko, "PD_RISK_GCD_16"@en ; fp:riskGradeLevel 6 .
+
+################################################################################
+# 4. 코드리스트 개체 — 자산군 / 투자지역 / 복제방식 / 통화
+################################################################################
+
+fp:AssetType_Equity      a fp:AssetType ; rdfs:label "주식"@ko, "Equity"@en .
+fp:AssetType_Bond        a fp:AssetType ; rdfs:label "채권"@ko, "Bond"@en .
+fp:AssetType_Commodity   a fp:AssetType ; rdfs:label "원자재"@ko, "Commodity"@en .
+fp:AssetType_MixedAsset  a fp:AssetType ; rdfs:label "혼합자산"@ko, "Mixed Assets"@en ; skos:altLabel "주식혼합"@ko, "채권혼합"@ko .
+fp:AssetType_MoneyMarket a fp:AssetType ; rdfs:label "단기자금"@ko, "Money Market"@en ; skos:altLabel "MMF"@ko .
+fp:AssetType_Currency    a fp:AssetType ; rdfs:label "통화"@ko, "Currency"@en .
+fp:AssetType_RealEstate  a fp:AssetType ; rdfs:label "부동산"@ko, "Real Estate"@en .
+fp:AssetType_Alternative a fp:AssetType ; rdfs:label "대체투자"@ko, "Alternatives"@en ; skos:altLabel "특별자산"@ko .
+fp:AssetType_Other       a fp:AssetType ; rdfs:label "기타"@ko, "Other"@en .
+
+fp:Region_Domestic  a fp:InvestmentRegion ; rdfs:label "국내"@ko, "Domestic"@en .
+fp:Region_Overseas  a fp:InvestmentRegion ; rdfs:label "해외"@ko, "Overseas"@en .
+fp:Region_Global    a fp:InvestmentRegion ; rdfs:label "글로벌"@ko, "Global"@en .
+fp:Region_GlobalExUS a fp:InvestmentRegion ; rdfs:label "글로벌(미국제외)"@ko, "Global Ex US"@en .
+fp:Region_US        a fp:InvestmentRegion ; rdfs:label "미국"@ko, "United States of America"@en .
+fp:Region_Americas  a fp:InvestmentRegion ; rdfs:label "남미·북미"@ko, "Americas"@en .
+fp:Region_Europe    a fp:InvestmentRegion ; rdfs:label "유럽"@ko, "Europe"@en .
+fp:Region_Asia      a fp:InvestmentRegion ; rdfs:label "아시아"@ko, "Asia"@en .
+fp:Region_China     a fp:InvestmentRegion ; rdfs:label "중국"@ko, "China"@en .
+fp:Region_Japan     a fp:InvestmentRegion ; rdfs:label "일본"@ko, "Japan"@en .
+fp:Region_India     a fp:InvestmentRegion ; rdfs:label "인도"@ko, "India"@en .
+fp:Region_Vietnam   a fp:InvestmentRegion ; rdfs:label "베트남"@ko, "Vietnam"@en .
+fp:Region_Emerging  a fp:InvestmentRegion ; rdfs:label "이머징·브릭스"@ko, "Global Emerging Markets"@en .
+fp:Region_MEA       a fp:InvestmentRegion ; rdfs:label "중동·아프리카"@ko, "Middle East and Africa"@en .
+
+fp:Replication_Physical  a fp:ReplicationMethod ; rdfs:label "실물복제"@ko, "Physical"@en ; skos:altLabel "Full"@en, "Optimized"@en .
+fp:Replication_Synthetic a fp:ReplicationMethod ; rdfs:label "합성복제"@ko, "Synthetic"@en ; skos:altLabel "Swap"@en .
+fp:Replication_Active    a fp:ReplicationMethod ; rdfs:label "액티브"@ko, "Active"@en .
+fp:Replication_Other     a fp:ReplicationMethod ; rdfs:label "기타"@ko, "Other"@en .
+
+fp:Currency_KRW a fp:Currency ; rdfs:label "한국 원"@ko, "KRW"@en .
+fp:Currency_USD a fp:Currency ; rdfs:label "미국 달러"@ko, "USD"@en .
+fp:Currency_EUR a fp:Currency ; rdfs:label "유로"@ko, "EUR"@en .
+fp:Currency_JPY a fp:Currency ; rdfs:label "일본 엔"@ko, "JPY"@en .
+
+################################################################################
+# 5. 핵심 관계 (owl:ObjectProperty) — 전부 domain·range 명시
+################################################################################
+
+fp:issuedBy a owl:ObjectProperty ;
+    rdfs:domain fp:Bond ;
+    rdfs:range fp:Issuer ;
+    rdfs:label "발행사"@ko, "issued by"@en ;
+    rdfs:comment "채권 → 발행기관. **domain이 fp:Bond로만 한정된다.** 'VOO(ETF)가 직접 발행한 회사채' 같은 질의는 주어가 fp:ETF이고 fp:ETF는 fp:Bond와 owl:disjointWith이므로 도메인 위반이 확정되어 ABSTAIN(엔티티 유형이 관계의 도메인·레인지와 불일치)으로 판정한다. ETF의 발행 주체를 묻는 질의는 fp:managedBy로 유도한다."@ko ;
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "PD_PBCM" .
+
+fp:managedBy a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN fp:PublicFund ) ] ;
+    rdfs:range fp:AssetManager ;
+    rdfs:label "운용사"@ko, "managed by"@en ;
+    rdfs:comment "ETF·ETN·펀드 → 운용사(ETN은 발행 증권사). 채권은 운용사 개념이 없으므로 domain에서 제외한다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "cu_fund_mgmt_co", "or_co_xtn_itt_cd" .
+
+fp:hasCustodian a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ;
+    rdfs:range fp:Custodian ;
+    rdfs:label "수탁회사"@ko, "has custodian"@en ;
+    rdfs:comment "공모펀드 → 수탁(신탁)회사. 기관코드 18종이며 코드↔사명 매핑표 미확보 상태다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "trusc_xtn_itt_cd" .
+
+fp:tracksIndex a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN fp:PublicFund ) ] ;
+    rdfs:range fp:Index ;
+    rdfs:label "기초지수 추종"@ko, "tracks index"@en ;
+    rdfs:comment "ETF·ETN → 기초지수, 펀드 → 벤치마크. 국내ETF는 cu_base_index가 95.2% 결측이라 사실상 공급이 끊겨 있고, 공모펀드 bmrk_nm(391종, 결측 0%)이 실질 주 공급원이다. 복합 벤치마크('MSCI ACWI CR 50% + 종합채권01Y 50%')는 지수 여러 개로 분해해 다중 연결한다. 지수명 별칭은 skos:altLabel로 묶는다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "cu_base_index", "bmrk_nm" .
+
+fp:hasHolding a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
+    rdfs:range fp:Holding ;
+    rdfs:label "편입관계 보유"@ko, "has holding"@en ;
+    rdfs:comment "상품 → 편입관계 노드(n-ary). 편입비중·기준일·근거문서를 달아야 하므로 상품→증권 직결 관계를 쓰지 않는다. **fp:ETN은 편입종목 개념이 없어 domain에서 제외**한다. 현재 3개 도메인 모두 편입 데이터가 0건이므로 인스턴스는 외부 수집(SEC N-PORT·투자설명서·운용보고서) 이후 생성된다."@ko .
+
+fp:holdingSecurity a owl:ObjectProperty ;
+    rdfs:domain fp:Holding ;
+    rdfs:range fp:Security ;
+    rdfs:label "편입증권"@ko, "holding security"@en ;
+    rdfs:comment "편입관계 노드 → 편입된 증권. fp:hasHolding·fp:weight·fp:asOf와 함께 하나의 편입 사실을 구성한다."@ko .
+
+fp:issuedByCompany a owl:ObjectProperty ;
+    rdfs:domain fp:Security ;
+    rdfs:range fp:Company ;
+    rdfs:label "증권 발행기업"@ko, "issued by company"@en ;
+    rdfs:comment "편입증권 → 발행 기업. ETF→편입증권→기업→자회사→산업/테마 경로의 두 번째 간선이다. 기업 식별자 마스터(종목코드↔기업명)가 없어 현재 인스턴스 생성 불가."@ko .
+
+fp:subsidiaryOf a owl:ObjectProperty ;
+    rdfs:domain fp:Company ;
+    rdfs:range fp:Company ;
+    rdfs:label "자회사 관계"@ko, "subsidiary of"@en ;
+    rdfs:comment "자회사 → 모회사. 지배구조 데이터(DART) 미수집으로 인스턴스 없음. 손자회사까지 추적하려면 다단계 탐색으로 처리하며, 전이성(owl:TransitiveProperty)은 지분율 기준이 관계마다 달라 선언하지 않는다."@ko .
+
+fp:belongsToIndustry a owl:ObjectProperty ;
+    rdfs:domain fp:Company ;
+    rdfs:range fp:Industry ;
+    rdfs:label "산업 소속"@ko, "belongs to industry"@en ;
+    rdfs:comment "기업 → 산업 분류. 현재 산업 분류축 데이터가 없다."@ko .
+
+fp:relatedToTheme a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Product fp:Company ) ] ;
+    rdfs:range fp:Theme ;
+    rdfs:label "테마 연관"@ko, "related to theme"@en ;
+    rdfs:comment "상품·기업 → 테마. 원천은 data/relations/etf_theme.csv(국내ETF 1,099종 × 176테마). **as_of가 공란이다** — LSEG 수집 시점이 확인되지 않아 추정 날짜를 채워 넣지 않았다(거짓 기준일 방지). 따라서 '특정 기간에 발생한 테마 연결' 질의는 이 관계만으로 답할 수 없다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다."@ko ;
+    fp:sourceTable "derived:etf_theme" ; fp:sourceColumn "theme" .
+
+fp:hasRisk a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Product fp:Company fp:Industry ) ] ;
+    rdfs:range fp:Risk ;
+    rdfs:label "위험요인 보유"@ko, "has risk"@en ;
+    rdfs:comment "상품·기업·산업 → 위험요인. 반드시 fp:supportedBy 근거 문서를 동반해야 한다."@ko .
+
+fp:hasShareClass a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ;
+    rdfs:range fp:ShareClass ;
+    rdfs:label "클래스 보유"@ko, "has share class"@en ;
+    rdfs:comment "대표(모)펀드 → 종류별 클래스. 그룹핑 키는 fp:managerItemCode(mtco_itm_no)이며 '미래에셋코어테크증권자투자신탁(주식)'처럼 한 모펀드에 14클래스가 달리는 사례가 있다. 클래스 중복을 제거하지 않으면 순자산 합계가 8.54배 부풀려진다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "mtco_itm_no", "rptt_ksd_itm_no" .
+
+fp:sameVehicleAs a owl:ObjectProperty, owl:SymmetricProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:Product ;
+    rdfs:label "동일 상품"@ko, "same vehicle as"@en ;
+    rdfs:comment "표기·데이터셋이 달라도 실체가 같은 상품을 잇는 대칭 관계. 실측 근거: 공모펀드 ksd_itm_no와 국내ETF pd_itm_no가 일치하는 **47종**(예: 펀드 KR5114601001 '삼성KODEX200증권상장지수투자신탁[주식]' ↔ ETF KR7069500007 'KODEX 200'). 중복 노출·중복 계상 방지의 근거다. owl:sameAs를 쓰지 않는 이유: fp:ETF와 fp:PublicFund는 owl:disjointWith이므로 동일 개체로 병합하면 모순이 된다. 두 레코드는 별개 노드로 두고 이 관계로만 잇는다."@ko ;
+    fp:sourceTable "PRFD01N001", "PREF01N001" ; fp:sourceColumn "ksd_itm_no", "pd_itm_no" .
+
+fp:supportedBy a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot fp:Risk ) ] ;
+    rdfs:range fp:Document ;
+    rdfs:label "근거문서"@ko, "supported by"@en ;
+    rdfs:comment "관계·주장 → 이를 지지하는 문서. 근거가 없는 관계는 답변에 포함하지 않는다. 문서에 함께 언급되었다는 사실만으로 편입·모자회사·테마 관계를 확정하지 않는다."@ko .
+
+fp:hasCreditRating a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Bond fp:Issuer ) ] ;
+    rdfs:range fp:CreditRating ;
+    rdfs:label "신용등급 보유"@ko, "has credit rating"@en ;
+    rdfs:comment "채권·발행사 → 신용등급 개체. 'AA- 이상' 조건은 연결된 개체의 fp:ratingRank <= 4로 판정한다. 원본 CRD_GRD는 41.6% 결측이므로 등급 미부여(국채 등)와 결측을 구분해 답한다."@ko ;
+    fp:sourceTable "PRBD01N001", "derived:bond_kr_enriched" ;
+    fp:sourceColumn "CRD_GRD", "derived:bond_kr_enriched.crd_grd_norm" .
+
+fp:hasRiskGrade a owl:ObjectProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:RiskGrade ;
+    rdfs:label "투자위험등급"@ko, "has risk grade"@en ;
+    rdfs:comment "상품 → 위험등급 개체(1~6). 채권·국내ETF·공모펀드 세 도메인이 같은 서열이라 교차 비교가 가능하다. 해외ETF에는 위험등급 컬럼이 없다."@ko ;
+    fp:sourceTable "PRBD01N001", "PREF01N001", "PRFD01N001" ;
+    fp:sourceColumn "PD_RISK_GCD", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
+
+fp:hasAssetType a owl:ObjectProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:AssetType ;
+    rdfs:label "투자자산군"@ko, "has asset type"@en ;
+    rdfs:comment "상품 → 자산군 개체. 국내ETF wu_inv_ast_type(한글 8종)·해외ETF wu_inv_ast_type(영문 6종)·공모펀드 or_attr_desc를 통합 개체로 매핑한다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "wu_inv_ast_type", "or_attr_desc" .
+
+fp:hasInvestmentRegion a owl:ObjectProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:InvestmentRegion ;
+    rdfs:label "투자지역"@ko, "has investment region"@en ;
+    rdfs:comment "상품 → 투자지역 개체. 해외ETF는 59종 국가 단위라 국가→지역 상위 매핑이 필요하다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "wu_inv_rgn", "fd_ivst_rgn_desc" .
+
+fp:hasReplicationMethod a owl:ObjectProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
+    rdfs:range fp:ReplicationMethod ;
+    rdfs:label "복제방식"@ko, "has replication method"@en ;
+    rdfs:comment "상품 → 복제방식 개체. 국내ETF cu_strtegy의 'C' 409건은 전부 ETN이라 ETF 필터 후 자동 소거된다. 해외ETF cu_index_repl_mthd는 58.2% 결측이며 결측은 액티브·비추종 상품이다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "derived:etf_kr_enriched" ;
+    fp:sourceColumn "cu_strtegy", "cu_index_repl_mthd", "derived:etf_kr_enriched.replication" .
+
+fp:hasCurrency a owl:ObjectProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:Currency ;
+    rdfs:label "표시통화"@ko, "has currency"@en ;
+    rdfs:comment "상품 → 통화 개체. 채권은 KRW 42,372/외화 22건, 펀드는 KRW/USD 2종, 해외ETF는 전량 USD다."@ko ;
+    fp:sourceTable "PRBD01N001", "PRFD01N001", "PREF02N001" ;
+    fp:sourceColumn "CURR_CD", "curr_cd", "pd_trd_ccy" .
+
+fp:hasMetricSnapshot a owl:ObjectProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range fp:MetricSnapshot ;
+    rdfs:label "수치 스냅샷 보유"@ko, "has metric snapshot"@en ;
+    rdfs:comment "상품 → 시점 가변 수치 노드. 기준일이 다른 수치를 한 답변에 섞을 때 각각의 fp:asOf를 함께 제시하기 위한 경로다."@ko .
+
+################################################################################
+# 6. 공통 데이터 속성 (owl:DatatypeProperty) — 전부 domain·range·출처 명시
+################################################################################
+
+fp:productCode a owl:DatatypeProperty, owl:InverseFunctionalProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range xsd:string ;
+    rdfs:label "상품번호"@ko, "product code"@en ;
+    rdfs:comment "도메인별 정본 식별자. 채권 PD_NO(ISIN형 12자리, 중복 0), 국내ETF pd_itm_no(중복 0), 해외ETF pd_itm_no(로이터 RIC, 중복 0), 공모펀드 itm_no. 상품 URI의 소재다."@ko ;
+    fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "PD_NO", "pd_itm_no", "itm_no" .
+
+fp:productName a owl:DatatypeProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range xsd:string ;
+    rdfs:label "상품명"@ko, "product name"@en ;
+    rdfs:comment "정식 명칭. 자연어 질의가 상품을 지목하는 주 통로이므로 **완전일치를 우선**하고 부분일치 유사명으로 대체하지 않는다('KODEX 200' 부분일치 14건, 'KODEX AI로봇' 유사명 18건이 오탐 원인)."@ko ;
+    fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "PD_NM", "pd_nm", "itm_nm" .
+
+fp:productShortName a owl:DatatypeProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range xsd:string ;
+    rdfs:label "상품약어명"@ko, "product short name"@en ;
+    rdfs:comment "축약 명칭. 국내ETF는 선두 토큰이 브랜드(KODEX/TIGER/RISE…), 해외ETF는 미국 티커, 펀드는 클래스 접미를 포함한다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "pd_abrv_nm", "itm_abrv_nm" .
+
+fp:netAssets a owl:DatatypeProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "순자산총액"@ko, "net assets"@en ;
+    rdfs:comment "규모 질의의 표준축. 국내ETF는 pd_net_tamt를 쓴다(du_last_aum은 결측 16.2%로 열등). 해외ETF는 du_last_aum이 유일축(USD). 공모펀드 fd_nast_suma는 **클래스마다 모펀드 값이 반복되므로 itm_no dedup 없이 합산하면 8.54배 과대계상**된다. 통화가 도메인마다 다르므로 합산 전 fp:hasCurrency 확인 필요."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "pd_net_tamt", "du_last_aum", "fd_nast_suma" .
+
+fp:expenseRatio a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "총보수요율"@ko, "expense ratio"@en ;
+    rdfs:comment "연 총보수(%). 해외ETF는 결측 0%로 온전하다. **국내ETF는 원본 cu_charge_rt가 ETF 기준 81.9% 결측이고 유효 217건 중 150건이 0.0 더미**라 LSEG ter로 보완한 derived:etf_kr_enriched.charge_rt_final을 정본으로 쓰고, 값의 출처는 fp:expenseRatioSource로 함께 제시한다. ETN에는 총보수 개념이 없어 domain에서 제외한다."@ko ;
+    fp:sourceTable "PREF02N001", "derived:etf_kr_enriched" ;
+    fp:sourceColumn "cu_charge_rt", "derived:etf_kr_enriched.charge_rt_final" .
+
+fp:expenseRatioSource a owl:DatatypeProperty ;
+    rdfs:domain fp:ETF ;
+    rdfs:range xsd:string ;
+    rdfs:label "총보수 출처"@ko, "expense ratio source"@en ;
+    rdfs:comment "총보수 값이 주최측 원본(RDB)인지 외부 보완(LSEG)인지 표시. 답변 evidence에 그대로 인용한다."@ko ;
+    fp:sourceTable "derived:etf_kr_enriched" ; fp:sourceColumn "derived:etf_kr_enriched.charge_rt_source" .
+
+fp:listingDate a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "상장일"@ko, "listing date"@en ;
+    rdfs:comment "거래 가능 개시일. '최근 상장 ETF' 질의축이다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001" ; fp:sourceColumn "pd_lstg_dt" .
+
+fp:onSale a owl:DatatypeProperty ;
+    rdfs:domain fp:Product ;
+    rdfs:range xsd:boolean ;
+    rdfs:label "판매 가능 여부"@ko, "on sale"@en ;
+    rdfs:comment "당사 판매 가능 여부. 국내ETF pd_sale_yn은 1/0 표기(Y/N 아님). **해외ETF는 전량 1이라 필터로 기능하지 못한다**. 채권은 판매 8컬럼이 완전 이분법이라 fp:isSellable 파생값을 쓴다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_sale_yn" .
+
+fp:return1W a owl:DatatypeProperty ; rdfs:domain fp:Product ; rdfs:range xsd:decimal ;
+    rdfs:label "1주 수익률"@ko, "1-week return"@en ;
+    rdfs:comment "최근 1주 수익률(%). 공모펀드에만 존재한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fd_wk1_ern_r" .
+
+fp:return1M a owl:DatatypeProperty ; rdfs:domain fp:Product ; rdfs:range xsd:decimal ;
+    rdfs:label "1개월 수익률"@ko, "1-month return"@en ;
+    rdfs:comment "최근 1개월 수익률(%). 국내ETF du_er_1m의 -100.00은 신규상장 잔재 이상치이므로 순위 질의 시 하한 필터가 필요하다."@ko ;
+    fp:sourceTable "PREF01N001", "PRFD01N001" ; fp:sourceColumn "du_er_1m", "fd_mm1_ern_r" .
+
+fp:return3M a owl:DatatypeProperty ; rdfs:domain fp:Product ; rdfs:range xsd:decimal ;
+    rdfs:label "3개월 수익률"@ko, "3-month return"@en ;
+    rdfs:comment "최근 3개월 수익률(%). -100.00 이상치 필터 필요."@ko ;
+    fp:sourceTable "PREF01N001", "PRFD01N001" ; fp:sourceColumn "du_er_3m", "fd_mm3_ern_r" .
+
+fp:return6M a owl:DatatypeProperty ; rdfs:domain fp:Product ; rdfs:range xsd:decimal ;
+    rdfs:label "6개월 수익률"@ko, "6-month return"@en ;
+    rdfs:comment "최근 6개월 수익률(%). -100.00 이상치 필터 필요."@ko ;
+    fp:sourceTable "PREF01N001", "PRFD01N001" ; fp:sourceColumn "du_er_6m", "fd_mm6_ern_r" .
+
+fp:return18M a owl:DatatypeProperty ; rdfs:domain fp:PublicFund ; rdfs:range xsd:decimal ;
+    rdfs:label "18개월 수익률"@ko, "18-month return"@en ;
+    rdfs:comment "최근 18개월 수익률(%). ETF에는 없는 구간이라 domain을 펀드로 한정한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fd_mm18_ern_r" .
+
+fp:return1Y a owl:DatatypeProperty ; rdfs:domain fp:Product ; rdfs:range xsd:decimal ;
+    rdfs:label "1년 수익률"@ko, "1-year return"@en ;
+    rdfs:comment "최근 1년 수익률(%). 성과 질의 최빈축. **해외ETF는 du_er_1d가 전량 0으로 미계산이라 수익률 축 자체가 없다** — 해외ETF 성과 질의는 답변 불가다."@ko ;
+    fp:sourceTable "PREF01N001", "PRFD01N001" ; fp:sourceColumn "du_er_1y", "fd_yr1_ern_r" .
+
+fp:return2Y a owl:DatatypeProperty ; rdfs:domain fp:PublicFund ; rdfs:range xsd:decimal ;
+    rdfs:label "2년 수익률"@ko, "2-year return"@en ;
+    rdfs:comment "최근 2년 수익률(%). 공모펀드 전용 구간."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fd_yr2_ern_r" .
+
+fp:return3Y a owl:DatatypeProperty ; rdfs:domain fp:PublicFund ; rdfs:range xsd:decimal ;
+    rdfs:label "3년 수익률"@ko, "3-year return"@en ;
+    rdfs:comment "최근 3년 수익률(%). 공모펀드 전용 구간."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fd_yr3_ern_r" .
+
+fp:return5Y a owl:DatatypeProperty ; rdfs:domain fp:PublicFund ; rdfs:range xsd:decimal ;
+    rdfs:label "5년 수익률"@ko, "5-year return"@en ;
+    rdfs:comment "최근 5년 수익률(%). 결측 46.8%는 설정 5년 미만 펀드다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fd_yr5_ern_r" .
+
+fp:returnYTD a owl:DatatypeProperty ; rdfs:domain fp:ETF ; rdfs:range xsd:decimal ;
+    rdfs:label "연초이후 수익률"@ko, "year-to-date return"@en ;
+    rdfs:comment "연초 이후 수익률(%). 국내ETF에만 존재한다."@ko ;
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "du_er_ytd" .
+
+fp:ratingRank a owl:DatatypeProperty ;
+    rdfs:domain fp:CreditRating ;
+    rdfs:range xsd:integer ;
+    rdfs:label "신용등급 서열"@ko, "credit rating rank"@en ;
+    rdfs:comment "1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다."@ko ;
+    fp:sourceTable "derived:bond_kr_enriched" ; fp:sourceColumn "derived:bond_kr_enriched.crd_grd_rank" .
+
+fp:riskGradeLevel a owl:DatatypeProperty ;
+    rdfs:domain fp:RiskGrade ;
+    rdfs:range xsd:integer ;
+    rdfs:label "위험등급 수준"@ko, "risk grade level"@en ;
+    rdfs:comment "1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다."@ko ;
+    fp:sourceTable "PRBD01N001", "PREF01N001", "PRFD01N001" ;
+    fp:sourceColumn "PD_RISK_GCD", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
+
+fp:weight a owl:DatatypeProperty ;
+    rdfs:domain fp:Holding ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "편입비중"@ko, "weight"@en ;
+    rdfs:comment "편입관계의 비중(%). 반드시 fp:asOf 기준일과 함께 제시한다. 현재 편입 데이터가 0건이라 값 없음."@ko ;
+    fp:sourceTable "derived:etf_holding" ; fp:sourceColumn "derived:etf_holding.weight" .
+
+fp:asOf a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "기준일"@ko, "as of"@en ;
+    rdfs:comment "시점 가변 관계·수치의 기준일. **시점을 모르는 관계는 비워 두고 추정 날짜를 채워 넣지 않는다**(거짓 기준일 방지). etf_theme 관계가 이에 해당한다."@ko ;
+    fp:sourceTable "derived:relations" ; fp:sourceColumn "derived:relations.as_of" .
+
+fp:validFrom a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "유효 시작일"@ko, "valid from"@en ;
+    rdfs:comment "관계·수치가 유효해지는 시점. 기간 필터 질의('2026년 상반기에 새로 편입된')에 필요하다."@ko ;
+    fp:sourceTable "derived:relations" ; fp:sourceColumn "derived:relations.valid_from" .
+
+fp:validTo a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "유효 종료일"@ko, "valid to"@en ;
+    rdfs:comment "관계·수치가 만료되는 시점. 값이 없으면 현재 유효로 해석한다."@ko ;
+    fp:sourceTable "derived:relations" ; fp:sourceColumn "derived:relations.valid_to" .
+
+fp:sourceId a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot ) ] ;
+    rdfs:range xsd:string ;
+    rdfs:label "출처 식별자"@ko, "source id"@en ;
+    rdfs:comment "관계·수치의 출처 표시(RDB=주최측 값, LSEG 등=외부 보완). 관계 테이블의 source 컬럼을 그대로 승계한다."@ko ;
+    fp:sourceTable "derived:relations" ; fp:sourceColumn "derived:relations.source" .
+
+fp:metricName a owl:DatatypeProperty ;
+    rdfs:domain fp:MetricSnapshot ;
+    rdfs:range xsd:string ;
+    rdfs:label "수치 항목명"@ko, "metric name"@en ;
+    rdfs:comment "스냅샷이 담는 수치의 이름(nav, aum, return_1y 등)."@ko ;
+    fp:sourceTable "derived:metric_snapshot" ; fp:sourceColumn "derived:metric_snapshot.metric_name" .
+
+fp:metricValue a owl:DatatypeProperty ;
+    rdfs:domain fp:MetricSnapshot ;
+    rdfs:range xsd:decimal ;
+    rdfs:label "수치 값"@ko, "metric value"@en ;
+    rdfs:comment "스냅샷 수치의 값. 단위는 fp:metricUnit으로 함께 제시한다."@ko ;
+    fp:sourceTable "derived:metric_snapshot" ; fp:sourceColumn "derived:metric_snapshot.metric_value" .
+
+fp:metricUnit a owl:DatatypeProperty ;
+    rdfs:domain fp:MetricSnapshot ;
+    rdfs:range xsd:string ;
+    rdfs:label "수치 단위"@ko, "metric unit"@en ;
+    rdfs:comment "KRW·USD·percent 등. 도메인 간 순자산 비교 시 단위 변환의 근거다."@ko ;
+    fp:sourceTable "derived:metric_snapshot" ; fp:sourceColumn "derived:metric_snapshot.metric_unit" .
+
+fp:documentTitle a owl:DatatypeProperty ;
+    rdfs:domain fp:Document ;
+    rdfs:range xsd:string ;
+    rdfs:label "문서명"@ko, "document title"@en ;
+    rdfs:comment "근거 문서의 제목. 답변 근거 계약의 필수 항목."@ko ;
+    fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.title" .
+
+fp:documentPublisher a owl:DatatypeProperty ;
+    rdfs:domain fp:Document ;
+    rdfs:range xsd:string ;
+    rdfs:label "발행기관"@ko, "document publisher"@en ;
+    rdfs:comment "근거 문서의 발행기관."@ko ;
+    fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.publisher" .
+
+fp:documentPublishedDate a owl:DatatypeProperty ;
+    rdfs:domain fp:Document ;
+    rdfs:range xsd:date ;
+    rdfs:label "문서 발행일"@ko, "document published date"@en ;
+    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-07-11) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
+    fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
+
+fp:documentQuote a owl:DatatypeProperty ;
+    rdfs:domain fp:Document ;
+    rdfs:range xsd:string ;
+    rdfs:label "근거 문장"@ko, "evidence quote"@en ;
+    rdfs:comment "관계·주장을 직접 지지하는 인용 문장."@ko ;
+    fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.quote" .
+
+fp:organizationName a owl:DatatypeProperty ;
+    rdfs:domain fp:Organization ;
+    rdfs:range xsd:string ;
+    rdfs:label "기관명"@ko, "organization name"@en ;
+    rdfs:comment "기관 정규 명칭. 원본 문자열은 법인격 표기가 흔들리므로(한국투자/한국투자증권(주), BlackRock Fund Advisors/LP) 정규화 후 값을 넣고 원표기는 skos:altLabel로 남긴다."@ko ;
+    fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001" ;
+    fp:sourceColumn "PD_PBCM", "cu_fund_mgmt_co" .
+
+fp:indexName a owl:DatatypeProperty ;
+    rdfs:domain fp:Index ;
+    rdfs:range xsd:string ;
+    rdfs:label "지수명"@ko, "index name"@en ;
+    rdfs:comment "지수·벤치마크 명칭. 해외ETF cu_base_index의 'Index is not provided by Management Company'(1,984건)·'Index is not available on Lipper Database'(721건)는 **값이 아니라 sentinel**이므로 결측으로 처리하고 지수 노드를 만들지 않는다."@ko ;
+    fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
+    fp:sourceColumn "cu_base_index", "bmrk_nm" .
+
+fp:themeName a owl:DatatypeProperty ;
+    rdfs:domain fp:Theme ;
+    rdfs:range xsd:string ;
+    rdfs:label "테마명"@ko, "theme name"@en ;
+    rdfs:comment "테마 명칭. 원천 표기를 그대로 쓴다('우주항공/방산'처럼 슬래시 결합 테마가 있어 '우주'·'항공' 분리 검색은 성립하지 않는다)."@ko ;
+    fp:sourceTable "derived:etf_theme" ; fp:sourceColumn "derived:etf_theme.theme" .

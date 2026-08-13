@@ -1,0 +1,233 @@
+@prefix fp:      <http://mafest.ai/product#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+################################################################################
+# fp-fund-pub — 국내 공모펀드 (PRFD01N001, 95,619행 / 실제 펀드 11,139종)
+#
+# 그레인 주의
+#   원본 1행 = (itm_no × prfd_attr_cd) 롱포맷이며 행 수가 펀드 수의 평균 8.58배다.
+#   온톨로지 인스턴스는 **itm_no 단위(data/enriched/fund_pub_dedup.csv, 11,138종)**로
+#   생성한다. dedup 없이 fd_nast_suma를 합산하면 13,194조원(실제 1,546조원)으로
+#   8.54배 과대계상된다.
+#
+# 공모 한정
+#   fp:PublicFund는 **공모 상품만**을 담는 클래스다. 원본에는 사모 102행
+#   (prvo_pbff_desc='사모')이 혼재하므로 적재 시 배제하고, 사모 여부는
+#   fp:hasInvestorEligibility 축으로 기록해 "공모펀드 목록"에 섞이지 않게 한다.
+#
+# 클래스 계층
+#   fp:ShareClass ⊑ fp:PublicFund ⊑ fp:Product (fp-common).
+#   같은 모펀드의 종류 A/C/C-P/C-Pe/F는 각각 별개 종목번호로 판매되는 상품이므로
+#   모두 개별 인스턴스이며, fp:hasShareClass로 대표 종목에 묶는다.
+#   그룹핑 키는 fp:managerItemCode(mtco_itm_no)가 정본이다
+#   (fp:representativeKsdCode는 sentinel 2,501행 2.6%로 신뢰도가 낮다).
+#
+# ETF와의 동일 상품 관계
+#   fund.ksd_itm_no == etf_kr.pd_itm_no 인 **47종**이 실측 확인된다
+#   (예: KR5114601001 '삼성KODEX200증권상장지수투자신탁[주식]' ↔ KODEX 200).
+#   이 쌍은 fp:sameVehicleAs(대칭)로 잇는다. 두 클래스가 owl:disjointWith라
+#   owl:sameAs로 병합하면 모순이 되므로 별도 관계를 쓴다.
+#
+# 데이터 실태
+#   - **기준일 컬럼이 하나도 없다.** 수치 기준일은 스냅샷 2026-07-11을 evidence에
+#     명시하는 응답 규칙으로 처리한다(외부 수집 대상이 아님).
+#   - CSV 파싱이 붕괴한 행 1개(itm_no == '"')가 5개 컬럼의 이상 enum을 동시에
+#     만든다. 컬럼별 예외 처리가 아니라 **행 단위로 배제**한다.
+#   - kofia_fd_ccd(금투협 20자리 분류코드)는 자리별 의미가 역추정 가설 단계이고
+#     23.1%가 0으로 채워져 있어 **분류 필터축으로 쓰지 않는다**. 식별자로만 싣는다.
+#   - 상수·중복 컬럼(hdge_fd_yn·ofsfd_yn·frc_bpr_itm_yn·bmrk_eng_nm·itm_eng_nm 등)은
+#     온톨로지에 싣지 않았다.
+################################################################################
+
+<http://mafest.ai/ontology/fp-fund-pub> a owl:Ontology ;
+    owl:imports <http://mafest.ai/ontology/fp-common> ;
+    rdfs:label "국내 공모펀드 온톨로지"@ko, "Korean Public Fund Ontology"@en ;
+    rdfs:comment "국내 공모펀드 마스터(PRFD01N001)와 dedup 파생 테이블 기반 스키마. 클래스 계층(ShareClass), 모펀드 그룹핑 키, 벤치마크, 환헤지·투자자자격 축, 주최측 분류축 6종을 정의한다."@ko ;
+    dcterms:source "PRFD01N001_fund_pub_master_20260711.csv, data/enriched/fund_pub_dedup.csv" .
+
+################################################################################
+# 1. 분류축 클래스 — 주최측 axis_* 라벨 6종
+################################################################################
+
+fp:FundType a owl:Class ;
+    rdfs:label "펀드 유형"@ko, "Fund Type"@en ;
+    rdfs:comment "주최측 axis_fundType(증권·MMF·혼합자산·부동산·특별자산). 원본 or_attr_desc 11종에서 재현 가능하다. **'06' 5,436행은 오염이 아니라 미매핑 원본 코드로 '파생형'에 해당**하므로 매핑 후 사용한다."@ko .
+
+fp:RedemptionType a owl:Class ;
+    rdfs:label "환매 유형"@ko, "Redemption Type"@en ;
+    rdfs:comment "주최측 axis_redemptionType(개방형/폐쇄형). **현재 데이터로 값을 채울 수 없다** — 환매 가능 여부를 나타내는 컬럼이 없다. fd_set_pcd(3값)는 코드 의미가 미확정이라 대용할 수 없다. 클래스·속성은 선언하되 값을 부여하지 않는다."@ko .
+
+fp:IssuanceType a owl:Class ;
+    rdfs:label "설정 유형"@ko, "Issuance Type"@en ;
+    rdfs:comment "주최측 axis_issuanceType(추가형/단위형). **현재 데이터로 값을 채울 수 없다** — fd_set_pcd('10' 91,354 / '20' 3,806 / '00' 458)가 유일한 후보지만 KOFIA 코드표 미확보로 코드 의미가 확정되지 않았다. 확정 전에는 값을 부여하지 않는다."@ko .
+
+fp:ListingType a owl:Class ;
+    rdfs:label "상장 구분"@ko, "Listing Type"@en ;
+    rdfs:comment "주최측 axis_listingType(상장/비상장). 직접 컬럼은 없으나 fp:sameVehicleAs로 국내ETF와 연결된 47종을 상장으로 판정하는 **부분 재현**이 가능하다. 나머지는 비상장 추정이며 근거를 함께 표기한다."@ko .
+
+fp:ClassDifferentiation a owl:Class ;
+    rdfs:label "클래스 구분"@ko, "Class Differentiation"@en ;
+    rdfs:comment "주최측 axis_classDifferentiation(단일클래스/멀티클래스). fp:managerItemCode 그룹의 크기(11,139종 → 4,661그룹)로 재현 가능하다. 그룹 원소가 2개 이상이면 멀티클래스다."@ko .
+
+fp:InvestorEligibility a owl:Class ;
+    rdfs:label "투자자 자격"@ko, "Investor Eligibility"@en ;
+    rdfs:comment "주최측 axis_investorEligibility(공모/사모). 원본 prvo_pbff_desc에서 그대로 온다. **공모 95,451행 / 사모 102행**이며 사모는 fp:PublicFund 적재 대상에서 제외한다."@ko .
+
+fp:FundType_Securities   a fp:FundType ; rdfs:label "증권형"@ko, "SecuritiesFund"@en ;
+    skos:altLabel "주식형"@ko, "채권형"@ko, "주식혼합"@ko, "채권혼합"@ko .
+fp:FundType_MoneyMarket  a fp:FundType ; rdfs:label "MMF"@ko, "MoneyMarketFund"@en .
+fp:FundType_MixedAssets  a fp:FundType ; rdfs:label "혼합자산형"@ko, "MixedAssetsFund"@en .
+fp:FundType_RealEstate   a fp:FundType ; rdfs:label "부동산형"@ko, "RealEstateFund"@en ;
+    skos:altLabel "임대형"@ko, "대출형"@ko .
+fp:FundType_SpecialAssets a fp:FundType ; rdfs:label "특별자산형"@ko, "SpecialAssetsFund"@en .
+fp:FundType_FundOfFunds  a fp:FundType ; rdfs:label "재간접형"@ko, "Fund of Funds"@en .
+fp:FundType_Derivative   a fp:FundType ; rdfs:label "파생형"@ko, "Derivative Fund"@en ;
+    skos:altLabel "06"@ko .
+
+fp:Redemption_OpenEnded   a fp:RedemptionType ; rdfs:label "개방형"@ko, "OpenEnded"@en .
+fp:Redemption_ClosedEnded a fp:RedemptionType ; rdfs:label "폐쇄형"@ko, "ClosedEnded"@en .
+
+fp:Issuance_Additional a fp:IssuanceType ; rdfs:label "추가형"@ko, "AdditionalType"@en .
+fp:Issuance_Unit       a fp:IssuanceType ; rdfs:label "단위형"@ko, "UnitType"@en .
+
+fp:Listing_Listed   a fp:ListingType ; rdfs:label "상장"@ko, "Listed"@en .
+fp:Listing_Unlisted a fp:ListingType ; rdfs:label "비상장"@ko, "Unlisted"@en .
+
+fp:ClassDiff_Single a fp:ClassDifferentiation ; rdfs:label "단일클래스"@ko, "SingleClass"@en .
+fp:ClassDiff_Multi  a fp:ClassDifferentiation ; rdfs:label "멀티클래스"@ko, "MultiClass"@en .
+
+fp:Eligibility_Public  a fp:InvestorEligibility ; rdfs:label "공모"@ko, "PublicOffering"@en .
+fp:Eligibility_Private a fp:InvestorEligibility ; rdfs:label "사모"@ko, "PrivateOffering"@en .
+
+################################################################################
+# 2. 공모펀드 관계 (owl:ObjectProperty)
+################################################################################
+
+fp:hasFundType a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:FundType ;
+    rdfs:label "펀드 유형"@ko, "has fund type"@en ;
+    rdfs:comment "펀드 → 유형 개체. or_attr_desc 11종을 매핑하며 '06'은 파생형으로 해석한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "or_attr_desc" .
+
+fp:hasRedemptionType a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:RedemptionType ;
+    rdfs:label "환매 유형"@ko, "has redemption type"@en ;
+    rdfs:comment "펀드 → 환매 유형 개체. **현재 데이터로 값을 채울 수 없다.** 개방형·폐쇄형 조건검색은 근거 부족으로 답변 불가다."@ko .
+
+fp:hasIssuanceType a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:IssuanceType ;
+    rdfs:label "설정 유형"@ko, "has issuance type"@en ;
+    rdfs:comment "펀드 → 설정 유형 개체. **현재 데이터로 값을 채울 수 없다**(fd_set_pcd 코드 의미 미확정, KOFIA 코드표 필요)."@ko .
+
+fp:hasListingType a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:ListingType ;
+    rdfs:label "상장 구분"@ko, "has listing type"@en ;
+    rdfs:comment "펀드 → 상장 구분 개체. fp:sameVehicleAs로 ETF와 연결된 47종만 상장으로 확정 가능하고 나머지는 추정이다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "ksd_itm_no" .
+
+fp:hasClassDifferentiation a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:ClassDifferentiation ;
+    rdfs:label "클래스 구분"@ko, "has class differentiation"@en ;
+    rdfs:comment "펀드 → 단일/멀티클래스 개체. mtco_itm_no 그룹 크기에서 파생한다."@ko ;
+    fp:sourceTable "derived:fund_pub_dedup" ; fp:sourceColumn "mtco_itm_no" .
+
+fp:hasInvestorEligibility a owl:ObjectProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range fp:InvestorEligibility ;
+    rdfs:label "투자자 자격"@ko, "has investor eligibility"@en ;
+    rdfs:comment "펀드 → 공모/사모 개체. 사모 102행은 fp:PublicFund 적재에서 배제하되 이 축으로 판정 근거를 남긴다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "prvo_pbff_desc" .
+
+################################################################################
+# 3. 공모펀드 데이터 속성
+#    필수-식별 5 / 필수-조건 21 / 필수-관계 8 등급 컬럼만 싣는다.
+#    수익률(fp:return1W~5Y)·순자산(fp:netAssets)·통화(fp:hasCurrency)·위험등급은
+#    fp-common에 공통 선언되어 있어 여기서 중복 선언하지 않는다.
+################################################################################
+
+fp:standardItemCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "표준종목번호"@ko, "standard item code"@en ;
+    rdfs:comment "보조 식별자. **'KR5…'와 'K55…' 두 형식이 혼재**하고 펀드 단위 중복 11건·결측 66행이 있어 정본 식별자로 쓰지 않는다(정본은 fp:productCode = itm_no)."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "std_itm_no" .
+
+fp:ksdCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "예탁원 종목번호"@ko, "KSD item code"@en ;
+    rdfs:comment "예탁결제원 코드. **국내ETF pd_itm_no와 값이 일치하는 47종이 fp:sameVehicleAs 판정의 직접 근거**다. 펀드 단위 중복 46건이 있다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "ksd_itm_no" .
+
+fp:fssCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "금감원 종목번호"@ko, "FSS item code"@en ;
+    rdfs:comment "금융감독원 코드(DART 펀드공시 조인키). **sentinel '000000000000'이 23,409행(24.5%)이므로 사실상 결측으로 처리**한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "fss_itm_no" .
+
+fp:managerItemCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "운용사 종목번호"@ko, "manager item code"@en ;
+    rdfs:comment "**클래스 → 모펀드 그룹핑의 정본 키**(11,139종 → 4,661그룹). 선행 따옴표 65행과 길이 불균일(1~10자, 표준 7자)이 있어 strip('\"') + zfill(7) 정규화가 선행되어야 하며 '0000000' 13건은 sentinel이다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "mtco_itm_no" .
+
+fp:representativeKsdCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "대표 예탁원 종목번호"@ko, "representative KSD code"@en ;
+    rdfs:comment "대표(모)펀드 예탁원 코드. **sentinel 2종('KR0000000000' 1,525행, '000000000000' 976행, 합 2.6%)을 제외**해야 한다. 그룹핑 신뢰도는 fp:managerItemCode가 더 높다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "rptt_ksd_itm_no" .
+
+fp:kofiaClassCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "금투협 펀드분류코드"@ko, "KOFIA fund class code"@en ;
+    rdfs:comment "금융투자협회 20자리 분류코드. **분류 필터축으로 쓰지 않는다** — 자리별 의미가 역추정 가설 단계이고 '0'×20이 22,131행(23.1%)이며 19자리 이상 행도 존재한다. KOFIA 코드 부여기준 문서 확보 전에는 식별자로만 보존한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "kofia_fd_ccd" .
+
+fp:fundAttributeCode a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "펀드별 속성코드"@ko, "fund attribute code"@en ;
+    rdfs:comment "원본 복합 PK의 2축(228종). 실체계는 2종 — 영문1+숫자3(210종)과 ISO 3166 3자리 국가코드(17종)다. '해외' 1종은 파싱 붕괴 행의 잔재이므로 체계로 취급하지 않는다. dedup 테이블에서는 prfd_attr_cds로 집약된다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "prfd_attr_cd", "derived:fund_pub_dedup.prfd_attr_cds" .
+
+fp:currencyHedged a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:boolean ;
+    rdfs:label "환헤지 여부"@ko, "currency hedged"@en ;
+    rdfs:comment "환헤지 적용 여부(Y 44,987 / N 20,870). '환헤지형' 질의의 직결축이다. **결측 31.1%는 국내투자 펀드**이며 이상값 '00080008' 1건은 파싱 붕괴 행이므로 행 단위로 배제한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "exchdg_yn" .
+
+fp:overseasScope a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "해외투자 구분"@ko, "overseas scope"@en ;
+    rdfs:comment "투자 대상 소재(해외 51,628 / 국내 33,107 / 국내외혼합 10,818). fp:hasInvestmentRegion과 상호보완적으로 쓴다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "ovrs_fd_desc" .
+
+fp:eligibleInvestorType a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "개인·법인 구분"@ko, "eligible investor type"@en ;
+    rdfs:comment "가입 대상 투자자(해당없음 73,054 / 개인 17,643 / 법인 4,856). '개인이 가입 가능한' 질의축이다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "pers_corp_desc" .
+
+fp:saleStatus a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "판매 상태"@ko, "sale status"@en ;
+    rdfs:comment "판매중 / 판매완료(펀드 단위 8,445 / 2,693). 판매 상태의 정본 축이다. **수익률이 전 구간 결측인 3,536종(31.7%)은 대부분 판매완료 잔존 레코드**이므로 성과 랭킹 질의에서 자동 배제된다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "sale_yn" .
+
+fp:soldByFirm a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:boolean ;
+    rdfs:label "당사 취급 여부"@ko, "sold by firm"@en ;
+    rdfs:comment "당사 판매 취급 여부. **'N' 값이 존재하지 않고 Y와 결측만 있으므로 결측(4.2%)을 '미취급'으로 해석**한다. 이상값 1건은 파싱 붕괴 행이다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "thco_sale_yn" .
+
+fp:benchmarkName a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "벤치마크명(원문)"@ko, "benchmark name"@en ;
+    rdfs:comment "비교지수 원문(391종, 결측 0%). **복합 벤치마크('MSCI ACWI CR 50% + 종합채권01Y 50%')가 다수**라 fp:tracksIndex로 지수 노드에 연결할 때는 구성 지수별로 분해해 다중 연결하고 가중치를 보존한다. 국내ETF cu_base_index와의 교집합은 17종뿐이라 별칭 매핑(skos:altLabel)이 필요하며, 영문명(bmrk_eng_nm)은 1:1 대응이라 별도 속성으로 싣지 않고 별칭으로만 흡수한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "bmrk_nm" .
+
+fp:riskGradeLabel a owl:DatatypeProperty ;
+    rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
+    rdfs:label "위험등급명(제로인)"@ko, "risk grade label"@en ;
+    rdfs:comment "제로인 위험등급명. **공백 표기가 흔들린다**('높은 위험' 29,088 vs '높은위험' 163). 공백 제거 정규화 후 코드(1~6)를 정본으로 삼고, 서열 비교는 fp:hasRiskGrade 개체의 fp:riskGradeLevel로 한다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "zrin_fd_ivst_risk_grd_nm" .
