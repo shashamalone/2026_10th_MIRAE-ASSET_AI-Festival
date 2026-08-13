@@ -29,6 +29,9 @@ AS_OF = "2026-07-10"
 YMD = AS_OF.replace("-", "")
 DOT = AS_OF.replace("-", ".")
 SLEEP = float(os.environ.get("COLLECT_SLEEP", 0.3))  # 429를 맞으면 늘려서 재실행(받은 파일은 건너뛴다)
+# 429는 레이트리밋이라 기다리면 풀린다. COLLECT_BACKOFF>0이면 중단 대신 그만큼 쉬었다 같은 종목을 재시도한다.
+BACKOFF = float(os.environ.get("COLLECT_BACKOFF", 0))
+MAX_RETRY = int(os.environ.get("COLLECT_MAX_RETRY", 5))
 UA = {"User-Agent": "Mozilla/5.0 (research; one-off snapshot)",
       "Accept": "*/*", "Accept-Language": "ko-KR,ko;q=0.9"}
 
@@ -181,7 +184,17 @@ def main(limit=None, only=None):
                 continue
             url = a["url"](internal)
             try:
-                body = get(url).content
+                for attempt in range(MAX_RETRY + 1):
+                    try:
+                        body = get(url).content
+                        break
+                    except requests.HTTPError as e:
+                        blocked = e.response.status_code in (403, 429)
+                        if not (blocked and BACKOFF and attempt < MAX_RETRY):
+                            raise
+                        print(f"  .. {brand} {e.response.status_code} — {BACKOFF:.0f}초 대기 후 재시도"
+                              f" ({attempt + 1}/{MAX_RETRY}) [{ticker}]", flush=True)
+                        time.sleep(BACKOFF)
                 parsed = a["parse"](body)
                 if not parsed:
                     raise ValueError("0행")
