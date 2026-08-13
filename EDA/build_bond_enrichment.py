@@ -35,14 +35,22 @@ def to_days(s):
 df = pd.read_csv(SRC, dtype=str, keep_default_na=False)
 enr = pd.DataFrame({"PD_NO": df["PD_NO"]})
 
-enr["crd_grd_norm"] = df["CRD_GRD"].map(norm_grade)
-assert set(enr["crd_grd_norm"]) <= set(GRADES) | {""}, set(enr["crd_grd_norm"]) - set(GRADES)
-enr["crd_grd_rank"] = enr["crd_grd_norm"].map(RANK).astype("Int64")
+crd = df["CRD_GRD"].map(norm_grade)
+assert set(crd) <= set(GRADES) | {""}, set(crd) - set(GRADES)
 
 # 다중 평가사 등급 문자열(콤마 구분) — 평가사 수와 등급 일치 여부. 1개 이하면 판정불가(빈 값).
 evco = df["PD_EVCO_CRD_GRD"].map(lambda s: [norm_grade(t) for t in s.split(",") if t.strip()])
 enr["evco_grd_count"] = evco.map(len)
 enr["evco_grd_agree"] = evco.map(lambda v: "" if len(v) < 2 else ("Y" if len(set(v)) == 1 else "N"))
+
+# CRD_GRD 결측 시 평가사 등급(PD_EVCO_CRD_GRD)으로 폴백한다. 평가사별 등급이 갈리면
+# 복수평가 관행대로 보수적으로 가장 낮은 등급(rank 최대)을 택한다.
+evco_worst = evco.map(lambda v: max((g for g in v if g in RANK), key=RANK.get, default=""))
+enr["crd_grd_norm"] = crd.where(crd.ne(""), evco_worst)
+enr["crd_grd_rank"] = enr["crd_grd_norm"].map(RANK).astype("Int64")
+enr["crd_grd_source"] = "CRD_GRD"
+enr.loc[crd.eq("") & evco_worst.ne(""), "crd_grd_source"] = "PD_EVCO_CRD_GRD"
+enr.loc[enr["crd_grd_norm"].eq(""), "crd_grd_source"] = ""
 
 # MAT_DT 결측 sentinel은 '0'. 음수(만기경과) 허용.
 # 영구채 4건은 MAT_DT=99991231(pandas datetime 범위 밖)이라 stdlib date로 파싱한다.
@@ -66,7 +74,8 @@ enr["source"] = "derived:PRBD01N001"
 assert len(enr) == 42394, len(enr)
 assert enr["PD_NO"].is_unique
 assert (enr["has_sale_info"] == "Y").sum() == 881
-assert enr["crd_grd_rank"].notna().sum() == df["CRD_GRD"].ne("").sum()
+assert enr["crd_grd_rank"].notna().sum() == enr["crd_grd_norm"].ne("").sum()
+assert (enr["crd_grd_source"].eq("") == enr["crd_grd_norm"].eq("")).all()
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 enr.to_csv(OUT, index=False, encoding="utf-8-sig", lineterminator="\n")
@@ -78,3 +87,4 @@ print(f"is_sellable=Y: {(enr['is_sellable'] == 'Y').sum()}건 (EDA 보고서 254
 print("maturity_bucket:", enr["maturity_bucket"].value_counts().reindex(
     ["만기경과", "1년미만", "1-3년", "3-5년", "5-10년", "10년이상", "미상"]).to_dict())
 print("evco_grd_agree:", enr["evco_grd_agree"].value_counts(dropna=False).to_dict())
+print("등급 출처:", enr["crd_grd_source"].replace("", "(무등급)").value_counts().to_dict())

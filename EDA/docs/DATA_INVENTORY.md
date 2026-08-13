@@ -20,7 +20,7 @@
 | `data/csv/PRFD01N001_fund_pub_axis_sample_20260711.csv` | 원본 | 100 | 11 | — |
 | `data/csv/PRFD01N001_fund_pub_master_20260711.csv` | 원본 | 95,619 | 45 | — |
 | `data/csv/PRFD01N001_fund_pub_schema_20260711.csv` | 원본 | 45 | 5 | — |
-| `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 11 | `EDA/build_bond_enrichment.py` |
+| `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 12 | `EDA/build_bond_enrichment.py` |
 | `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
 | `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
 | `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
@@ -414,10 +414,11 @@
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
 | `PD_NO` | 0.0% | 42,394 |
-| `crd_grd_norm` | 41.6% | 20 |
-| `crd_grd_rank` | 41.6% | 20 |
 | `evco_grd_count` | 0.0% | 4 |
 | `evco_grd_agree` | 46.7% | 3 |
+| `crd_grd_norm` | 37.8% | 20 |
+| `crd_grd_rank` | 37.8% | 20 |
+| `crd_grd_source` | 37.8% | 3 |
 | `remaining_days` | 0.8% | 5,351 |
 | `maturity_bucket` | 0.0% | 7 |
 | `is_krw` | 0.0% | 2 |
