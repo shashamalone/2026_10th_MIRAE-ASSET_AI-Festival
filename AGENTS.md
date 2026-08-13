@@ -23,7 +23,7 @@ data/external/   외부 수집 원천 + 사이드카 {원본파일명}.meta.json
 ontology/*.ttl   제출 필수 — common + bond_kr/etf_kr/etf_gl/fund_pub
 EDA/*.py         실행 스크립트 (build_/collect_/validate_)
 EDA/src/*.py     jupytext 노트북 소스 전용
-EDA/docs/*.md    문서
+docs/*.md    문서
 expected_question/  예상 평가 질문 35문항
 ```
 
@@ -43,7 +43,7 @@ python3 EDA/validate_external.py        # as_of 기준일 가드 (실패 시 exi
 python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 검증
 ```
 
-데이터 구조를 바꿨으면 `build_data_inventory.py`를 재실행해 `EDA/docs/DATA_INVENTORY.md`를 함께 커밋한다. 이 파일의 `git diff`가 변경 이력이다.
+데이터 구조를 바꿨으면 `build_data_inventory.py`를 재실행해 `docs/DATA_INVENTORY.md`를 함께 커밋한다. 이 파일의 `git diff`가 변경 이력이다.
 
 ## 반드시 알아야 할 데이터 함정
 
@@ -61,7 +61,7 @@ python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 �
 | **깨진 행** | 공모펀드에 `itm_no='"'`인 1행이 CSV 파싱 붕괴로 값이 밀림 | 행 단위 배제. 컬럼별 예외처리 금지 |
 | **엔티티 표기** | 발행사는 `에스케이하이닉스(주)`·`(주)엘지에너지솔루션` 형태. `SK하이닉스`로 검색하면 0건 | 정규화 후 매칭 |
 | **룩어헤드 컬럼** | KODEX 현재가·등락, TIGER 등락률은 조회일과 무관하게 오늘 값 | 관계 테이블에 절대 넣지 않는다 |
-| **생존편향** | 운용사 사이트는 상장폐지 종목을 제거해 과거 조회도 0행(24종) | "편입종목 미확보"로 명시. 조용히 빠지면 "편입 안 함" 오답 |
+| **생존편향** | 운용사 사이트는 상장폐지 종목을 제거해 과거 조회도 0행(25종) | "편입종목 미확보"로 명시. 조용히 빠지면 "편입 안 함" 오답 |
 
 ## 온톨로지
 
@@ -87,11 +87,11 @@ python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 �
 
 | 문서 | 내용 |
 |---|---|
-| `EDA/docs/EDA_REPORT.md` | 4개 도메인 실측 분석, 답변 가능/불가 질의 |
-| `EDA/docs/COLUMN_GUIDE.md` | 207컬럼 설명서 + 온톨로지 등급 + enum 값 |
-| `EDA/docs/DATA_LAYER_PLAN.md` | 계층·파일명·출처 규칙의 **단일 기준** |
-| `EDA/docs/DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `EDA/docs/EXTERNAL_DATA_PLAN.md` | 외부데이터 우선순위(35문항 blocking 기준) |
-| `EDA/docs/QUERY_COVERAGE_35.md` | 35문항 커버리지 매트릭스 |
-| `EDA/docs/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교 |
-| `EDA/docs/DATA_INVENTORY.md` | 자동 생성. 직접 편집 금지 |
+| `docs/EDA_REPORT.md` | 4개 도메인 실측 분석, 답변 가능/불가 질의 |
+| `docs/COLUMN_GUIDE.md` | 207컬럼 설명서 + 온톨로지 등급 + enum 값 |
+| `docs/DATA_LAYER_PLAN.md` | 계층·파일명·출처 규칙의 **단일 기준** |
+| `docs/DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
+| `docs/EXTERNAL_DATA_PLAN.md` | 외부데이터 우선순위(35문항 blocking 기준) |
+| `docs/QUERY_COVERAGE_35.md` | 35문항 커버리지 매트릭스 |
+| `docs/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교 |
+| `docs/DATA_INVENTORY.md` | 자동 생성. 직접 편집 금지 |

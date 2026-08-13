@@ -5,7 +5,7 @@ import os
 
 import pandas as pd
 
-OUT = "EDA/docs/DATA_INVENTORY.md"
+OUT = "docs/DATA_INVENTORY.md"
 LAYERS = [("data/csv", "원본"), ("data/enriched", "파생"), ("data/relations", "관계"), ("data/external", "외부")]
 BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하드코딩한다.
     "fund_pub_dedup.csv": "build_fund_dedup.py",

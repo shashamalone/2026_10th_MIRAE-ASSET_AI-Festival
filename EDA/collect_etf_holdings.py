@@ -1,6 +1,6 @@
 """국내 ETF 편입종목 스냅샷 수집 (KODEX/TIGER/RISE/ACE, as_of=2026-07-10).
 
-설계: EDA/docs/HOLDINGS_COLLECTION_DESIGN.md
+설계: docs/HOLDINGS_COLLECTION_DESIGN.md
 원본을 data/external/etf_kr_holdings/{brand}_{ticker}_{as_of}.{ext} + 사이드카로 저장한다.
 브랜드별 어댑터는 list_products / url / parse 3함수뿐이고 나머지 파이프라인은 공유한다.
 
