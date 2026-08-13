@@ -1,0 +1,50 @@
+﻿column,dtype,name_ko,출처,근거/비고,결측률,고유값수
+cu_base_index,text,기초지수,국내ETF스키마 상속,,0.0014,1733
+cu_charge_rt,numeric,총보수요율,국내ETF스키마 상속,,0.0,127
+cu_etn_yn,text,ETN여부,직접해석,값이 'Y' 59건뿐이고 pd_grp_no=='ETN'과 정확히 일치,0.9896,1
+cu_fund_mgmt_co,text,운용사,국내ETF스키마 상속,,0.0014,372
+cu_index_repl_mthd,text,지수복제방식,직접해석,Optimized/Swap/Full/Other — 국내 cu_strtegy의 실물/합성에 대응,0.582,4
+cu_index_tracking_yn,text,지수추종여부,직접해석,"'Y' 또는 결측만 존재, cu_index_repl_mthd 유무와 결측 패턴 동일",0.582,1
+cu_inverse_short_yn,text,인버스/숏여부,직접해석,"'Y' 171건, 상품명의 Inverse/Short/Bear와 대응",0.9697,1
+cu_lev_fector,numeric,배수,국내ETF스키마 상속,,1.0,0
+cu_strtegy,text,운용전략,국내ETF스키마 상속,,0.0014,5566
+cu_upt_dt,text,변동갱신일자,국내ETF스키마 상속,,0.0,1
+du_base_dt_match_yn,text,종가·NAV기준일일치여부,직접해석,전 행 'N' — 종가일과 NAV일이 다름을 뜻하는 상수 플래그,0.0018,1
+du_bpr,numeric,기준가,국내ETF스키마 상속,,0.0018,5181
+du_clpr,numeric,종가,국내ETF스키마 상속,,0.0018,5105
+du_clpr_base_dt,text,종가기준일자,직접해석,"YYYYMMDD, du_upt_dt와 거의 동일하나 stale 종목 존재",0.0018,86
+du_clpr_src,text,종가출처,직접해석,전 행 'pd65n101.tday_clpr' — 사내 적재 테이블명,0.0018,1
+du_diff_rt,numeric,괴리율,국내ETF스키마 상속,,0.9995,3
+du_er_1d,numeric,수익률_1D,국내ETF스키마 상속,,0.0457,1
+du_hpr,numeric,고가,국내ETF스키마 상속,,0.0018,4621
+du_last_aum,numeric,최종AUM,국내ETF스키마 상속,,0.0331,4743
+du_last_nav,numeric,최종NAV,국내ETF스키마 상속,,0.8792,527
+du_lpr,numeric,시가,국내ETF스키마 상속,,0.0018,4735
+du_nav_base_dt,timestamp without time zone,NAV기준일자,직접해석,"timestamp, du_clpr_base_dt와 쌍",0.0,1
+du_opr,numeric,시가,직접해석,국내 du_lpr(시가)과 다른 이름을 씀 — open price,0.0018,4231
+du_upt_dt,text,일간갱신일자,국내ETF스키마 상속,,0.0,88
+du_val_1d,numeric,일거래대금,국내ETF스키마 상속,,0.0018,5352
+du_vol_1d,numeric,일거래량,국내ETF스키마 상속,,0.0018,4852
+pd_abrv_nm,text,상품약어명,국내ETF스키마 상속,,0.0,5641
+pd_curr_cd,text,상품통화코드,국내ETF스키마 상속,,0.0014,2
+pd_exg_mkt_cd,text,거래소코드,국내ETF스키마 상속,,0.0,5
+pd_grp_no,text,상품군종류,국내ETF스키마 상속,,0.0,2
+pd_isin_cd,text,ISIN코드,직접해석,"국제증권식별번호 12자리, 외부 조인 표준키",0.0016,5587
+pd_itm_no,text,상품번호,국내ETF스키마 상속,,0.0,5646
+pd_itm_no_ma,text,상품번호_미래에셋,국내ETF스키마 상속,,0.0,5646
+pd_lipper_id,text,Lipper펀드ID,직접해석,"LSEG Lipper 식별자, 외부 펀드 DB 조인키",0.0014,5588
+pd_lstg_dt,text,상품거래가능일자,국내ETF스키마 상속,,0.0,1956
+pd_lst_price,numeric,상품액면가,국내ETF스키마 상속,,0.0018,2
+pd_lst_stk_cnt,numeric,상품상장주식수,국내ETF스키마 상속,,0.0,3105
+pd_mkt_id,text,상품거래시장코드,국내ETF스키마 상속,,0.0,1
+pd_nm,text,상품명,국내ETF스키마 상속,,0.0,5630
+pd_sale_yn,text,상품판매여부,국내ETF스키마 상속,,0.0018,1
+pd_trd_ccy,text,거래통화,직접해석,전 행 USD,0.0,1
+pd_tr_yn,text,상품거래정지혀부,국내ETF스키마 상속,,0.0018,1
+pd_us_cik,text,미국SEC CIK,직접해석,SEC EDGAR 등록번호 — N-PORT 구성종목 취득의 유일 경로,0.0023,374
+ru_mkt_price,numeric,현재가,국내ETF스키마 상속,,0.0018,5101
+ru_mkt_volume,numeric,거래량,국내ETF스키마 상속,,0.0018,4852
+wu_core_yn,text,핵심ETF여부,국내ETF스키마 상속,,0.9818,1
+wu_inv_ast_type,text,투자자산군,국내ETF스키마 상속,,0.0014,6
+wu_inv_rgn,text,투자지역,국내ETF스키마 상속,,0.0014,59
+wu_upt_dt,text,주간갱신일자,국내ETF스키마 상속,,0.0,1
