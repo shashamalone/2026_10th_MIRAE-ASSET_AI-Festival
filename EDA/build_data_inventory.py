@@ -12,6 +12,7 @@ BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하
     "etf_kr_enriched.csv": "build_etf_enrichment.py",
     "bond_kr_enriched.csv": "build_bond_enrichment.py",
     "etf_theme.csv": "build_etf_enrichment.py",
+    "etf_holding.csv": "build_etf_holding.py",
 }
 
 files = [(p, layer) for d, layer in LAYERS for p in sorted(glob.glob(f"{d}/*.csv"))]

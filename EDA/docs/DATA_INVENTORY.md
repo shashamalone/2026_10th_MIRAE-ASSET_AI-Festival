@@ -23,6 +23,7 @@
 | `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 12 | `EDA/build_bond_enrichment.py` |
 | `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
 | `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
+| `data/relations/etf_holding.csv` | 관계 | 30,737 | 7 | `EDA/build_etf_holding.py` |
 | `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
 
 ## 파일별 컬럼
@@ -492,6 +493,18 @@
 | `zrin_fd_ivst_risk_gcd` | 23.1% | 7 |
 | `zrin_fd_ivst_risk_grd_nm` | 23.1% | 9 |
 | `prfd_attr_cds` | 0.0% | 10,621 |
+
+### `data/relations/etf_holding.csv`
+
+| 컬럼 | 결측률 | 고유값수 |
+|---|---|---|
+| `pd_itm_no` | 0.0% | 487 |
+| `holding_code_raw` | 0.0% | 9,265 |
+| `holding_code_type` | 0.0% | 4 |
+| `holding_name` | 0.1% | 8,349 |
+| `weight` | 1.4% | 1,897 |
+| `source` | 0.0% | 4 |
+| `as_of` | 0.0% | 1 |
 
 ### `data/relations/etf_theme.csv`
 
