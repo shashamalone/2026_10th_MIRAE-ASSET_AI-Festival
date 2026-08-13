@@ -66,11 +66,22 @@ ontology/*.ttl
 |---|---|---|
 | `data/enriched/fund_pub_dedup.csv` | 펀드 1행화(11,138), 속성코드는 `prfd_attr_cds`로 집약 | `build_fund_dedup.py` |
 | `data/enriched/etf_kr_enriched.csv` | 국내ETF/ETN PK + LSEG 스칼라(ter·replication·base_market·base_asset·hedge_type) + `charge_rt_final`/`charge_rt_source` | `build_etf_enrichment.py` |
+| `data/enriched/bond_kr_enriched.csv` | 국내채권 PK + 등급 ordinal(`crd_grd_rank`, 1=AAA) + 잔존만기(`remaining_days`/`maturity_bucket`, 2026-07-11 기준 재계산) + `is_sellable`(254건) | `build_bond_enrichment.py` |
 | `data/relations/etf_theme.csv` | 국내ETF↔테마 (LSEG themes, 176종) 롱포맷. `as_of`는 LSEG 수집 시점 미확인이라 공란 | `build_etf_enrichment.py` |
+| `EDA/docs/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | `build_data_inventory.py` |
+
+채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
+
+## 변경 추적
+
+데이터 구조 변경 이력은 수기 changelog 대신 `EDA/docs/DATA_INVENTORY.md`의 `git diff`로 관리한다.
+
+1. 원본 교체·파생 테이블 추가·컬럼 변경이 생기면 `python3 EDA/build_data_inventory.py`를 재실행한다.
+2. 갱신된 `DATA_INVENTORY.md`를 함께 커밋한다. `git diff`가 곧 "어느 파일의 어느 컬럼이 언제 바뀌었나"의 답이 된다.
+3. 문서는 직접 편집하지 않는다. 출력은 결정적이어야 하므로 생성 시각 같은 매 실행마다 바뀌는 값을 넣지 않는다(diff 노이즈 방지).
 
 ## 다음 후보 (미생성)
 
-- `data/enriched/bond_kr_enriched.csv`: `is_sellable`(판매플래그+KRW+만기미도래 → 254건), 등급 ordinal, 잔존만기 버킷
 - `data/relations/etf_holding.csv`: ETF↔구성종목 — 외부 P0 수집 후
 - `data/relations/company_subsidiary.csv`: 기업↔자회사 — 외부 P0(DART) 수집 후
 - `data/relations/product_index.csv`: 상품↔기초지수/벤치마크 — 지수 별칭 매핑 후
