@@ -77,9 +77,19 @@ s["source"] = "DART:otrCprInvstmntSttus"
 
 ahead = s["as_of"] > CUTOFF  # 룩어헤드 가드: 컷오프 이후 접수분 제외
 print(f"as_of > {CUTOFF} 제외: {ahead.sum()}행" + (f" {sorted(s.loc[ahead, 'as_of'].unique())}" if ahead.any() else ""))
-s = s[~ahead & s.child_name.str.strip().ne("")]
-s = s[["parent_corp_code", "parent_name", "child_name", "child_name_norm",
+junk = s.child_name_norm.isin(["합계", "소계", "계", "-", ""])  # DART 표의 소계 행. 자회사가 아니다
+print(f"요약행 제외: {junk.sum()}행 {s.loc[junk, 'child_name'].value_counts().head(3).to_dict()}")
+s = s[~ahead & ~junk]
+
+# 자회사는 법인명 문자열로만 오므로 정규화명으로 마스터에 되붙인다. 동명이인(5,532명)은 특정 불가라 공란
+uniq = m.groupby("corp_name_norm").corp_code.nunique()
+s["child_corp_code"] = s.child_name_norm.map(m[m.corp_name_norm.isin(uniq[uniq == 1].index)]
+                                             .set_index("corp_name_norm").corp_code).fillna("")
+s = s[["parent_corp_code", "parent_name", "child_name", "child_name_norm", "child_corp_code",
        "ownership_pct", "invest_purpose", "source", "as_of"]]
+hit = s.child_corp_code.ne("")
+print(f"child_corp_code 매칭: {hit.sum():,} / {len(s):,} = {hit.mean():.1%} "
+      f"(그중 상장 {s.child_corp_code.isin(set(m.loc[listed, 'corp_code'])).sum():,}행)")
 assert len(s) and s.as_of.le(CUTOFF).all() and s.parent_corp_code.str.len().eq(8).all()
 OUT_SUB.parent.mkdir(parents=True, exist_ok=True)
 s.to_csv(OUT_SUB, index=False, encoding="utf-8-sig", lineterminator="\n")

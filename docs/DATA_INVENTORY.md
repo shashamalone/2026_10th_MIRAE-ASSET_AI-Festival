@@ -24,7 +24,7 @@
 | `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `EDA/build_company_relations.py` |
 | `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
 | `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
-| `data/relations/company_subsidiary.csv` | 관계 | 32,791 | 8 | `EDA/build_company_relations.py` |
+| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 9 | `EDA/build_company_relations.py` |
 | `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `EDA/build_etf_holding.py` |
 | `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
 
@@ -510,14 +510,15 @@
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `parent_corp_code` | 0.0% | 2,667 |
-| `parent_name` | 0.0% | 2,667 |
-| `child_name` | 0.0% | 26,902 |
-| `child_name_norm` | 0.0% | 24,820 |
-| `ownership_pct` | 16.3% | 4,224 |
-| `invest_purpose` | 0.0% | 1,295 |
+| `parent_corp_code` | 0.0% | 2,266 |
+| `parent_name` | 0.0% | 2,266 |
+| `child_name` | 0.0% | 26,899 |
+| `child_name_norm` | 0.0% | 24,818 |
+| `child_corp_code` | 73.6% | 5,526 |
+| `ownership_pct` | 8.1% | 4,185 |
+| `invest_purpose` | 0.0% | 1,294 |
 | `source` | 0.0% | 1 |
-| `as_of` | 0.0% | 136 |
+| `as_of` | 0.0% | 119 |
 
 ### `data/relations/etf_holding.csv`
 

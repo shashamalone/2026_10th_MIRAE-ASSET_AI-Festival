@@ -96,7 +96,7 @@
 | API | 원천 | 결과 |
 |---|---|---|
 | `corpCode.xml` | `data/external/company_master/dart_corpcode_20260711.xml` (30MB) | **118,709건** (상장 3,983 / 비상장 114,726) → `data/enriched/company_master.csv` |
-| `otrCprInvstmntSttus` | `data/external/company_governance/dart_invst_{corp_code}_20260711.json` | 상장사 **2,753사** 조회(실패 0, 출자 없음 21) → `data/relations/company_subsidiary.csv` **32,791행 / 모회사 2,667사** |
+| `otrCprInvstmntSttus` | `data/external/company_governance/dart_invst_{corp_code}_20260711.json` | 상장사 **2,753사** 조회(실패 0, 출자 없음 21) → `data/relations/company_subsidiary.csv` **29,524행 / 모회사 2,266사** (표 소계 행 `합계`·`-` 3,340행 제외) |
 
 - **대상 선정**: ETF 편입종목 `ticker6` ∪ KIND 종목코드 2,935건 → corpCode 매핑 성공 2,753종(미매핑 182는 ETF·우선주·상폐)
 - **조인 실측** (KIND 상장사 마스터 → DART 마스터)
@@ -109,7 +109,8 @@
 
   발행사 매칭이 **12.8% → 65.4%**로 뛴 것이 이 소스의 실익이다(비상장 발행사가 붙었다). 편입종목은 이미 KIND로 충분해 변화가 없다
 - **시점**: `bsns_year=2025 & reprt_code=11011`(사업보고서). 접수일 대부분 2026-03. 관계 테이블 `as_of`는 응답 `rcept_no` 앞 8자리에서 도출하고 **컷오프 초과 646행(65사, 07-11 이후 접수된 정정보고서)은 제외**했다
-- **한계**: 자회사가 **법인명 문자열**로만 오고 corp_code가 없다 → `child_name_norm`으로 마스터에 재매칭해야 한다. 다단계(자회사의 자회사)는 상장 모회사 보고서에만 의존하므로 비상장 중간지주 아래는 끊긴다
+- **자회사 → 기업 노드 연결**: 응답에 자회사 corp_code가 없어 `child_name_norm`으로 마스터에 되붙였다(`child_corp_code`). **7,780 / 29,524 = 26.4%**, 그중 **상장 자회사 1,801행(모회사 719사)** — `LG화학→LG에너지솔루션(373220) 79%`, `에코프로→에코프로비엠(247540) 41%`처럼 ETF 편입종목까지 이어지는 링크가 여기서 나온다. 미매칭은 대부분 해외법인·투자조합(영문명 6,779행)이고, 동명이인 정규화명(마스터 5,532개)은 특정 불가라 공란으로 둔다
+- **한계**: 다단계(자회사의 자회사)는 상장 모회사 보고서에만 의존하므로 비상장 중간지주 아래는 끊긴다
 - **막힌 경로**: DART 공시 원문 직접 크롤링은 robots.txt Disallow(`/dsaf001/main.do`, `/report/viewer.do` 등). 공식 API가 합법 대체로다
 
 ---
