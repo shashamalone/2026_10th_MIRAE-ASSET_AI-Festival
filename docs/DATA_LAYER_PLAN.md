@@ -69,6 +69,8 @@ ontology/*.ttl
 | `data/enriched/bond_kr_enriched.csv` | 국내채권 PK + 등급 ordinal(`crd_grd_rank`, 1=AAA) + 잔존만기(`remaining_days`/`maturity_bucket`, 2026-07-11 기준 재계산) + `is_sellable`(254건) | `build_bond_enrichment.py` |
 | `data/relations/etf_theme.csv` | 국내ETF↔테마 (LSEG themes, 176종) 롱포맷. `as_of`는 LSEG 수집 시점 미확인이라 공란 | `build_etf_enrichment.py` |
 | `data/relations/etf_holding.csv` | 국내ETF↔편입종목 (KODEX/TIGER/RISE/ACE 4사, `as_of` 2026-07-10) 롱포맷. 식별자는 원본 보존(`holding_code_raw`/`holding_code_type`) | `collect_etf_holdings.py` → `build_etf_holding.py` |
+| `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | `build_company_relations.py` |
+| `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (32,791행, 모회사 2,667사) 롱포맷. `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | `collect_dart.py` → `build_company_relations.py` |
 | `docs/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | `build_data_inventory.py` |
 
 채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
@@ -83,5 +85,4 @@ ontology/*.ttl
 
 ## 다음 후보 (미생성)
 
-- `data/relations/company_subsidiary.csv`: 기업↔자회사 — 외부 P0(DART) 수집 후
 - `data/relations/product_index.csv`: 상품↔기초지수/벤치마크 — 지수 별칭 매핑 후
