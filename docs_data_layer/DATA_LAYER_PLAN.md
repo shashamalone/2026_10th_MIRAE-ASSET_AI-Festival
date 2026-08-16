@@ -24,7 +24,7 @@ ontology/*.ttl   relations + enriched 스키마에서 생성
 
 EDA/*.py         실행 스크립트 (build_*.py 파생 생성, collect_*.py 수집, validate_*.py 검증)
 EDA/src/*.py     jupytext 노트북 소스 전용 (01~05). 실행 스크립트를 여기 두지 않는다
-docs/*.md    문서
+docs_raw/ · docs_data_layer/ · docs_data_collection/  문서
 ```
 
 ### 파일명 규칙
@@ -71,13 +71,13 @@ ontology/*.ttl
 | `data/relations/etf_holding.csv` | 국내ETF↔편입종목 (KODEX/TIGER/RISE/ACE 4사, `as_of` 2026-07-10) 롱포맷. 식별자는 원본 보존(`holding_code_raw`/`holding_code_type`) | `collect_etf_holdings.py` → `build_etf_holding.py` |
 | `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | `build_company_relations.py` |
 | `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (29,524행, 모회사 2,266사) 롱포맷. 자회사는 법인명 문자열이라 `child_corp_code`로 마스터에 되붙임(26.4%). `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | `collect_dart.py` → `build_company_relations.py` |
-| `docs/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | `build_data_inventory.py` |
+| `docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | `build_data_inventory.py` |
 
 채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
 
 ## 변경 추적
 
-데이터 구조 변경 이력은 수기 changelog 대신 `docs/DATA_INVENTORY.md`의 `git diff`로 관리한다.
+데이터 구조 변경 이력은 수기 changelog 대신 `docs_data_layer/DATA_INVENTORY.md`의 `git diff`로 관리한다.
 
 1. 원본 교체·파생 테이블 추가·컬럼 변경이 생기면 `python3 EDA/build_data_inventory.py`를 재실행한다.
 2. 갱신된 `DATA_INVENTORY.md`를 함께 커밋한다. `git diff`가 곧 "어느 파일의 어느 컬럼이 언제 바뀌었나"의 답이 된다.

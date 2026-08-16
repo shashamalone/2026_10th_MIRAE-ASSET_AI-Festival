@@ -23,7 +23,9 @@ data/external/   외부 수집 원천 + 사이드카 {원본파일명}.meta.json
 ontology/*.ttl   제출 필수 — common + bond_kr/etf_kr/etf_gl/fund_pub
 EDA/*.py         실행 스크립트 (build_/collect_/validate_)
 EDA/src/*.py     jupytext 노트북 소스 전용
-docs/*.md    문서
+docs_raw/            EDA 산출 문서 (EDA_REPORT·COLUMN_GUIDE·QUERY_COVERAGE_35)
+docs_data_layer/     데이터 계층 문서 (DATA_LAYER_PLAN·EXTERNAL_DATA_PLAN·EXTERNAL_DATA_SOURCES·DATA_INVENTORY)
+docs_data_collection/ 수집 설계 문서 (HOLDINGS_COLLECTION_DESIGN)
 expected_question/  예상 평가 질문 35문항
 ```
 
@@ -43,7 +45,7 @@ python3 EDA/validate_external.py        # as_of 기준일 가드 (실패 시 exi
 python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 검증
 ```
 
-데이터 구조를 바꿨으면 `build_data_inventory.py`를 재실행해 `docs/DATA_INVENTORY.md`를 함께 커밋한다. 이 파일의 `git diff`가 변경 이력이다.
+데이터 구조를 바꿨으면 `build_data_inventory.py`를 재실행해 `docs_data_layer/DATA_INVENTORY.md`를 함께 커밋한다. 이 파일의 `git diff`가 변경 이력이다.
 
 ## 반드시 알아야 할 데이터 함정
 
@@ -87,11 +89,11 @@ python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 �
 
 | 문서 | 내용 |
 |---|---|
-| `docs/EDA_REPORT.md` | 4개 도메인 실측 분석, 답변 가능/불가 질의 |
-| `docs/COLUMN_GUIDE.md` | 207컬럼 설명서 + 온톨로지 등급 + enum 값 |
-| `docs/DATA_LAYER_PLAN.md` | 계층·파일명·출처 규칙의 **단일 기준** |
-| `docs/DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `docs/EXTERNAL_DATA_PLAN.md` | 외부데이터 우선순위(35문항 blocking 기준) |
-| `docs/QUERY_COVERAGE_35.md` | 35문항 커버리지 매트릭스 |
-| `docs/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교 |
-| `docs/DATA_INVENTORY.md` | 자동 생성. 직접 편집 금지 |
+| `docs_raw/EDA_REPORT.md` | 4개 도메인 실측 분석, 답변 가능/불가 질의 |
+| `docs_raw/COLUMN_GUIDE.md` | 207컬럼 설명서 + 온톨로지 등급 + enum 값 |
+| `docs_data_layer/DATA_LAYER_PLAN.md` | 계층·파일명·출처 규칙의 **단일 기준** |
+| `docs_data_layer/EXTERNAL_DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
+| `docs_data_layer/EXTERNAL_DATA_PLAN.md` | 외부데이터 우선순위(35문항 blocking 기준) |
+| `docs_raw/QUERY_COVERAGE_35.md` | 35문항 커버리지 매트릭스 |
+| `docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교 |
+| `docs_data_layer/DATA_INVENTORY.md` | 자동 생성. 직접 편집 금지 |
