@@ -20,7 +20,7 @@ data/csv/        원본 xlsx → CSV 변환본 (동결)
 data/enriched/   파생 테이블 (재그레인·스칼라 보강)
 data/relations/  롱포맷 관계 테이블 (주어ID, 목적어, source, as_of)
 data/external/   외부 수집 원천 + 사이드카 {원본파일명}.meta.json
-ontology/*.ttl   제출 필수 — common + bond_kr/etf_kr/etf_gl/fund_pub
+ontology/*.ttl   제출 필수 — 스키마 5파일(common + 4도메인, 커밋) + instances_*.ttl 5파일(생성물, gitignore)
 EDA/*.py         실행 스크립트 (build_/collect_/validate_)
 EDA/src/*.py     jupytext 노트북 소스 전용
 docs_raw/            EDA 산출 문서 (EDA_REPORT·COLUMN_GUIDE·QUERY_COVERAGE_35)
@@ -40,6 +40,9 @@ python3 EDA/build_etf_enrichment.py     # LSEG 보강 + ETF↔테마 관계
 python3 EDA/build_bond_enrichment.py    # 등급 서열·잔존만기·판매가능
 python3 EDA/collect_etf_holdings.py     # 운용사 4사 편입종목 수집
 python3 EDA/build_etf_holding.py        # → data/relations/etf_holding.csv
+python3 EDA/build_company_relations.py  # DART 자회사 관계 + 기업 마스터 (수집: collect_dart.py)
+python3 EDA/build_holding_code_map.py   # 편입종목 ticker6 해소(우선주→보통주·모ETF)
+python3 EDA/build_ontology_instances.py # 관계·마스터 → ontology/instances_*.ttl (1M 트리플)
 python3 EDA/build_data_inventory.py     # 데이터 구조 스냅샷 갱신
 python3 EDA/validate_external.py        # as_of 기준일 가드 (실패 시 exit 1)
 python3 EDA/validate_ontology.py        # TTL 파싱·domain/range·Q35 판정 검증

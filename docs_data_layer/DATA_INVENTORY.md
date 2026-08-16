@@ -24,7 +24,8 @@
 | `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `EDA/build_company_relations.py` |
 | `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
 | `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
-| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 9 | `EDA/build_company_relations.py` |
+| `data/enriched/holding_code_map.csv` | 파생 | 1,393 | 8 | — |
+| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 10 | `EDA/build_company_relations.py` |
 | `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `EDA/build_etf_holding.py` |
 | `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
 
@@ -93,7 +94,7 @@
 | `COV` | 31.6% | 16,188 |
 | `NDY_DUR` | 31.6% | 14,607 |
 | `NDY_COV` | 31.6% | 15,941 |
-| `EVAL_PRICE` | 24.9% | 20,313 |
+| `EVAL_PRICE` | 24.9% | 20,310 |
 | `APPLIED_YIELD` | 24.9% | 3,852 |
 | `DIRTY` | 31.6% | 19,665 |
 | `NDY_EVAL_PRICE` | 31.6% | 16,427 |
@@ -506,6 +507,19 @@
 | `zrin_fd_ivst_risk_grd_nm` | 23.1% | 9 |
 | `prfd_attr_cds` | 0.0% | 10,621 |
 
+### `data/enriched/holding_code_map.csv`
+
+| 컬럼 | 결측률 | 고유값수 |
+|---|---|---|
+| `holding_code_raw` | 0.0% | 1,393 |
+| `holding_name` | 0.0% | 1,390 |
+| `sec_type` | 6.5% | 4 |
+| `corp_code` | 11.6% | 1,212 |
+| `common_ticker` | 98.6% | 17 |
+| `etf_isin` | 94.8% | 73 |
+| `match_rule` | 6.5% | 4 |
+| `source` | 0.0% | 1 |
+
 ### `data/relations/company_subsidiary.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
@@ -514,7 +528,8 @@
 | `parent_name` | 0.0% | 2,266 |
 | `child_name` | 0.0% | 26,899 |
 | `child_name_norm` | 0.0% | 24,818 |
-| `child_corp_code` | 73.6% | 5,526 |
+| `child_corp_code` | 69.7% | 6,191 |
+| `child_match_rule` | 69.7% | 5 |
 | `ownership_pct` | 8.1% | 4,185 |
 | `invest_purpose` | 0.0% | 1,294 |
 | `source` | 0.0% | 1 |

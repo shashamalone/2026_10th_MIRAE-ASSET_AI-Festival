@@ -6,3 +6,5 @@ lseg_static_metadata.json
 theme_list.json
 .env
 __pycache__/
+
+ontology/instances_*.ttl

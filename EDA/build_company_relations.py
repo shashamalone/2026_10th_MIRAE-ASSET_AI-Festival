@@ -81,12 +81,35 @@ junk = s.child_name_norm.isin(["합계", "소계", "계", "-", ""])  # DART 표�
 print(f"요약행 제외: {junk.sum()}행 {s.loc[junk, 'child_name'].value_counts().head(3).to_dict()}")
 s = s[~ahead & ~junk]
 
-# 자회사는 법인명 문자열로만 오므로 정규화명으로 마스터에 되붙인다. 동명이인(5,532명)은 특정 불가라 공란
+# 자회사는 법인명 문자열로만 오므로 정규화명으로 마스터에 되붙인다.
+# 1순위: 정규화명이 마스터에서 유일 → 그 법인. 2순위: 동명이인이지만 상장사가 정확히 1개 →
+# 그 상장사(타법인출자에 등장하는 KT·삼성물산류 대형명은 상장사가 맞다). 비상장 동명이인은 특정 불가라 공란.
 uniq = m.groupby("corp_name_norm").corp_code.nunique()
-s["child_corp_code"] = s.child_name_norm.map(m[m.corp_name_norm.isin(uniq[uniq == 1].index)]
-                                             .set_index("corp_name_norm").corp_code).fillna("")
+by_unique = m[m.corp_name_norm.isin(uniq[uniq == 1].index)].set_index("corp_name_norm").corp_code
+lst = m[listed]
+lst_uniq = lst.groupby("corp_name_norm").corp_code.nunique()
+by_listed = lst[lst.corp_name_norm.isin(lst_uniq[lst_uniq == 1].index)].set_index("corp_name_norm").corp_code
+s["child_corp_code"] = s.child_name_norm.map(by_unique).fillna("")
+s["child_match_rule"] = ""
+s.loc[s.child_corp_code.ne(""), "child_match_rule"] = "unique_name"
+amb = s.child_corp_code.eq("") & s.child_name_norm.isin(by_listed.index)
+s.loc[amb, "child_corp_code"] = s.loc[amb, "child_name_norm"].map(by_listed)
+s.loc[amb, "child_match_rule"] = "unique_listed"
+print(f"동명이인 중 유일 상장사 매칭(unique_listed): {amb.sum()}행")
+
+# 3순위: 공시 표기 노이즈 제거 후 재매칭 — 각주((주1)·(*2)), 개명 주석((구XX)), 증권종류 접미(보통주·RCPS 등).
+# 지역명 괄호((곤산)·(베트남) = 별도 현지법인)는 제거하지 않는다. 사명 변경(에코프로머티리얼즈→에코프로머티)은
+# 오프라인 근거가 없어 규칙으로 풀지 않고 미매칭으로 남긴다.
+NOISE_PAREN = re.compile(r"\((?:주\s?\d*|\*+\d*|구[.,]?\s?[^)]*|사명변경전[^)]*|유상증자|KOSDAQ|주\d+참조)\)")
+SEC_SUFFIX = re.compile(r"(_?(투자분|의무인수분|환매청구권)|보통주식?|전환?우선주(식)?|전환사채\(?\d*CB\)?|\d+C[BP]S?|RCPS|CPS|CB)+$")
+cl = s.child_name_norm.map(lambda n: SEC_SUFFIX.sub("", NOISE_PAREN.sub("", n)).strip())
+for rule, table in [("clean_unique_name", by_unique), ("clean_unique_listed", by_listed)]:
+    todo = s.child_corp_code.eq("") & cl.ne(s.child_name_norm) & cl.isin(table.index)
+    s.loc[todo, "child_corp_code"] = cl[todo].map(table)
+    s.loc[todo, "child_match_rule"] = rule
+    print(f"표기 정제 재매칭({rule}): {todo.sum()}행")
 s = s[["parent_corp_code", "parent_name", "child_name", "child_name_norm", "child_corp_code",
-       "ownership_pct", "invest_purpose", "source", "as_of"]]
+       "child_match_rule", "ownership_pct", "invest_purpose", "source", "as_of"]]
 hit = s.child_corp_code.ne("")
 print(f"child_corp_code 매칭: {hit.sum():,} / {len(s):,} = {hit.mean():.1%} "
       f"(그중 상장 {s.child_corp_code.isin(set(m.loc[listed, 'corp_code'])).sum():,}행)")
