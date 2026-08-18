@@ -62,18 +62,20 @@ ontology/*.ttl
 
 ## 산출물 현황
 
-| 파일 | 내용 | 스크립트 |
-|---|---|---|
-| `data/enriched/fund_pub_dedup.csv` | 펀드 1행화(11,138), 속성코드는 `prfd_attr_cds`로 집약 | `build_fund_dedup.py` |
-| `data/enriched/etf_kr_enriched.csv` | 국내ETF/ETN PK + LSEG 스칼라(ter·replication·base_market·base_asset·hedge_type) + `charge_rt_final`/`charge_rt_source` | `build_etf_enrichment.py` |
-| `data/enriched/bond_kr_enriched.csv` | 국내채권 PK + 등급 ordinal(`crd_grd_rank`, 1=AAA) + 잔존만기(`remaining_days`/`maturity_bucket`, 2026-07-11 기준 재계산) + `is_sellable`(254건) | `build_bond_enrichment.py` |
-| `data/relations/etf_theme.csv` | 국내ETF↔테마 (LSEG themes, 176종) 롱포맷. `as_of`는 LSEG 수집 시점 미확인이라 공란 | `build_etf_enrichment.py` |
-| `data/relations/etf_holding.csv` | 국내ETF↔편입종목 (KODEX/TIGER/RISE/ACE 4사, `as_of` 2026-07-10) 롱포맷. 식별자는 원본 보존(`holding_code_raw`/`holding_code_type`) | `collect_etf_holdings.py` → `build_etf_holding.py` |
-| `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | `build_company_relations.py` |
-| `data/enriched/holding_code_map.csv` | 편입종목 ticker6 1,393종 식별자 해소: 정확매칭 1,211 / 모ETF 72(`etf_isin`) / 우선주→보통주 20(`common_ticker`) / 미해소 90(대부분 회사채 코드 — 오매칭 위험으로 공란 유지). `match_rule`로 판정 근거 기록 | `build_holding_code_map.py` |
-| `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (29,524행, 모회사 2,266사) 롱포맷. 자회사는 법인명 문자열이라 `child_corp_code`로 마스터에 되붙임(**30.3%**, 판정 근거는 `child_match_rule`: unique_name 7,780 / unique_listed 275 / 표기정제 900). 비상장 동명이인·사명변경은 미매칭 유지. `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | `collect_dart.py` → `build_company_relations.py` |
-| `ontology/instances_*.ttl` | 위 관계·마스터 테이블의 TTL 인스턴스 5파일(1,014,201트리플, 47MB). fp:Holding·fp:SubsidiaryRelation n-ary, 결정적 출력. **gitignore 대상**(재생성 가능·주최측 데이터 파생) | `build_ontology_instances.py` (검증 `validate_ontology.py`) |
-| `docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | `build_data_inventory.py` |
+`원천데이터` 열은 이 파일이 어느 데이터에서 파생됐는지를 나타낸다. **주최측**은 2026-07-11 스냅샷 원본(`data/csv/`), **외부**는 대회 규칙상 `as_of ≤ 2026-07-11`을 지켜 별도 수집한 데이터(상세는 `EXTERNAL_DATA_SOURCES.md`), **내부 파생**은 이 표의 다른 행을 조합해 만든 2차 산출물이다.
+
+| 파일 | 내용 | 원천데이터 | 스크립트 |
+|---|---|---|---|
+| `data/enriched/fund_pub_dedup.csv` | 펀드 1행화(11,138), 속성코드는 `prfd_attr_cds`로 집약 | 주최측 `PRFD01N001_fund_pub_master` | `build_fund_dedup.py` |
+| `data/enriched/etf_kr_enriched.csv` | 국내ETF/ETN PK + LSEG 스칼라(ter·replication·base_market·base_asset·hedge_type) + `charge_rt_final`/`charge_rt_source` | 주최측 `PREF01N001_etf_kr_master` + 외부 LSEG(`lseg_static_metadata.json`) | `build_etf_enrichment.py` |
+| `data/enriched/bond_kr_enriched.csv` | 국내채권 PK + 등급 ordinal(`crd_grd_rank`, 1=AAA) + 잔존만기(`remaining_days`/`maturity_bucket`, 2026-07-11 기준 재계산) + `is_sellable`(254건) | 주최측 `PRBD01N001_bond_kr_master` | `build_bond_enrichment.py` |
+| `data/relations/etf_theme.csv` | 국내ETF↔테마 (LSEG themes, 176종) 롱포맷. `as_of`는 LSEG 수집 시점 미확인이라 공란 | 외부 LSEG(`lseg_static_metadata.json`) | `build_etf_enrichment.py` |
+| `data/relations/etf_holding.csv` | 국내ETF↔편입종목 (KODEX/TIGER/RISE/ACE 4사, `as_of` 2026-07-10) 롱포맷. 식별자는 원본 보존(`holding_code_raw`/`holding_code_type`) | 외부 운용사 4사 API(KODEX/TIGER/RISE/ACE) | `collect_etf_holdings.py` → `build_etf_holding.py` |
+| `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | 외부 DART `corpCode` + KIND 상장법인목록 | `build_company_relations.py` |
+| `data/enriched/holding_code_map.csv` | 편입종목 ticker6 1,393종 식별자 해소: 정확매칭 1,211 / 모ETF 72(`etf_isin`) / 우선주→보통주 20(`common_ticker`) / 미해소 90(대부분 회사채 코드 — 오매칭 위험으로 공란 유지). `match_rule`로 판정 근거 기록 | 내부 파생 (`etf_holding.csv` + `company_master.csv` + 주최측 `PREF01N001`) | `build_holding_code_map.py` |
+| `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (29,524행, 모회사 2,266사) 롱포맷. 자회사는 법인명 문자열이라 `child_corp_code`로 마스터에 되붙임(**30.3%**, 판정 근거는 `child_match_rule`: unique_name 7,780 / unique_listed 275 / 표기정제 900). 비상장 동명이인·사명변경은 미매칭 유지. `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | 외부 DART `otrCprInvstmntSttus`(타법인출자현황) | `collect_dart.py` → `build_company_relations.py` |
+| `ontology/instances_*.ttl` | 위 관계·마스터 테이블의 TTL 인스턴스 5파일(1,014,201트리플, 47MB). fp:Holding·fp:SubsidiaryRelation n-ary, 결정적 출력. **gitignore 대상**(재생성 가능·주최측 데이터 파생) | 내부 파생 (위 `data/relations/`·`data/enriched/` 전체) | `build_ontology_instances.py` (검증 `validate_ontology.py`) |
+| `docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | 내부 파생 (위 전체) | `build_data_inventory.py` |
 
 채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
 
