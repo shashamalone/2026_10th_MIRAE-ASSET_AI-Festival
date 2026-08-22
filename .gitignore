@@ -8,3 +8,6 @@ theme_list.json
 __pycache__/
 
 ontology/instances_*.ttl
+ontology.zip
+
+artifacts/
