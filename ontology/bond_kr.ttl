@@ -124,9 +124,11 @@ fp:TradingMarket a owl:Class ;
 # 3. 분류축 개체
 ################################################################################
 
-fp:IssuerType_Corporate  a fp:BondIssuerType ; rdfs:label "회사채"@ko, "CorporateBond"@en .
+fp:IssuerType_Corporate  a fp:BondIssuerType ; rdfs:label "회사채"@ko, "CorporateBond"@en ;
+    skos:altLabel "외화채권-회사채"@ko, "외화채권-금융채"@ko .
 fp:IssuerType_Special    a fp:BondIssuerType ; rdfs:label "특수채"@ko, "SpecialBond"@en .
-fp:IssuerType_Government a fp:BondIssuerType ; rdfs:label "국공채"@ko, "GovernmentBond"@en .
+fp:IssuerType_Government a fp:BondIssuerType ; rdfs:label "국공채"@ko, "GovernmentBond"@en ;
+    skos:altLabel "개인투자용국채"@ko .
 fp:IssuerType_Municipal  a fp:BondIssuerType ; rdfs:label "지방채"@ko, "MunicipalBond"@en .
 
 fp:Maturity_ShortTerm a fp:MaturityClass ; rdfs:label "단기"@ko, "ShortTerm"@en ;
@@ -143,6 +145,11 @@ fp:Coupon_Floating    a fp:CouponType ; rdfs:label "변동금리"@ko, "FloatingC
 fp:Coupon_Zero        a fp:CouponType ; rdfs:label "무이표(할인채)"@ko, "ZeroCoupon"@en .
 fp:Coupon_Convertible a fp:CouponType ; rdfs:label "전환형"@ko, "ConvertibleCoupon"@en .
 
+# CRD_GRD → 대역 매핑은 altLabel 사전이 아니라 **최장 접두 규칙**으로 처리한다.
+#   AAA / AA(AA+·AA0·AA-) / A(A+·A0·A-) / BBB(BBB+·BBB0·BBB-) 순으로 긴 접두부터 판정하고,
+#   BB·B·CCC·CC·C 계열은 fp:RatingBand_Specul, 공란 17,644건은 fp:RatingBand_NotRated로 간다.
+#   개별 등급 문자열('AA-' 등)은 fp:CreditRating 개체의 표층형이므로 여기에 altLabel로 달면
+#   같은 문자열이 두 개체를 가리켜 원본값→개체 사전이 충돌한다.
 fp:RatingBand_AAA      a fp:RatingBand ; rdfs:label "AAA등급"@ko, "AAAGrade"@en .
 fp:RatingBand_AA       a fp:RatingBand ; rdfs:label "AA등급"@ko, "AAGrade"@en .
 fp:RatingBand_A        a fp:RatingBand ; rdfs:label "A등급"@ko, "AGrade"@en .
@@ -159,8 +166,10 @@ fp:Collateral_Secured     a fp:CollateralType ; rdfs:label "담보부"@ko, "Secu
 fp:Collateral_Guaranteed  a fp:CollateralType ; rdfs:label "보증"@ko, "Guaranteed"@en .
 fp:Collateral_Subordinated a fp:CollateralType ; rdfs:label "후순위"@ko, "Subordinated"@en .
 
-fp:Market_Domestic a fp:IssuanceMarket ; rdfs:label "국내 발행"@ko, "DomesticMarket"@en .
-fp:Market_Foreign  a fp:IssuanceMarket ; rdfs:label "해외 발행"@ko, "ForeignMarket"@en .
+fp:Market_Domestic a fp:IssuanceMarket ; rdfs:label "국내 발행"@ko, "DomesticMarket"@en ;
+    skos:altLabel "KR"@ko .
+fp:Market_Foreign  a fp:IssuanceMarket ; rdfs:label "해외 발행"@ko, "ForeignMarket"@en ;
+    skos:altLabel "XS"@ko .
 
 fp:IssuerCat_Financial       a fp:IssuerCategory ; rdfs:label "금융 회사"@ko, "FinancialCorporateIssuer"@en .
 fp:IssuerCat_NonFinancial    a fp:IssuerCategory ; rdfs:label "비금융 회사"@ko, "NonFinancialCorporateIssuer"@en .

@@ -225,29 +225,29 @@ fp:ratingStatus a owl:ObjectProperty ;
 ################################################################################
 
 fp:RiskGrade_1 a fp:RiskGrade ; rdfs:label "매우 높은 위험(1등급)"@ko, "Very High Risk (Grade 1)"@en ;
-    skos:altLabel "매우높은위험(1등급)"@ko, "PD_RISK_GCD_11"@en ; fp:riskGradeLevel 1 .
+    skos:altLabel "매우높은위험(1등급)"@ko, "PD_RISK_GCD_11"@en, "1"@en ; fp:riskGradeLevel 1 .
 fp:RiskGrade_2 a fp:RiskGrade ; rdfs:label "높은 위험(2등급)"@ko, "High Risk (Grade 2)"@en ;
-    skos:altLabel "높은위험(2등급)"@ko, "PD_RISK_GCD_12"@en ; fp:riskGradeLevel 2 .
+    skos:altLabel "높은위험(2등급)"@ko, "PD_RISK_GCD_12"@en, "2"@en ; fp:riskGradeLevel 2 .
 fp:RiskGrade_3 a fp:RiskGrade ; rdfs:label "다소 높은 위험(3등급)"@ko, "Moderately High Risk (Grade 3)"@en ;
-    skos:altLabel "다소높은위험(3등급)"@ko, "PD_RISK_GCD_13"@en ; fp:riskGradeLevel 3 .
+    skos:altLabel "다소높은위험(3등급)"@ko, "PD_RISK_GCD_13"@en, "3"@en ; fp:riskGradeLevel 3 .
 fp:RiskGrade_4 a fp:RiskGrade ; rdfs:label "보통 위험(4등급)"@ko, "Moderate Risk (Grade 4)"@en ;
-    skos:altLabel "보통위험(4등급)"@ko, "PD_RISK_GCD_14"@en ; fp:riskGradeLevel 4 .
+    skos:altLabel "보통위험(4등급)"@ko, "PD_RISK_GCD_14"@en, "4"@en ; fp:riskGradeLevel 4 .
 fp:RiskGrade_5 a fp:RiskGrade ; rdfs:label "낮은 위험(5등급)"@ko, "Low Risk (Grade 5)"@en ;
-    skos:altLabel "낮은위험(5등급)"@ko, "PD_RISK_GCD_15"@en ; fp:riskGradeLevel 5 .
+    skos:altLabel "낮은위험(5등급)"@ko, "PD_RISK_GCD_15"@en, "5"@en ; fp:riskGradeLevel 5 .
 fp:RiskGrade_6 a fp:RiskGrade ; rdfs:label "매우 낮은 위험(6등급)"@ko, "Very Low Risk (Grade 6)"@en ;
-    skos:altLabel "매우낮은위험(6등급)"@ko, "PD_RISK_GCD_16"@en ; fp:riskGradeLevel 6 .
+    skos:altLabel "매우낮은위험(6등급)"@ko, "PD_RISK_GCD_16"@en, "6"@en ; fp:riskGradeLevel 6 .
 
 ################################################################################
 # 4. 코드리스트 개체 — 자산군 / 투자지역 / 복제방식 / 통화
 ################################################################################
 
-fp:AssetType_Equity      a fp:AssetType ; rdfs:label "주식"@ko, "Equity"@en .
-fp:AssetType_Bond        a fp:AssetType ; rdfs:label "채권"@ko, "Bond"@en .
+fp:AssetType_Equity      a fp:AssetType ; rdfs:label "주식"@ko, "Equity"@en ; skos:altLabel "주식형"@ko .
+fp:AssetType_Bond        a fp:AssetType ; rdfs:label "채권"@ko, "Bond"@en ; skos:altLabel "채권형"@ko .
 fp:AssetType_Commodity   a fp:AssetType ; rdfs:label "원자재"@ko, "Commodity"@en .
 fp:AssetType_MixedAsset  a fp:AssetType ; rdfs:label "혼합자산"@ko, "Mixed Assets"@en ; skos:altLabel "주식혼합"@ko, "채권혼합"@ko .
 fp:AssetType_MoneyMarket a fp:AssetType ; rdfs:label "단기자금"@ko, "Money Market"@en ; skos:altLabel "MMF"@ko .
 fp:AssetType_Currency    a fp:AssetType ; rdfs:label "통화"@ko, "Currency"@en .
-fp:AssetType_RealEstate  a fp:AssetType ; rdfs:label "부동산"@ko, "Real Estate"@en .
+fp:AssetType_RealEstate  a fp:AssetType ; rdfs:label "부동산"@ko, "Real Estate"@en ; skos:altLabel "임대형"@ko, "대출형"@ko .
 fp:AssetType_Alternative a fp:AssetType ; rdfs:label "대체투자"@ko, "Alternatives"@en ; skos:altLabel "특별자산"@ko .
 fp:AssetType_Other       a fp:AssetType ; rdfs:label "기타"@ko, "Other"@en .
 
@@ -256,22 +256,22 @@ fp:Region_Overseas  a fp:InvestmentRegion ; rdfs:label "해외"@ko, "Overseas"@e
 fp:Region_Global    a fp:InvestmentRegion ; rdfs:label "글로벌"@ko, "Global"@en .
 fp:Region_GlobalExUS a fp:InvestmentRegion ; rdfs:label "글로벌(미국제외)"@ko, "Global Ex US"@en .
 fp:Region_US        a fp:InvestmentRegion ; rdfs:label "미국"@ko, "United States of America"@en .
-fp:Region_Americas  a fp:InvestmentRegion ; rdfs:label "남미·북미"@ko, "Americas"@en .
+fp:Region_Americas  a fp:InvestmentRegion ; rdfs:label "남미·북미"@ko, "Americas"@en ; skos:altLabel "남미/북미"@ko .
 fp:Region_Europe    a fp:InvestmentRegion ; rdfs:label "유럽"@ko, "Europe"@en .
 fp:Region_Asia      a fp:InvestmentRegion ; rdfs:label "아시아"@ko, "Asia"@en .
 fp:Region_China     a fp:InvestmentRegion ; rdfs:label "중국"@ko, "China"@en .
 fp:Region_Japan     a fp:InvestmentRegion ; rdfs:label "일본"@ko, "Japan"@en .
 fp:Region_India     a fp:InvestmentRegion ; rdfs:label "인도"@ko, "India"@en .
 fp:Region_Vietnam   a fp:InvestmentRegion ; rdfs:label "베트남"@ko, "Vietnam"@en .
-fp:Region_Emerging  a fp:InvestmentRegion ; rdfs:label "이머징·브릭스"@ko, "Global Emerging Markets"@en .
-fp:Region_MEA       a fp:InvestmentRegion ; rdfs:label "중동·아프리카"@ko, "Middle East and Africa"@en .
+fp:Region_Emerging  a fp:InvestmentRegion ; rdfs:label "이머징·브릭스"@ko, "Global Emerging Markets"@en ; skos:altLabel "이머징/브릭스"@ko .
+fp:Region_MEA       a fp:InvestmentRegion ; rdfs:label "중동·아프리카"@ko, "Middle East and Africa"@en ; skos:altLabel "중동/아프리카"@ko .
 
 fp:Replication_Physical  a fp:ReplicationMethod ; rdfs:label "실물복제"@ko, "Physical"@en ; skos:altLabel "Full"@en, "Optimized"@en .
 fp:Replication_Synthetic a fp:ReplicationMethod ; rdfs:label "합성복제"@ko, "Synthetic"@en ; skos:altLabel "Swap"@en .
 fp:Replication_Active    a fp:ReplicationMethod ; rdfs:label "액티브"@ko, "Active"@en .
 fp:Replication_Other     a fp:ReplicationMethod ; rdfs:label "기타"@ko, "Other"@en .
 
-fp:Currency_KRW a fp:Currency ; rdfs:label "한국 원"@ko, "KRW"@en .
+fp:Currency_KRW a fp:Currency ; rdfs:label "한국 원"@ko, "KRW"@en ; skos:altLabel "CURR_CD_KRW"@en .
 fp:Currency_USD a fp:Currency ; rdfs:label "미국 달러"@ko, "USD"@en .
 fp:Currency_EUR a fp:Currency ; rdfs:label "유로"@ko, "EUR"@en .
 fp:Currency_JPY a fp:Currency ; rdfs:label "일본 엔"@ko, "JPY"@en .
