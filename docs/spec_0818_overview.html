@@ -1,0 +1,920 @@
+<title>온톨로지 지식계층 설계도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
+
+<style>
+:root {
+  --paper:   #ECEEF1;
+  --surface: #FFFFFF;
+  --sunken:  #E2E6EA;
+  --ink:     #10151C;
+  --muted:   #5D6875;
+  --faint:   #8A94A1;
+  --line:    #D2D8DF;
+  --hair:    #E4E8ED;
+
+  --tbox:    #1B4DE4;
+  --graph:   #6D3BD1;
+  --rdb:     #0B7A6B;
+  --vector:  #B8621B;
+
+  --ok:      #1B7A3E;
+  --warn:    #A8321F;
+  --ok-bg:   #E4F1E8;
+  --warn-bg: #F7E7E3;
+
+  --sans: "IBM Plex Sans KR", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --shell: 1180px;
+  --col: 74ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:   #0C1016;
+    --surface: #141A22;
+    --sunken:  #191F28;
+    --ink:     #E4E9F0;
+    --muted:   #93A0AF;
+    --faint:   #6B7787;
+    --line:    #28313D;
+    --hair:    #1F262F;
+
+    --tbox:    #7BA0FF;
+    --graph:   #B196F7;
+    --rdb:     #3FC5AD;
+    --vector:  #E39A52;
+
+    --ok:      #4FC97B;
+    --warn:    #F08A72;
+    --ok-bg:   #14261B;
+    --warn-bg: #2A1815;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:   #0C1016;
+  --surface: #141A22;
+  --sunken:  #191F28;
+  --ink:     #E4E9F0;
+  --muted:   #93A0AF;
+  --faint:   #6B7787;
+  --line:    #28313D;
+  --hair:    #1F262F;
+
+  --tbox:    #7BA0FF;
+  --graph:   #B196F7;
+  --rdb:     #3FC5AD;
+  --vector:  #E39A52;
+
+  --ok:      #4FC97B;
+  --warn:    #F08A72;
+  --ok-bg:   #14261B;
+  --warn-bg: #2A1815;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 0 28px 96px;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 52px;
+  align-items: start;
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  grid-column: 1 / -1;
+  border-bottom: 2px solid var(--ink);
+  padding: 56px 0 26px;
+  margin-bottom: 44px;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+h1 {
+  font-size: clamp(30px, 4.4vw, 46px);
+  font-weight: 600;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px;
+  text-wrap: balance;
+}
+
+.standfirst {
+  font-size: 17px;
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0;
+  font-weight: 300;
+}
+
+.meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 28px;
+  margin-top: 24px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.meta-strip b { color: var(--ink); font-weight: 600; }
+
+/* ---------- nav rail ---------- */
+
+nav {
+  position: sticky;
+  top: 28px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+nav ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+nav a {
+  display: flex;
+  gap: 10px;
+  padding: 6px 8px 6px 0;
+  color: var(--muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  padding-left: 12px;
+  transition: color .12s, border-color .12s;
+}
+nav a:hover, nav a:focus-visible { color: var(--ink); border-left-color: var(--tbox); }
+nav a span { font-family: var(--mono); font-size: 11px; color: var(--faint); padding-top: 1px; }
+
+/* ---------- sections ---------- */
+
+main { min-width: 0; }
+
+section { margin-bottom: 68px; scroll-margin-top: 24px; }
+
+h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  text-wrap: balance;
+}
+h2 .n {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tbox);
+  margin-right: 12px;
+  letter-spacing: 0.06em;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 34px 0 8px;
+  letter-spacing: -0.005em;
+}
+
+p { max-width: var(--col); margin: 0 0 14px; }
+p.lede { color: var(--muted); margin-bottom: 22px; }
+
+strong { font-weight: 600; }
+code, .m { font-family: var(--mono); font-size: 0.88em; }
+code {
+  background: var(--sunken);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+
+ul.plain { max-width: var(--col); padding-left: 18px; margin: 0 0 16px; }
+ul.plain li { margin-bottom: 7px; }
+
+/* ---------- tables ---------- */
+
+.tw { overflow-x: auto; margin: 18px 0 22px; border: 1px solid var(--line); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.55; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+thead th {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--sunken);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: none; }
+td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.was { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--warn); }
+td.id { font-family: var(--mono); font-size: 11.5px; color: var(--tbox); font-weight: 600; white-space: nowrap; }
+
+/* ---------- figures ---------- */
+
+figure {
+  margin: 26px 0 30px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.fig-body { overflow-x: auto; padding: 22px 20px 8px; }
+figure svg { display: block; max-width: 100%; height: auto; min-width: 620px; margin: 0 auto; color: var(--ink); }
+figcaption {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--hair);
+  background: var(--sunken);
+  line-height: 1.6;
+}
+figcaption b { color: var(--ink); font-weight: 600; }
+
+.svg-label { font-family: "IBM Plex Sans KR", sans-serif; font-size: 13px; font-weight: 500; }
+.svg-sub   { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; }
+.svg-tag   { font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: 0.08em; }
+.svg-head  { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; font-weight: 600; letter-spacing: 0.1em; }
+
+/* ---------- callouts ---------- */
+
+.note {
+  border-left: 3px solid var(--tbox);
+  background: var(--surface);
+  padding: 14px 18px;
+  margin: 20px 0;
+  font-size: 14.5px;
+  max-width: var(--col);
+}
+.note.warn { border-left-color: var(--warn); }
+.note p:last-child { margin-bottom: 0; }
+.note .h {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tbox);
+  display: block;
+  margin-bottom: 5px;
+}
+.note.warn .h { color: var(--warn); }
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.62;
+  margin: 16px 0 20px;
+}
+pre .c { color: var(--muted); }
+pre .k { color: var(--tbox); font-weight: 500; }
+
+/* ---------- scorecard ---------- */
+
+.score {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+  margin: 22px 0 26px;
+}
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.score-cell { padding: 18px 20px; border-right: 1px solid var(--hair); }
+.score-cell:last-child { border-right: none; }
+.score-cell .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+}
+.score-cell .v {
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.score-cell .u { font-size: 12px; color: var(--muted); font-family: var(--mono); display: block; margin-top: 4px; }
+.verdict {
+  border-top: 1px solid var(--line);
+  padding: 14px 20px;
+  background: var(--warn-bg);
+  font-size: 14px;
+}
+.verdict.ok {
+  background: var(--ok-bg);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pill {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+  color: var(--warn);
+  white-space: nowrap;
+}
+.pill.ok { color: var(--ok); }
+
+.bars { display: flex; flex-direction: column; gap: 3px; margin: 18px 0 22px; max-width: var(--col); }
+.bar-row { display: grid; grid-template-columns: 88px 1fr 58px; align-items: center; gap: 12px; font-size: 12.5px; }
+.bar-row .lbl { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; }
+.bar-track { background: var(--sunken); height: 16px; position: relative; }
+.bar-fill { height: 100%; background: var(--tbox); }
+.bar-fill.u { background: var(--warn); }
+.bar-row .cnt { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+footer {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.8;
+}
+
+a { color: var(--tbox); }
+:focus-visible { outline: 2px solid var(--tbox); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 20px 72px; }
+  nav { display: none; }
+  .masthead { padding-top: 36px; }
+}
+</style>
+
+<div class="shell">
+
+<header class="masthead">
+  <p class="eyebrow">제10회 미래에셋증권 AI Festival · 금융상품 Agent</p>
+  <h1>온톨로지 지식계층 설계도</h1>
+  <p class="standfirst">
+    자연어 질의를 TBox 주석으로 번역해 RDB·Graph·Vector 세 엔진에 나눠 보내는 구조.
+    1단계(온톨로지)와 2단계(KnowledgeBase)의 기술스택 확정본과, 모호성 3% 게이트 재계측 결과.
+  </p>
+  <div class="meta-strip">
+    <span>기준일 <b>2026-07-11</b></span>
+    <span>제출 마감 <b>2026-09-06 23:59</b></span>
+    <span>잔여 <b>16일</b></span>
+    <span>응답 예산 <b>60초</b></span>
+    <span>원본 <b>docs/spec_0818.md</b></span>
+  </div>
+</header>
+
+<nav aria-label="목차">
+  <ol>
+    <li><a href="#pipeline"><span>01</span>질의 처리 파이프라인</a></li>
+    <li><a href="#stack"><span>02</span>3계층 스택과 경계</a></li>
+    <li><a href="#tbox"><span>03</span>TBox가 엔진이다</a></li>
+    <li><a href="#vector"><span>04</span>Vector 인덱스 분리</a></li>
+    <li><a href="#types"><span>05</span>질의 유형과 우선순위</a></li>
+    <li><a href="#fixes"><span>06</span>1차 기획 정정 9건</a></li>
+    <li><a href="#gate"><span>07</span>모호성 3% 검증</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ============ 01 ============ -->
+<section id="pipeline">
+  <h2><span class="n">01</span>질의 처리 파이프라인</h2>
+  <p class="lede">
+    핵심은 <strong>LLM이 연산하지 않는다</strong>는 것이다. LLM은 질의를 분류하고(①), 실행 계획을 쓰고(③), 결과를 문장으로 포장한다(⑤).
+    실제 필터·조인·정렬은 전부 파이썬 코드와 세 엔진이 한다.
+  </p>
+
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 760 610" role="img" aria-label="질의가 6단계를 거치는 파이프라인. LLM은 1·3·5단계에서 각 1회씩 총 3회 호출되고, 2단계 스키마 검색과 4단계 계획 실행에서는 호출되지 않는다.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- stage 0 -->
+        <rect x="196" y="8" width="330" height="50" fill="none" stroke="currentColor" stroke-width="1" opacity="0.45"/>
+        <text class="svg-label" x="216" y="38" fill="currentColor">사용자 질의 “안전한 ETF 추천해줘”</text>
+
+        <line x1="361" y1="58" x2="361" y2="90" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text class="svg-sub" x="374" y="79" fill="currentColor" opacity="0.65">원문</text>
+
+        <!-- stage 1 -->
+        <rect x="196" y="90" width="330" height="66" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text class="svg-tag" x="176" y="118" text-anchor="end" fill="currentColor" opacity="0.55">① 단계</text>
+        <text class="svg-label" x="216" y="118" fill="currentColor">Intent Classification</text>
+        <text class="svg-sub" x="216" y="138" fill="currentColor" opacity="0.7">도메인 · 질의유형 · 키워드 추출 (TBox 미참조)</text>
+        <rect x="540" y="106" width="96" height="22" fill="none" stroke="currentColor" stroke-width="1"/>
+        <text class="svg-tag" x="588" y="121" text-anchor="middle" fill="currentColor">LLM ×1</text>
+        <text class="svg-sub" x="644" y="121" fill="currentColor" opacity="0.6">DASH-002</text>
+
+        <line x1="361" y1="156" x2="361" y2="188" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text class="svg-sub" x="374" y="177" fill="currentColor" opacity="0.65">{도메인, 키워드}</text>
+
+        <!-- stage 2 -->
+        <rect x="196" y="188" width="330" height="66" fill="none" stroke="var(--vector)" stroke-width="2"/>
+        <text class="svg-tag" x="176" y="216" text-anchor="end" fill="currentColor" opacity="0.55">② 단계</text>
+        <text class="svg-label" x="216" y="216" fill="var(--vector)">Ontology Grounding</text>
+        <text class="svg-sub" x="216" y="236" fill="currentColor" opacity="0.7">스키마 인덱스 유사도 검색 → 속성 3~5개</text>
+        <rect x="540" y="204" width="96" height="22" fill="none" stroke="var(--vector)" stroke-width="1"/>
+        <text class="svg-tag" x="588" y="219" text-anchor="middle" fill="var(--vector)">LLM ×0</text>
+        <text class="svg-sub" x="644" y="219" fill="currentColor" opacity="0.6">벡터만</text>
+
+        <line x1="361" y1="254" x2="361" y2="286" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text class="svg-sub" x="374" y="275" fill="currentColor" opacity="0.65">rdfs:comment 원문</text>
+
+        <!-- stage 3 -->
+        <rect x="196" y="286" width="330" height="66" fill="none" stroke="var(--tbox)" stroke-width="2"/>
+        <text class="svg-tag" x="176" y="314" text-anchor="end" fill="currentColor" opacity="0.55">③ 단계</text>
+        <text class="svg-label" x="216" y="314" fill="var(--tbox)">Plan &amp; Routing</text>
+        <text class="svg-sub" x="216" y="334" fill="currentColor" opacity="0.7">실행 계획 JSON 생성 (structured outputs)</text>
+        <rect x="540" y="302" width="96" height="22" fill="none" stroke="var(--tbox)" stroke-width="1"/>
+        <text class="svg-tag" x="588" y="317" text-anchor="middle" fill="var(--tbox)">LLM ×1</text>
+        <text class="svg-sub" x="644" y="317" fill="currentColor" opacity="0.6">HCX-007</text>
+
+        <line x1="361" y1="352" x2="361" y2="384" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text class="svg-sub" x="374" y="373" fill="currentColor" opacity="0.65">실행 계획 JSON</text>
+
+        <!-- stage 4 -->
+        <rect x="196" y="384" width="330" height="86" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text class="svg-tag" x="176" y="412" text-anchor="end" fill="currentColor" opacity="0.55">④ 실행</text>
+        <text class="svg-label" x="216" y="412" fill="currentColor">계획 실행 — 파이썬 코드</text>
+        <rect x="216" y="428" width="86" height="26" fill="none" stroke="var(--graph)" stroke-width="1.4"/>
+        <text class="svg-sub" x="259" y="445" text-anchor="middle" fill="var(--graph)">Graph</text>
+        <rect x="310" y="428" width="86" height="26" fill="none" stroke="var(--rdb)" stroke-width="1.4"/>
+        <text class="svg-sub" x="353" y="445" text-anchor="middle" fill="var(--rdb)">RDB</text>
+        <rect x="404" y="428" width="86" height="26" fill="none" stroke="var(--vector)" stroke-width="1.4"/>
+        <text class="svg-sub" x="447" y="445" text-anchor="middle" fill="var(--vector)">Vector</text>
+        <rect x="540" y="414" width="96" height="22" fill="none" stroke="currentColor" stroke-width="1"/>
+        <text class="svg-tag" x="588" y="429" text-anchor="middle" fill="currentColor">LLM ×0</text>
+
+        <line x1="361" y1="470" x2="361" y2="502" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+        <text class="svg-sub" x="374" y="491" fill="currentColor" opacity="0.65">evidence (내부 표현)</text>
+
+        <!-- stage 5 -->
+        <rect x="196" y="502" width="330" height="66" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <text class="svg-tag" x="176" y="530" text-anchor="end" fill="currentColor" opacity="0.55">⑤ 생성</text>
+        <text class="svg-label" x="216" y="530" fill="currentColor">Answer Generator</text>
+        <text class="svg-sub" x="216" y="550" fill="currentColor" opacity="0.7">retrieved_context · think_trace · answer 직렬화</text>
+        <rect x="540" y="518" width="96" height="22" fill="none" stroke="currentColor" stroke-width="1"/>
+        <text class="svg-tag" x="588" y="533" text-anchor="middle" fill="currentColor">LLM ×1</text>
+        <text class="svg-sub" x="644" y="533" fill="currentColor" opacity="0.6">HCX-007</text>
+
+        <!-- totals rail -->
+        <line x1="120" y1="90" x2="120" y2="568" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+        <text class="svg-head" x="104" y="300" text-anchor="end" fill="currentColor" opacity="0.55">LLM 총 3회</text>
+      </svg>
+    </div>
+    <figcaption>
+      <b>LLM 호출은 3회다.</b> 1차 기획 요약은 “LLM 2회”라고 적었으나 답변 생성(⑤)이 빠져 있었다.
+      ②는 벡터 검색만 하므로 호출이 없고, ④는 전부 코드다 — 60초 예산에서 LLM은 3회분만 쓴다.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="stack">
+  <h2><span class="n">02</span>3계층 스택과 경계</h2>
+  <p class="lede">
+    2단계가 만드는 것은 엔진 3개와, 3·4단계가 호출할 <strong>함수 4개</strong>다. 라우팅·분해·통합은 넘기지 않는다 — 그건 3단계 소관이다.
+  </p>
+
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 900 356" role="img" aria-label="2단계는 sql, sparql, schema_search, content_search 네 함수만 노출하고 그 아래에 DuckDB, pyoxigraph, FAISS 스키마 인덱스, FAISS 콘텐츠 인덱스가 각각 대응한다.">
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- consumer -->
+        <rect x="60" y="10" width="800" height="52" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <text class="svg-label" x="80" y="34" fill="currentColor">3단계 Intent &amp; Retrieval · 4단계 Answer Generator</text>
+        <text class="svg-sub" x="80" y="51" fill="currentColor" opacity="0.6">질의 분해 · 라우팅 · 결과 통합 — 2단계 범위 밖</text>
+
+        <line x1="145" y1="62" x2="145" y2="112" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="355" y1="62" x2="355" y2="112" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="565" y1="62" x2="565" y2="112" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="775" y1="62" x2="775" y2="112" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+
+        <!-- boundary -->
+        <line x1="40" y1="88" x2="880" y2="88" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 5" opacity="0.55"/>
+        <text class="svg-head" x="40" y="80" fill="currentColor" opacity="0.6">2단계가 노출하는 인터페이스</text>
+
+        <!-- function chips -->
+        <rect x="60" y="112" width="170" height="46" fill="none" stroke="var(--rdb)" stroke-width="1.6"/>
+        <text class="svg-sub" x="145" y="132" text-anchor="middle" fill="var(--rdb)">sql(query)</text>
+        <text class="svg-sub" x="145" y="148" text-anchor="middle" fill="currentColor" opacity="0.6">출처 컬럼 포함 반환</text>
+
+        <rect x="270" y="112" width="170" height="46" fill="none" stroke="var(--graph)" stroke-width="1.6"/>
+        <text class="svg-sub" x="355" y="132" text-anchor="middle" fill="var(--graph)">sparql(query)</text>
+        <text class="svg-sub" x="355" y="148" text-anchor="middle" fill="currentColor" opacity="0.6">TBox · ABox 분리</text>
+
+        <rect x="480" y="112" width="170" height="46" fill="none" stroke="var(--vector)" stroke-width="1.6"/>
+        <text class="svg-sub" x="565" y="132" text-anchor="middle" fill="var(--vector)">schema_search()</text>
+        <text class="svg-sub" x="565" y="148" text-anchor="middle" fill="currentColor" opacity="0.6">term_uri + comment</text>
+
+        <rect x="690" y="112" width="170" height="46" fill="none" stroke="var(--vector)" stroke-width="1.6"/>
+        <text class="svg-sub" x="775" y="132" text-anchor="middle" fill="var(--vector)">content_search()</text>
+        <text class="svg-sub" x="775" y="148" text-anchor="middle" fill="currentColor" opacity="0.6">pd_itm_no + source</text>
+
+        <line x1="145" y1="158" x2="145" y2="212" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="355" y1="158" x2="355" y2="212" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="565" y1="158" x2="565" y2="212" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+        <line x1="775" y1="158" x2="775" y2="212" stroke="currentColor" stroke-width="1" marker-end="url(#ar2)"/>
+
+        <!-- engines -->
+        <rect x="60" y="212" width="170" height="88" fill="none" stroke="var(--rdb)" stroke-width="2"/>
+        <text class="svg-label" x="145" y="240" text-anchor="middle" fill="var(--rdb)">DuckDB</text>
+        <text class="svg-sub" x="145" y="260" text-anchor="middle" fill="currentColor" opacity="0.7">12테이블 1:1</text>
+        <text class="svg-sub" x="145" y="277" text-anchor="middle" fill="currentColor" opacity="0.7">숫자 · 정렬 · 집계</text>
+
+        <rect x="270" y="212" width="170" height="88" fill="none" stroke="var(--graph)" stroke-width="2"/>
+        <text class="svg-label" x="355" y="240" text-anchor="middle" fill="var(--graph)">pyoxigraph</text>
+        <text class="svg-sub" x="355" y="260" text-anchor="middle" fill="currentColor" opacity="0.7">1,014,201 트리플</text>
+        <text class="svg-sub" x="355" y="277" text-anchor="middle" fill="currentColor" opacity="0.7">관계 순회 · 도메인 검증</text>
+
+        <rect x="480" y="212" width="170" height="88" fill="none" stroke="var(--vector)" stroke-width="2"/>
+        <text class="svg-label" x="565" y="240" text-anchor="middle" fill="var(--vector)">FAISS · 스키마</text>
+        <text class="svg-sub" x="565" y="260" text-anchor="middle" fill="currentColor" opacity="0.7">193 청크</text>
+        <text class="svg-sub" x="565" y="277" text-anchor="middle" fill="currentColor" opacity="0.7">TBox rdfs:comment</text>
+
+        <rect x="690" y="212" width="170" height="88" fill="none" stroke="var(--vector)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text class="svg-label" x="775" y="240" text-anchor="middle" fill="var(--vector)">FAISS · 콘텐츠</text>
+        <text class="svg-sub" x="775" y="260" text-anchor="middle" fill="currentColor" opacity="0.7">약 6천 청크</text>
+        <text class="svg-sub" x="775" y="277" text-anchor="middle" fill="currentColor" opacity="0.7">해외ETF 서술 위주</text>
+
+        <text class="svg-sub" x="450" y="330" text-anchor="middle" fill="currentColor" opacity="0.6">서버 프로세스 0개 — 전부 파일 기반. 빌드 산출물은 gitignore, 스크립트만 커밋</text>
+        <text class="svg-sub" x="775" y="348" text-anchor="middle" fill="var(--vector)" opacity="0.85">파선 = 코퍼스 미완</text>
+      </svg>
+    </div>
+    <figcaption>
+      네 함수가 각각 하나의 저장소에 1:1로 대응한다. <b>스키마 인덱스만 지금 완성 가능</b>하고, 콘텐츠 인덱스는 근거 문서 확보 전까지 해외ETF 서술 위주로만 채워진다.
+    </figcaption>
+  </figure>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>계층</th><th>엔진</th><th>선정 근거</th></tr></thead>
+      <tbody>
+        <tr><td><strong>RDB</strong></td><td class="m">DuckDB</td><td>집계·조인에서 SQLite 대비 10~100배. CSV 직접 질의로 적재가 짧다</td></tr>
+        <tr><td><strong>Graph</strong></td><td class="m">pyoxigraph</td><td>기존 <code>.ttl</code>을 변환 없이 벌크 로드. rdflib은 100만 트리플에서 수십 초 — 예산을 소진한다</td></tr>
+        <tr><td><strong>Vector</strong></td><td class="m">FAISS</td><td>CLOVA <code>bge-m3</code> 1024차원 cosine. 1만 청크 미만이라 인덱스 구조가 자유롭다</td></tr>
+        <tr><td><strong>LLM</strong></td><td class="m">ChatClovaX</td><td>HyperCLOVA X 전용 제약. 분류는 <code>HCX-DASH-002</code>, 계획·생성은 <code>HCX-007</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note warn">
+    <span class="h">동시 사용 불가</span>
+    <p>CLOVA Studio는 function calling · structured outputs · thinking을 <strong>동시에 못 쓴다.</strong> 3단계는 structured outputs를 쓰므로 라우팅을 LLM tool call로 하지 않는다 — 반환된 JSON 계획을 파이썬 코드가 해석·실행한다.</p>
+  </div>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="tbox">
+  <h2><span class="n">03</span>TBox가 엔진이다</h2>
+  <p class="lede">
+    “안전한”은 어떤 컬럼에도 없다. 이 말을 데이터가 아는 조건으로 번역하는 것이 <code>rdfs:comment</code>다.
+    기술세션 벤치마크가 <strong>프롬프트 주입 +2.4pp / 런타임 식별 +20pp</strong>로 갈린 이유가 여기 있다.
+  </p>
+
+  <p>이 저장소의 TTL은 이미 그렇게 쓰여 있다. 주석이 사람용 설명이 아니라 <strong>실행 지시서</strong>다.</p>
+
+<pre><span class="k">fp:ratingRank</span>  rdfs:comment
+  <span class="c">"1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank &lt;= 4로 판정한다.
+   data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로
+   RDB 선필터와 온톨로지 판정 결과가 일치한다."@ko</span>
+
+<span class="k">fp:riskGradeLevel</span>  rdfs:comment
+  <span class="c">"1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다."@ko</span></pre>
+
+  <p>실측한 주석 보유 현황이다. 이 <strong>193개가 그대로 스키마 인덱스의 청크</strong>가 된다.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>파일</th><th class="num">rdfs:comment</th><th class="num">DatatypeProperty</th><th class="num">ObjectProperty</th></tr></thead>
+      <tbody>
+        <tr><td class="m">common.ttl</td><td class="num">92</td><td class="num">38</td><td class="num">24</td></tr>
+        <tr><td class="m">bond_kr.ttl</td><td class="num">40</td><td class="num">19</td><td class="num">8</td></tr>
+        <tr><td class="m">fund_pub.ttl</td><td class="num">27</td><td class="num">14</td><td class="num">6</td></tr>
+        <tr><td class="m">etf_kr.ttl</td><td class="num">23</td><td class="num">12</td><td class="num">5</td></tr>
+        <tr><td class="m">etf_gl.ttl</td><td class="num">11</td><td class="num">10</td><td class="num">0</td></tr>
+        <tr><td><strong>합계</strong></td><td class="num"><strong>193</strong></td><td class="num">93</td><td class="num">43</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="h">전제 검증 결과</span>
+    <p>1차 기획의 2단계는 “모든 속성의 <code>rdfs:comment</code>를 임베딩해 둔다”를 전제한다. <strong>성립한다.</strong> 남은 일은 클래스·속성 총계 약 240개 대비 부족한 <strong>약 47개를 채우는 것</strong>뿐이고, 이건 2단계 인덱스 구축 전에 선행한다.</p>
+  </div>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="vector">
+  <h2><span class="n">04</span>Vector 인덱스 분리</h2>
+  <p class="lede">
+    1차 기획을 반영하며 바꾼 유일한 구조다. 스키마 검색과 근거 검색은 규모도, 갱신 주기도, 메타데이터도 다르다 — 한 인덱스에 두면 서로를 오염시킨다.
+  </p>
+
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 880 300" role="img" aria-label="왼쪽은 단일 인덱스에 스키마 검색과 근거 검색이 함께 들어가는 구조, 오른쪽은 스키마 인덱스와 콘텐츠 인덱스로 분리한 구조.">
+        <defs>
+          <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <line x1="440" y1="16" x2="440" y2="284" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+
+        <!-- LEFT -->
+        <text class="svg-head" x="24" y="26" fill="currentColor" opacity="0.6">1차 기획 — 단일 인덱스</text>
+
+        <rect x="24" y="46" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text class="svg-sub" x="109" y="66" text-anchor="middle" fill="currentColor">② Schema Retrieval</text>
+        <text class="svg-sub" x="109" y="82" text-anchor="middle" fill="currentColor" opacity="0.6">193 · TTL 수정 시 갱신</text>
+
+        <rect x="220" y="46" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text class="svg-sub" x="305" y="66" text-anchor="middle" fill="currentColor">④ 근거 보강</text>
+        <text class="svg-sub" x="305" y="82" text-anchor="middle" fill="currentColor" opacity="0.6">6천 · 수집 시 갱신</text>
+
+        <path d="M 109 90 L 109 130 L 190 130 L 190 168" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+        <path d="M 305 90 L 305 130 L 224 130 L 224 168" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+
+        <rect x="122" y="168" width="170" height="60" fill="none" stroke="var(--warn)" stroke-width="2"/>
+        <text class="svg-label" x="207" y="194" text-anchor="middle" fill="var(--warn)">FAISS · 단일</text>
+        <text class="svg-sub" x="207" y="214" text-anchor="middle" fill="currentColor" opacity="0.7">메타 스키마가 충돌</text>
+
+        <text class="svg-sub" x="207" y="256" text-anchor="middle" fill="var(--warn)">한쪽 재빌드가 다른 쪽을 끌고 간다</text>
+        <text class="svg-sub" x="207" y="273" text-anchor="middle" fill="currentColor" opacity="0.6">문서 0건이면 스키마 검색까지 무력</text>
+
+        <!-- RIGHT -->
+        <text class="svg-head" x="480" y="26" fill="currentColor" opacity="0.6">2차 확정 — 용도별 분리</text>
+
+        <rect x="480" y="46" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text class="svg-sub" x="565" y="66" text-anchor="middle" fill="currentColor">② Schema Retrieval</text>
+        <text class="svg-sub" x="565" y="82" text-anchor="middle" fill="currentColor" opacity="0.6">193 · TTL 수정 시 갱신</text>
+
+        <rect x="676" y="46" width="170" height="44" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        <text class="svg-sub" x="761" y="66" text-anchor="middle" fill="currentColor">④ 근거 보강</text>
+        <text class="svg-sub" x="761" y="82" text-anchor="middle" fill="currentColor" opacity="0.6">6천 · 수집 시 갱신</text>
+
+        <line x1="565" y1="90" x2="565" y2="168" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+        <line x1="761" y1="90" x2="761" y2="168" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar3)"/>
+
+        <rect x="480" y="168" width="170" height="60" fill="none" stroke="var(--vector)" stroke-width="2"/>
+        <text class="svg-label" x="565" y="194" text-anchor="middle" fill="var(--vector)">스키마 인덱스</text>
+        <text class="svg-sub" x="565" y="214" text-anchor="middle" fill="currentColor" opacity="0.7">term_uri · property_type</text>
+
+        <rect x="676" y="168" width="170" height="60" fill="none" stroke="var(--vector)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text class="svg-label" x="761" y="194" text-anchor="middle" fill="var(--vector)">콘텐츠 인덱스</text>
+        <text class="svg-sub" x="761" y="214" text-anchor="middle" fill="currentColor" opacity="0.7">pd_itm_no · as_of</text>
+
+        <text class="svg-sub" x="663" y="256" text-anchor="middle" fill="var(--ok)">문서 0건이어도 스키마 검색은 오늘 동작한다</text>
+        <text class="svg-sub" x="663" y="273" text-anchor="middle" fill="currentColor" opacity="0.6">유형1·2·5·6 = 25문항(71.4%) 즉시 커버</text>
+      </svg>
+    </div>
+    <figcaption>
+      분리의 실익은 성능이 아니라 <b>착수 시점</b>이다. 근거 문서가 한 건도 없는 현재 상태에서도 스키마 인덱스 193청크만으로 25문항이 커버된다.
+    </figcaption>
+  </figure>
+
+  <div class="note warn">
+    <span class="h">실행 불가 구간</span>
+    <p><code>cu_strtegy</code>는 <strong>해외ETF에만</strong> 있다. 1차 기획의 예시(“안전한 ETF”)는 국내ETF 질의이므로 근거 텍스트가 현재 존재하지 않는다. 투자설명서 확보 전까지 국내ETF 답변의 “왜 안전한가”는 <strong>위험등급·레버리지 분류 근거로 한정</strong>하고, 없는 근거를 지어내지 않는다.</p>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="types">
+  <h2><span class="n">05</span>질의 유형과 우선순위</h2>
+  <p class="lede">
+    예상 35문항을 실행 형태로 나누면 6유형이 나온다. 커버리지 판정과 교차하면 착수 순서가 정해진다.
+  </p>
+
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 880 172" role="img" aria-label="35문항의 유형별 분포. 유형1 RDB 단독 14건, 유형2 4건, 유형3 2건, 유형4 8건, 유형5 2건, 유형6 5건.">
+        <text class="svg-head" x="20" y="20" fill="currentColor" opacity="0.6">35문항 실행 형태 분포</text>
+
+        <rect x="20"  y="36" width="336" height="46" fill="var(--rdb)"    opacity="0.85"/>
+        <rect x="356" y="36" width="96"  height="46" fill="var(--graph)"  opacity="0.85"/>
+        <rect x="452" y="36" width="48"  height="46" fill="var(--vector)" opacity="0.85"/>
+        <rect x="500" y="36" width="192" height="46" fill="var(--graph)"  opacity="0.5"/>
+        <rect x="692" y="36" width="48"  height="46" fill="var(--graph)"  opacity="0.3"/>
+        <rect x="740" y="36" width="120" height="46" fill="var(--tbox)"   opacity="0.85"/>
+
+        <text class="svg-sub" x="188" y="64" text-anchor="middle" fill="var(--paper)">유형1 · 14</text>
+        <text class="svg-sub" x="404" y="64" text-anchor="middle" fill="var(--paper)">유형2 · 4</text>
+        <text class="svg-sub" x="596" y="64" text-anchor="middle" fill="currentColor">유형4 · 8</text>
+        <text class="svg-sub" x="800" y="64" text-anchor="middle" fill="var(--paper)">유형6 · 5</text>
+
+        <line x1="476" y1="82" x2="476" y2="104" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <text class="svg-sub" x="476" y="118" text-anchor="middle" fill="currentColor" opacity="0.7">유형3 · 2</text>
+        <line x1="716" y1="82" x2="716" y2="128" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        <text class="svg-sub" x="716" y="142" text-anchor="middle" fill="currentColor" opacity="0.7">유형5 · 2</text>
+
+        <text class="svg-sub" x="20" y="164" fill="currentColor" opacity="0.6">병렬이 실효인 구간은 유형3의 2건(5.7%)뿐 — asyncio 도입은 유형3 착수까지 미룬다</text>
+      </svg>
+    </div>
+    <figcaption>
+      막대 폭이 문항 수에 비례한다. <b>유형1(RDB 단독)이 40%</b>를 차지하고, 가장 어려운 유형4는 8건이지만 그중 3건은 데이터 부재로 현재 불가다.
+    </figcaption>
+  </figure>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="num">순위</th><th>유형</th><th class="num">문항</th><th>필요한 것</th><th>착수 이유</th></tr></thead>
+      <tbody>
+        <tr><td class="id">1</td><td><strong>유형6</strong> TBox 검증</td><td class="num">5</td><td>Graph(TBox) + 규칙</td><td>감점 방지 구간. 데이터 의존 없음, 4/5가 이미 ‘가능’</td></tr>
+        <tr><td class="id">2</td><td><strong>유형1</strong> RDB 단독</td><td class="num">14</td><td>DuckDB + 스키마 인덱스</td><td>전체의 40%. 9/14가 이미 ‘가능’</td></tr>
+        <tr><td class="id">3</td><td><strong>유형5</strong> Graph 단독</td><td class="num">2</td><td>Graph(ABox)</td><td>관계 존재 확인만</td></tr>
+        <tr><td class="id">4</td><td><strong>유형2</strong> Graph→RDB</td><td class="num">4</td><td>두 계층 연결</td><td><code>WHERE IN</code> 주입 패턴 확립</td></tr>
+        <tr><td class="id">5</td><td><strong>유형3</strong> Graph→RDB+Vector</td><td class="num">2</td><td>콘텐츠 인덱스</td><td>병렬 실행의 유일한 실효 구간</td></tr>
+        <tr><td class="id">6</td><td><strong>유형4</strong> 다단계 순차</td><td class="num">8</td><td>경로 물질화 + 문서</td><td>3건(23·25·30)은 데이터 부재로 현재 불가</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="fixes">
+  <h2><span class="n">06</span>1차 기획 정정 9건</h2>
+  <p class="lede">
+    주최측 원문·실제 TTL과 대조해 확인한 오류다. 그대로 두면 구현이 어긋난다.
+  </p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="num">#</th><th>1차 기획 표기</th><th>실제</th><th>근거</th></tr></thead>
+      <tbody>
+        <tr><td class="id">C1</td><td class="was">응답 15초 제한</td><td><strong>60초 이내 권장</strong></td><td>과제설명 PDF p11. 15초는 OT 구두</td></tr>
+        <tr><td class="id">C2</td><td class="was">fp:riskGrade</td><td class="m">fp:hasRiskGrade + fp:RiskGrade_1~6 + fp:riskGradeLevel</td><td class="m">common.ttl:227-238,384,552</td></tr>
+        <tr><td class="id">C3</td><td class="was">fp:totalExpenseRatio</td><td class="m">fp:expenseRatio</td><td class="m">common.ttl:466</td></tr>
+        <tr><td class="id">C4</td><td class="was">fp:DomesticETF 클래스</td><td><strong>없음.</strong> 국내/해외는 인스턴스 URI 접두(<code>fpi:etfkr-</code>)로 갈린다</td><td class="m">common.ttl:67</td></tr>
+        <tr><td class="id">C5</td><td class="was">국내ETF에 fp:isInverse</td><td><strong>해외ETF에만</strong> 선언. 국내는 <code>fp:leverageFactor</code>뿐</td><td class="m">etf_gl.ttl:96</td></tr>
+        <tr><td class="id">C6</td><td class="was">유형4 8건 전부 불가</td><td><strong>불가는 3건</strong>(23·25·30). 나머지 5건은 부분</td><td class="m">QUERY_COVERAGE_35.md:188-190</td></tr>
+        <tr><td class="id">C7</td><td class="was">유형 A/C/D/F 라벨 혼용</td><td>번호(유형1~6)로 통일</td><td>—</td></tr>
+        <tr><td class="id">C8</td><td class="was">as_of "2026-06-15"</td><td>데이터 기준일은 <strong>2026-07-11</strong></td><td>과제설명 PDF p5</td></tr>
+        <tr><td class="id">C9</td><td class="was">evidence 필드</td><td><strong>5필드 고정</strong> — question_id · question · retrieved_context · think_trace · answer</td><td>과제설명 PDF p11</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="h">C9 보충</span>
+    <p>1차 기획의 구조는 유지된다. <code>evidence</code> dict는 내부 표현으로 두고, 응답 직전에 <code>retrieved_context</code>(참조 테이블·문서)와 <code>think_trace</code>(조건 파싱 → 필터 → 정렬 경로)로 직렬화한다. <strong>3단계 파이프라인이 그대로 <code>think_trace</code>가 된다.</strong></p>
+  </div>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="gate">
+  <h2><span class="n">07</span>모호성 3% 검증</h2>
+  <p class="lede">
+    스칼라 자기채점이 아니라 <strong>이산 체크리스트의 미해결 비율</strong>이다. 항목을 세고, 각 항목은 해결/미해결 둘 중 하나이며, 비율은 계산된다.
+  </p>
+
+  <div class="score">
+    <div class="score-grid">
+      <div class="score-cell"><span class="k">전체 항목</span><span class="v">52</span><span class="u">추가 12 · 삭제 0</span></div>
+      <div class="score-cell"><span class="k">미해결</span><span class="v">1</span><span class="u">허용 1개</span></div>
+      <div class="score-cell"><span class="k">모호도</span><span class="v">1.92<span style="font-size:16px">%</span></span><span class="u">1/52</span></div>
+      <div class="score-cell"><span class="k">임계값</span><span class="v">3.0<span style="font-size:16px">%</span></span><span class="u">floor(52×0.03)=1</span></div>
+    </div>
+    <div class="verdict ok">
+      <span class="pill ok">판정 · 통과</span>
+      <span>08-21에 <strong>#20·#52 해소</strong>. 남은 <strong>#51 배포 환경 1건</strong>은 허용치 이내이며, 사용자가 이후 확정해 전달하기로 했다.</span>
+    </div>
+  </div>
+
+  <h3>항목 3건의 처리 결과</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th class="num">항목</th><th>내용</th><th>상태</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="id">#20</td>
+          <td><code>ontology.zip</code> 처리 방침</td>
+          <td><span class="pill ok">해소</span></td>
+          <td><code>.gitignore</code>에 등록. <code>instances_*.ttl</code>과 같은 근거 — <code>build_ontology_instances.py</code>로 재생성 가능한 파생물이라 커밋하지 않는다</td>
+        </tr>
+        <tr>
+          <td class="id">#52</td>
+          <td>자회사 <code>child_corp_code</code> 매칭률</td>
+          <td><span class="pill ok">해소</span></td>
+          <td>재측정 결과 <strong>행 기준 30.33%</strong>(8,955/29,524)가 정본. 26.4%는 <code>clean_*</code> 룰 900건 추가 이전의 옛 수치였다 — 아래 표 참조</td>
+        </tr>
+        <tr>
+          <td class="id">#51</td>
+          <td>평가용 API 배포 환경</td>
+          <td><span class="pill">미해결</span></td>
+          <td>이후 확정해 전달 예정. <strong>09.07~09.20 2주 상시 운영</strong>이 필요하므로 늦어도 09.06 이전. 임베디드 스택이라 배포처 종속성은 없다</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>#52 재측정 상세</h3>
+  <p>두 수치는 <strong>분모가 다를 뿐 둘 다 맞다.</strong> 26.4%만 그 어느 쪽도 아닌 옛 값이었다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th><code>child_match_rule</code></th><th class="num">행</th><th class="num">비율</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td class="m">unique_name</td><td class="num">7,780</td><td class="num">26.35%</td><td>← <strong>옛 26.4%의 정체</strong>. 이 룰만 세던 시점의 값</td></tr>
+        <tr><td class="m">clean_unique_name</td><td class="num">868</td><td class="num">2.94%</td><td rowspan="2">커밋 <code>816093d</code>에서 추가된 표기정제 룰 900건</td></tr>
+        <tr><td class="m">clean_unique_listed</td><td class="num">32</td><td class="num">0.11%</td></tr>
+        <tr><td class="m">unique_listed</td><td class="num">275</td><td class="num">0.93%</td><td>상장사 종목코드 매칭</td></tr>
+        <tr><td><strong>매칭 합계</strong></td><td class="num"><strong>8,955</strong></td><td class="num"><strong>30.33%</strong></td><td><strong>정본 — 행 기준</strong> (분모 29,524행)</td></tr>
+        <tr><td>(공란) 미매칭</td><td class="num">20,569</td><td class="num">69.67%</td><td>해외법인·투자조합은 DART corp_code가 원천적으로 없음</td></tr>
+        <tr><td><strong>고유 자회사명 기준</strong></td><td class="num">6,572</td><td class="num">26.48%</td><td>분모 24,818 고유명. 인용 시 기준을 함께 적는다</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>분모 구성</h3>
+  <p>항목은 요청의 실제 표면에서 뽑았고, 개수를 맞추려고 쪼개지 않았다. 루프 중 12건이 추가돼 분모가 40 → 52로 늘었다. <strong>분모를 줄여 통과시키지 않았다</strong> — 52는 그대로 두고 미해결만 3 → 1로 내려갔다.</p>
+
+  <div class="bars">
+    <div class="bar-row"><span class="lbl">범위·산출물</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">5 / 5</span></div>
+    <div class="bar-row"><span class="lbl">주최측 제약</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">8 / 8</span></div>
+    <div class="bar-row"><span class="lbl">1단계 온톨로지</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">7 / 7</span></div>
+    <div class="bar-row"><span class="lbl">기술스택</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">8 / 8</span></div>
+    <div class="bar-row"><span class="lbl">파이프라인 반영</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">8 / 8</span></div>
+    <div class="bar-row"><span class="lbl">2단계 구현</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span class="cnt">10 / 10</span></div>
+    <div class="bar-row"><span class="lbl">운영·재현성</span><span class="bar-track"><span class="bar-fill u" style="width:83.3%"></span></span><span class="cnt">5 / 6</span></div>
+  </div>
+
+  <h3>답변 출처 내역</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>분류</th><th class="num">건수</th><th>어떻게 닫았나</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Evidence</strong> · 공개 문서 URL</td><td class="num">4</td><td>CLOVA Studio 모델·임베딩 가이드, LangChain ChatClovaX, pyoxigraph</td></tr>
+        <tr><td><strong>Evidence</strong> · 주최측 원문</td><td class="num">11</td><td>과제설명 PDF p5·p7·p8·p11·p23 — URL이 아닌 로컬 1차 자료라 구분해 표기</td></tr>
+        <tr><td><strong>Inference</strong> · 코드베이스 실측</td><td class="num">29</td><td>TTL 파싱, CSV 행 검사, <code>child_match_rule</code> 재집계, <code>pip list</code>, git 이력</td></tr>
+        <tr><td><strong>Preference</strong> · 사용자 답변</td><td class="num">7</td><td>범위 / 엔진 스택 / 코퍼스 범위 / 배포</td></tr>
+        <tr><td><strong>미해결</strong></td><td class="num">1</td><td>#51 배포 환경</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="h">정직한 표기</span>
+    <p>항목이 52개이므로 3%는 <strong>미해결 1개까지</strong>를 뜻한다. “3%”가 여유 있게 읽히면 안 된다 — 통과했지만 여유는 0건이다.
+    다음 라운드에서 항목이 하나라도 더 드러나 미해결이 2가 되면 즉시 미달로 돌아간다.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  출처 · <span class="m">docs/spec_0818.md</span> · <span class="m">docs_raw/QUERY_COVERAGE_35.md</span> · <span class="m">docs_data_layer/DATA_LAYER_PLAN.md</span> · <span class="m">ontology/*.ttl</span> · [참고]/기술세션 과제설명 PDF<br>
+  모든 수치는 2026-08-21 기준 실측값. 온톨로지 주석 수·CSV 행수·설치 패키지는 저장소에서 직접 세었다.
+</footer>
+
+</div>
