@@ -80,11 +80,14 @@ fp:InvestorEligibility a owl:Class ;
 fp:FundType_Securities   a fp:FundType ; rdfs:label "증권형"@ko, "SecuritiesFund"@en ;
     skos:altLabel "주식형"@ko, "채권형"@ko, "주식혼합"@ko, "채권혼합"@ko .
 fp:FundType_MoneyMarket  a fp:FundType ; rdfs:label "MMF"@ko, "MoneyMarketFund"@en .
-fp:FundType_MixedAssets  a fp:FundType ; rdfs:label "혼합자산형"@ko, "MixedAssetsFund"@en .
+fp:FundType_MixedAssets  a fp:FundType ; rdfs:label "혼합자산형"@ko, "MixedAssetsFund"@en ;
+    skos:altLabel "혼합자산"@ko .
 fp:FundType_RealEstate   a fp:FundType ; rdfs:label "부동산형"@ko, "RealEstateFund"@en ;
     skos:altLabel "임대형"@ko, "대출형"@ko .
-fp:FundType_SpecialAssets a fp:FundType ; rdfs:label "특별자산형"@ko, "SpecialAssetsFund"@en .
-fp:FundType_FundOfFunds  a fp:FundType ; rdfs:label "재간접형"@ko, "Fund of Funds"@en .
+fp:FundType_SpecialAssets a fp:FundType ; rdfs:label "특별자산형"@ko, "SpecialAssetsFund"@en ;
+    skos:altLabel "특별자산"@ko .
+fp:FundType_FundOfFunds  a fp:FundType ; rdfs:label "재간접형"@ko, "Fund of Funds"@en ;
+    skos:altLabel "재간접"@ko .
 fp:FundType_Derivative   a fp:FundType ; rdfs:label "파생형"@ko, "Derivative Fund"@en ;
     skos:altLabel "06"@ko .
 

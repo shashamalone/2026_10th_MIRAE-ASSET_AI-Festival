@@ -5,13 +5,16 @@ import os
 
 import pandas as pd
 
-OUT = "EDA/docs/DATA_INVENTORY.md"
+OUT = "docs_data_layer/DATA_INVENTORY.md"
 LAYERS = [("data/csv", "원본"), ("data/enriched", "파생"), ("data/relations", "관계"), ("data/external", "외부")]
 BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하드코딩한다.
     "fund_pub_dedup.csv": "build_fund_dedup.py",
     "etf_kr_enriched.csv": "build_etf_enrichment.py",
     "bond_kr_enriched.csv": "build_bond_enrichment.py",
     "etf_theme.csv": "build_etf_enrichment.py",
+    "etf_holding.csv": "build_etf_holding.py",
+    "company_master.csv": "build_company_relations.py",
+    "company_subsidiary.csv": "build_company_relations.py",
 }
 
 files = [(p, layer) for d, layer in LAYERS for p in sorted(glob.glob(f"{d}/*.csv"))]
