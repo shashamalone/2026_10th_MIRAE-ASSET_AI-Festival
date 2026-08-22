@@ -1,0 +1,11 @@
+pandas>=2.0
+openpyxl>=3.1
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+rdflib>=7.0
+langgraph>=1.2
+openai>=3.1
+SPARQLWrapper>=2.0
+fastapi>=0.141
+uvicorn[standard]>=0.52
