@@ -1,0 +1,27 @@
+# 2026 미래에셋 AI Festival — 금융상품 Agent
+# python3 -m pip install -r requirements.txt
+
+# 데이터 파이프라인
+pandas
+numpy
+openpyxl          # 주최측 xlsx 읽기
+lxml              # DART corpCode.xml 파싱
+requests
+
+# 온톨로지
+rdflib
+
+# KnowledgeBase
+faiss-cpu         # 스키마 벡터 인덱스 (cosine = 정규화 후 IndexFlatIP)
+
+# Agent
+langgraph
+langchain
+langchain-naver   # ChatClovaX / ClovaXEmbeddings (HyperCLOVA X)
+
+# 서비스
+fastapi
+uvicorn
+
+# 시각화 (선택 — EDA/viz)
+pyvis
