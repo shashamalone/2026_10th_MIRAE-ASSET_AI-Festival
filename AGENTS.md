@@ -1,9 +1,7 @@
-# AGENTS.md
+# [AGENTS.md](http://AGENTS.md)
 
 2026 미래에셋 AI Festival **금융상품 Agent(Agentic RAG·QA)** 과제 저장소.
 정형 금융상품 데이터를 온톨로지·지식그래프로 구조화하고, 근거에 기반해 답변하는 에이전트를 만든다.
-
-작업 규칙(계획 위임·커밋 언어)은 `CLAUDE.md`를 따른다. 이 문서는 **프로젝트 사실**을 다룬다.
 
 ## 절대 규칙
 
@@ -50,31 +48,80 @@ expected_question/  예상 평가 질문 35문항
 
 ```
 repo/
-├── agent/                  # LangGraph — 상태·노드·그래프
-│   ├── agent_core.py       # StateGraph 조립·compile, run(question) 진입, to_response() 5필드 직렬화
-│   ├── nodes.py            # 노드 함수 전부 (8개). 도구는 tools/에서 import만
-│   └── state.py            # State TypedDict + ABSTAIN 코드 상수
-├── tools/                  # spec 5절이 확정한 도구 4 + 판정 1. 각 파일이 엔진 핸들 1개를 소유
-│   ├── rdb.py              # sql(query) -> list[dict]                DuckDB
-│   ├── graph.py            # sparql(query) -> list[dict]             pyoxigraph (ABox)
-│   ├── schema.py           # schema_search(text, domain, k) -> list  FAISS 스키마 인덱스
-│   ├── content.py          # content_search(text, filter, k) -> list FAISS 콘텐츠 인덱스
-│   └── validate.py         # TBox 판정 5종 → ABSTAIN 코드 (유형6). sparql ASK만 쓴다
-├── kb/                     # 빌드 타임 전용. 런타임에서 import 하지 않는다 (ids.py 제외)
-│   ├── build_rdb.py        # data/csv+enriched+relations 12테이블 → artifacts/kb.duckdb
-│   ├── build_graph.py      # ontology/*.ttl 10개 → artifacts/oxigraph/ (TBox·ABox named graph 분리)
-│   ├── build_schema_index.py   # TBox rdfs:comment 193청크 → artifacts/schema.faiss
-│   ├── build_content_index.py  # cu_strtegy 등 서술 텍스트 → artifacts/content.faiss
-│   └── ids.py              # norm()·식별자 해소 단일 구현 (spec R7). 빌드와 런타임이 같은 규칙을 쓴다
-├── artifacts/              # 빌드 산출물. 전부 gitignore (spec 4.4)
-├── api.py                  # FastAPI 진입점 1파일. 기동 시 그래프 compile 1회 + 엔진 로드 1회
-├── config.py               # 경로·모델명·k·시간예산 상수
-├── clova.py                # HyperCLOVA X 클라이언트 — chat()·embed()·parse_json_loose()·load_key()
-├── requirements.txt        # 제출 필수 (spec 4.4 목록)
-├── data/ ontology/ script/ docs*/   # 기존 유지
+├── src/                            # 핵심 애플리케이션 코드
+│   │
+│   ├── agent/                      # LangGraph — 상태·노드·그래프
+│   │   ├── agent_core.py           # StateGraph 조립·compile, run(question), to_response()
+│   │   ├── nodes.py                # Agent 노드 함수. Tool은 tools/에서 import
+│   │   └── state.py                # State TypedDict + ABSTAIN 코드
+│   │
+│   ├── tools/                      # 런타임 Tool / Engine
+│   │   ├── rdb.py                  # sql(query) -> list[dict]              DuckDB
+│   │   ├── graph.py                # sparql(query) -> list[dict]           pyoxigraph
+│   │   ├── schema.py               # schema_search(...) -> list            pgvector (TBox)
+│   │   ├── schema_context.py        # TBox → Physical/Business Context
+│   │   ├── content.py              # content_search(...) -> list           콘텐츠 Vector 검색
+│   │   └── validate.py             # TBox/domain/value 검증 → ABSTAIN
+│   │
+│   ├── kb/                         # 빌드 타임 코드
+│   │   ├── build_rdb.py            # CSV/enriched/relations → DuckDB
+│   │   ├── build_graph.py          # ontology/*.ttl → Oxigraph
+│   │   ├── build_schema_index.py   # TBox comment → pgvector
+│   │   ├── build_schema_catalog.py # RDB table/column/type/PK/FK catalog 생성
+│   │   ├── build_content_index.py  # 서술형 데이터 → Content Vector Index
+│   │   └── ids.py                  # 식별자 정규화 단일 구현
+│   │
+│   ├── api.py                      # FastAPI 진입점
+│   ├── config.py                   # 경로·DB·모델·k·시간예산 상수
+│   └── clova.py                    # HyperCLOVA X client
+│
+├── data/                           # 원천/가공 데이터
+│   ├── csv/
+│   ├── enriched/
+│   └── relations/
+│
+├── ontology/                       # TBox / ABox TTL
+│   ├── bond.ttl
+│   └── ...
+│
+├── metadata/                       # Semantic Schema Context 관련 정적 메타데이터
+│   ├── business_rules.json         # filter/join/unit/value 규칙
+│   └── schema_bindings.json        # 검증된 logical ↔ physical mapping
+│
+├── artifacts/                      # 재생성 가능한 빌드 산출물 (gitignore)
+│   ├── oxigraph/
+│   └── ...
+│
+├── script/                         # 실행·평가·운영 스크립트
+│   ├── test_agent.py
+│   └── ...
+│
+├── vectordb_test/                  # pgvector/검색 실험 및 과거 baseline
+│   └── ...
+│
+├── docs/                           # 명세·실험 보고서
+│   └── ...
+│
+├── requirements.txt
+├── .env
+└── README.md
 ```
 
 `__init__.py`는 만들지 않는다 (namespace package로 충분)
+
+src/       = 실행·빌드 로직
+
+data/      = 실제 데이터
+
+ontology/  = 의미 모델
+
+metadata/  = 의미 ↔ 물리 스키마 연결정보
+
+artifacts/ = 빌드 결과
+
+script/    = 실행/검증
+
+docs/      = 명세/실험 기록
 
 ## 반드시 알아야 할 데이터 함정
 

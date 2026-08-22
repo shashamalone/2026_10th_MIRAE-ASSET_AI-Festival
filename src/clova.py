@@ -107,8 +107,24 @@ def _embedder():
     return _EMB
 
 
-def embed(text: str) -> list[float]:
+def _embed_raw(text: str) -> list[float]:
+    """캐시를 거치지 않는 실제 API 호출. 이 함수만 embed_query를 부른다.
+
+    embed_many가 이걸 부르고 embed는 embed_many에 위임한다. 셋 중 하나라도
+    서로를 부르면 무한 재귀가 된다 — 실제로 embed_many가 embed를 부르던 시절
+    캐시 미스에서 RecursionError가 났다.
+    """
     return _embedder().embed_query(text)
+
+
+def embed(text: str) -> list[float]:
+    """단건 임베딩. embed_many에 위임해 디스크 캐시를 공유한다.
+
+    직접 embed_query를 부르면 캐시를 지나치므로, 같은 질문이 반복될 때마다
+    API를 다시 때리고 간격도 없어 연속 호출 시 429에 걸린다.
+    임베딩은 같은 텍스트·모델이면 결정적이라 캐시해도 값이 달라지지 않는다.
+    """
+    return embed_many([text], pause=0.0, progress=False)[0]
 
 
 def embed_many(texts: list[str], pause: float = 1.2, progress: bool = True) -> list[list[float]]:
@@ -143,7 +159,7 @@ def embed_many(texts: list[str], pause: float = 1.2, progress: bool = True) -> l
             continue
         for attempt in range(7):
             try:
-                v = embed(t)
+                v = _embed_raw(t)      # embed() 를 부르면 여기로 되돌아와 무한 재귀가 된다
                 break
             except Exception as e:
                 if "429" not in str(e) and "42901" not in str(e):
@@ -169,3 +185,16 @@ def embed_many(texts: list[str], pause: float = 1.2, progress: bool = True) -> l
     if progress:
         print(f"  임베딩 완료 — API 호출 {api_calls}건 / 캐시 재사용 {len(texts)-api_calls}건")
     return out
+
+
+if __name__ == "__main__":
+    # 자기검사: embed / embed_many / _embed_raw 의 호출 고리가 닫히지 않았는지 본다.
+    # 캐시 적중 경로에서는 재귀가 드러나지 않으므로 반드시 '캐시에 없는' 문장을 쓴다.
+    # (실제로 embed_many 가 embed 를 부르던 시절 RecursionError 가 났고,
+    #  회귀 테스트 72건이 전부 캐시 적중이라 그 버그를 못 잡았다.)
+    import uuid
+    probe = f"clova 자기검사 {uuid.uuid4()}"
+    v = embed(probe)
+    assert len(v) == 1024, f"차원 이상: {len(v)}"
+    assert embed(probe) == v, "같은 문장인데 결과가 다르다 — 캐시가 안 먹는다"
+    print(f"clova 자기검사 PASS — 캐시미스 경로 dim={len(v)}, 재호출 일치")
