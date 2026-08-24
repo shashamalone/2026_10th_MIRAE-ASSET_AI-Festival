@@ -1,0 +1,693 @@
+{
+  "환경": {
+    "postgresql": "18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)",
+    "pgvector": "0.8.1",
+    "database": "vectordb_test",
+    "embedding_model": "bge-m3",
+    "embedding_dim": 1024,
+    "distance": "cosine (<=>, vector_cosine_ops)",
+    "hybrid": "RRF (k=60), vector + FTS(simple)",
+    "documents": 10,
+    "korean_summary": {
+      "한국어_질의수": 6,
+      "FTS_simple_적중": 3,
+      "FTS_english_적중": 3,
+      "벡터_1위정답": 6
+    }
+  },
+  "queries": [
+    {
+      "query": "barking dog",
+      "note": "영문 정상 동작 확인",
+      "expected_doc_key": "en:dog",
+      "vector_results": [
+        {
+          "doc_key": "en:dog",
+          "content": "The dog is barking loudly in the yard.",
+          "score": 0.808161,
+          "distance": 0.191839
+        },
+        {
+          "doc_key": "en:cat",
+          "content": "A cat is sleeping quietly on the warm windowsill.",
+          "score": 0.442531,
+          "distance": 0.557469
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.399787,
+          "distance": 0.600213
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.392489,
+          "distance": 0.607511
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.37652,
+          "distance": 0.62348
+        }
+      ],
+      "keyword_results_simple": [
+        {
+          "doc_key": "en:dog",
+          "content": "The dog is barking loudly in the yard.",
+          "score": 0.098501
+        }
+      ],
+      "keyword_results_english": [
+        {
+          "doc_key": "en:dog",
+          "content": "The dog is barking loudly in the yard.",
+          "score": 0.098501
+        }
+      ],
+      "trigram_results": [
+        {
+          "doc_key": "en:dog",
+          "content": "The dog is barking loudly in the yard.",
+          "score": 0.8
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "en:dog",
+          "content": "The dog is barking loudly in the yard.",
+          "score": 0.032787,
+          "ranks": {
+            "vector": 1,
+            "keyword": 1
+          }
+        },
+        {
+          "doc_key": "en:cat",
+          "content": "A cat is sleeping quietly on the warm windowsill.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "듀레이션",
+      "note": "정확 어절 — FTS 도 잡아야 정상",
+      "expected_doc_key": "fp:duration",
+      "vector_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.550455,
+          "distance": 0.449545
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.357544,
+          "distance": 0.642456
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.33224,
+          "distance": 0.66776
+        },
+        {
+          "doc_key": "en:pg",
+          "content": "PostgreSQL is an open source object-relational database system.",
+          "score": 0.327949,
+          "distance": 0.672051
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.325384,
+          "distance": 0.674616
+        }
+      ],
+      "keyword_results_simple": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.075991
+        }
+      ],
+      "keyword_results_english": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.075991
+        }
+      ],
+      "trigram_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 1.0
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.032787,
+          "ranks": {
+            "vector": 1,
+            "keyword": 1
+          }
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "en:pg",
+          "content": "PostgreSQL is an open source object-relational database system.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "위험등급",
+      "note": "정확 어절 (문서엔 '위험등급 수준')",
+      "expected_doc_key": "fp:riskGradeLevel",
+      "vector_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.606849,
+          "distance": 0.393151
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.486342,
+          "distance": 0.513658
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.472555,
+          "distance": 0.527445
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.42167,
+          "distance": 0.57833
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.414998,
+          "distance": 0.585002
+        }
+      ],
+      "keyword_results_simple": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.060793
+        }
+      ],
+      "keyword_results_english": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.060793
+        }
+      ],
+      "trigram_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 1.0
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.032787,
+          "ranks": {
+            "vector": 1,
+            "keyword": 1
+          }
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "금리 민감도",
+      "note": "복합 어절 2개 — 둘 다 원문에 존재",
+      "expected_doc_key": "fp:duration",
+      "vector_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.646561,
+          "distance": 0.353439
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.500149,
+          "distance": 0.499851
+        },
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.456423,
+          "distance": 0.543577
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.440138,
+          "distance": 0.559862
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.359093,
+          "distance": 0.640907
+        }
+      ],
+      "keyword_results_simple": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.099103
+        }
+      ],
+      "keyword_results_english": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.099103
+        }
+      ],
+      "trigram_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 1.0
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.032787,
+          "ranks": {
+            "vector": 1,
+            "keyword": 1
+          }
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "듀레이션이 뭐야?",
+      "note": "조사 결합 — 한국어 FTS 최대 약점",
+      "expected_doc_key": "fp:duration",
+      "vector_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.505406,
+          "distance": 0.494594
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.327162,
+          "distance": 0.672838
+        },
+        {
+          "doc_key": "en:pg",
+          "content": "PostgreSQL is an open source object-relational database system.",
+          "score": 0.318748,
+          "distance": 0.681252
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.303172,
+          "distance": 0.696828
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.303138,
+          "distance": 0.696862
+        }
+      ],
+      "keyword_results_simple": [],
+      "keyword_results_english": [],
+      "trigram_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.444444
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.016393,
+          "ranks": {
+            "vector": 1
+          }
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "en:pg",
+          "content": "PostgreSQL is an open source object-relational database system.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "en:vector",
+          "content": "Vector similarity search finds nearest neighbors in embedding space.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "등급",
+      "note": "부분어 — '위험등급' 안에 있으나 어절이 아님",
+      "expected_doc_key": "fp:riskGradeLevel",
+      "vector_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.532223,
+          "distance": 0.467777
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.510989,
+          "distance": 0.489011
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.474004,
+          "distance": 0.525996
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.450301,
+          "distance": 0.549699
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.438362,
+          "distance": 0.561638
+        }
+      ],
+      "keyword_results_simple": [],
+      "keyword_results_english": [],
+      "trigram_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.333333
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.333333
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.016393,
+          "ranks": {
+            "vector": 1
+          }
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "fp:maturityBucket",
+          "content": "fp:maturityBucket | 잔존만기 구간 | 만기경과 / 1년미만 / 1-3년 / 3-5년 / 5-10년 / 10년이상 / 미상(파생). fp:hasMaturityClass 개체 매핑의 소재다.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    },
+    {
+      "query": "채권 이자율",
+      "note": "동의어(표면금리) — 어휘 불일치, 벡터만 가능",
+      "expected_doc_key": "fp:couponRate",
+      "vector_results": [
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.554168,
+          "distance": 0.445832
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.448546,
+          "distance": 0.551454
+        },
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.443892,
+          "distance": 0.556108
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.430904,
+          "distance": 0.569096
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.409256,
+          "distance": 0.590744
+        }
+      ],
+      "keyword_results_simple": [],
+      "keyword_results_english": [],
+      "trigram_results": [
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.428571
+        }
+      ],
+      "hybrid_results": [
+        {
+          "doc_key": "fp:couponRate",
+          "content": "fp:couponRate | 표면금리 | 액면 대비 연 이표율(%). **0은 결측이 아니라 무이표(할인채)**를 뜻한다.",
+          "score": 0.016393,
+          "ranks": {
+            "vector": 1
+          }
+        },
+        {
+          "doc_key": "fp:duration",
+          "content": "fp:duration | 듀레이션 | 금리 민감도. **0이 8,268건이며 만기경과와 미계산이 섞여 있으므로 듀레이션 질의 시 0 제외가 필수**다. 익일 계열(NDY_DUR)과 컨벡시티는 중복·고급축이라 온톨로지에 싣지 않았다.",
+          "score": 0.016129,
+          "ranks": {
+            "vector": 2
+          }
+        },
+        {
+          "doc_key": "fp:riskGradeLevel",
+          "content": "fp:riskGradeLevel | 위험등급 수준 | 1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다.",
+          "score": 0.015873,
+          "ranks": {
+            "vector": 3
+          }
+        },
+        {
+          "doc_key": "fp:ratingRank",
+          "content": "fp:ratingRank | 신용등급 서열 | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다.",
+          "score": 0.015625,
+          "ranks": {
+            "vector": 4
+          }
+        },
+        {
+          "doc_key": "en:market",
+          "content": "The stock market closed higher on strong quarterly earnings reports.",
+          "score": 0.015385,
+          "ranks": {
+            "vector": 5
+          }
+        }
+      ]
+    }
+  ]
+}

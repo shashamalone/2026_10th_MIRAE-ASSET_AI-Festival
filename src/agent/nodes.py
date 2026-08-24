@@ -5,18 +5,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import clova  # noqa: E402
+from agent import query_frame  # noqa: E402
 from agent.state import State  # noqa: E402
-from config import ANSWER_MODEL, BOND_TOP_K, INTENT_MODEL  # noqa: E402
+from config import ANSWER_MODEL, BOND_TOP_K  # noqa: E402
 from tools.bond_schema import bond_schema_search  # noqa: E402
-
-INTENT_SYSTEM = """너는 금융상품 질의를 분류한다. JSON 객체 하나만 출력한다. 설명·코드펜스 금지.
-
-domain: "BOND"(국내채권) | "ETF" | "FUND" | "OTHER"
-intent: "SCHEMA_SEARCH"  용어·개념·정의를 묻는다 (예: "듀레이션이 뭐야", "위험등급은 어떻게 정의돼")
-        "DATA_SEARCH"    실제 상품을 찾거나 조건으로 거른다 (예: "AA- 이상 채권 알려줘")
-keywords: 질의의 핵심어. 조사·서술어를 뗀 명사구로.
-
-출력 형식: {"domain":"","intent":"","keywords":[]}"""
 
 ANSWER_SYSTEM = """너는 금융상품 온톨로지를 근거로 답하는 애널리스트다.
 
@@ -30,16 +22,26 @@ ANSWER_SYSTEM = """너는 금융상품 온톨로지를 근거로 답하는 애�
 - 한국어로 3~5문장 이내."""
 
 
-def classify_intent(state: State) -> dict:
-    """1단계 — TBox를 보지 않고 가볍게 분류만 한다."""
+def extract_query_frame(state: State) -> dict:
+    """1단계 — TBox도 물리 스키마도 보지 않고 질의를 의미 요소로 쪼갠다.
+
+    LLM 2회를 쓴다. 분해와 '검증이 필요한 지점' 감사를 한 프롬프트에 같이 시키면
+    서로 밀어내는 것이 실측으로 확인됐다 — 감사 트리거를 늘릴수록 다른 슬롯이
+    퇴행했고, 떼어내자 Validation Recall 이 1/5 → 5/5 로 올랐다.
+    감사 호출은 프롬프트가 짧아 p50 0.76s 로 싸다.
+    """
     try:
-        raw = clova.chat(INTENT_MODEL, INTENT_SYSTEM, state["question"], max_tokens=256)
-        intent = clova.parse_json_loose(raw)
+        frame = query_frame.extract(state["question"], use_audit=True)
     except Exception as e:
-        # 분류가 실패해도 파이프라인은 계속 간다. 검색은 질문 원문으로도 된다.
-        intent = {"domain": "BOND", "intent": "SCHEMA_SEARCH", "keywords": [],
-                  "error": f"{type(e).__name__}: {e}"}
-    return {"intent": intent}
+        # 추출이 실패해도 파이프라인은 계속 간다. 검색은 질문 원문으로도 된다.
+        frame = query_frame.empty_frame()
+        frame["_error"] = f"{type(e).__name__}: {e}"
+    trace = [f"query_frame: task={frame['task']} domain={frame['domain_candidates']} "
+             f"constraints={len(frame['constraints'])} relations={len(frame['relations'])} "
+             f"validation={[v['type'] for v in frame['validation_targets']]}"]
+    if frame.get("_error"):
+        trace.append(f"query_frame 실패 — 질문 원문으로 진행: {frame['_error']}")
+    return {"intent": frame, "trace": trace}
 
 
 def search_bond_schema(state: State) -> dict:

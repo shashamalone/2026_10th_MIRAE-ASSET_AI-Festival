@@ -37,7 +37,10 @@ BOND_TOP_K = 5
 BOND_SCORE_FLOOR = 0.45
 
 EMBEDDING_MODEL = "bge-m3"        # 1024차원, cosine (CLOVA Studio)
-INTENT_MODEL = "HCX-DASH-002"     # 분류 전용 — 가장 빠름 (실측 0.29s)
+# 1단계 Query Frame 추출. HCX-005·HCX-DASH-002 와 대표 4문항으로 비교해 정했다 —
+# 스키마 준수 4/4 vs 2/4 vs 1/4. DASH-002 의 속도 이점은 프롬프트가 길어지면서
+# 사라졌다(출력 토큰이 지연을 지배한다). 근거: vectordb_test/5_query_frame_v1/README.md
+FRAME_MODEL = "HCX-007"
 ANSWER_MODEL = "HCX-005"          # 답변 생성
 
 CLOVA_HOST = "https://clovastudio.stream.ntruss.com"

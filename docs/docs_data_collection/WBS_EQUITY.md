@@ -94,7 +94,7 @@
 | **EQ-E4** | **자회사 지배 여부 컬럼 추가** — `is_control`(50% 초과 OR 경영참여) + `invest_purpose_norm`(`경영참여`/`경영참가`/`경영 참여` 3표기 통합: 7,348 + 858 + 462 = 8,699행). TTL은 `fp:hasSubsidiary`와 투자지분 관계를 술어로 분리 | `script/build_company_relations.py`, `script/build_ontology_instances.py`, `ontology/common.ttl` | EQ-P1 | **S** |
 | **EQ-E5** | **관계 경로 물질화** — `기업 → 자회사 → 편입종목 → ETF`를 빌드 시점에 1테이블로 펼친다(`docs/spec_0818.md` 4.2절). 유형4 8문항이 전부 이 경로를 4홉으로 타므로 응답 예산(60초 상한/15초 목표)의 최대 위험 구간 | 신규 `script/build_company_exposure.py` → `data/relations/company_exposure.csv` | EQ-E1·EQ-E2·EQ-E4 | **M** |
 | **EQ-E6** | **편입 커버리지 플래그 테이블** — ETF 1,202종 × `coverage_status`(collected 711 / not_collected 491, 그중 delisted_unrecoverable 19 / site_missing 6). 답변 노드가 "미확보"를 말하려면 조회 가능한 형태가 있어야 한다 | 신규 `script/build_holding_coverage.py` → `data/enriched/etf_holding_coverage.csv` | EQ-P2 | **S** |
-| **EQ-E7** | **관계축 SPARQL 스모크 테스트** — 에코프로 경로 45종, 삼성전자 131종, 캠브리콘 14종을 고정 기대값으로 두고 회귀 검증. 현재 `duckdb`·`pyoxigraph` **미설치**라 3계층이 기동조차 안 된다 | `script/validate_ontology.py` 확장, `requirements.txt`(신설 — `spec_0818.md` 4.4절) | `kb/build_graph.py` (다른 축 문서와 공유 선행) | **S** |
+| **EQ-E7** | **관계축 SPARQL 스모크 테스트** — 에코프로 경로 45종, 삼성전자 131종, 캠브리콘 14종을 고정 기대값으로 두고 회귀 검증. 현재 `duckdb`·`pyoxigraph` **미설치**라 3계층이 기동조차 안 된다 | `script/validate_ontology.py` 확장, `requirements.txt`(신설 — `spec_0818.md` 4.4절) | `src/kb/build_graph.py` (다른 축 문서와 공유 선행) | **S** |
 
 ---
 

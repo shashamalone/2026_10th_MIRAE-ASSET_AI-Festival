@@ -71,12 +71,12 @@
 
 | ID | 항목 | 대상 파일 | 선행조건 | 규모 |
 |---|---|---|---|---|
-| BOND-E1 | **답변 검증 노드** — 생성 문장이 comment에 근거하는지 대조 후 미근거 문장 제거 | `agent/nodes.py` (신규 노드) | BOND-P1 | M |
-| BOND-E2 | intent enum 가드 — 후처리로 허용값 밖이면 보정 | `agent/nodes.py` | BOND-P4 | S |
+| BOND-E1 | **답변 검증 노드** — 생성 문장이 comment에 근거하는지 대조 후 미근거 문장 제거 | `src/agent/nodes.py` (신규 노드) | BOND-P1 | M |
+| BOND-E2 | intent enum 가드 — 후처리로 허용값 밖이면 보정 | `src/agent/nodes.py` | BOND-P4 | S |
 | BOND-E3 | 미배선 3축 빌더 배선 | `script/build_ontology_instances.py` | BOND-D1~D3 | S |
 | BOND-E4 | **채권 RDB 질의 함수** `sql()` | `src/kb/build_rdb.py` (신규) | BOND-D7 | M |
 | BOND-E5 | **정답지 회귀 게이트 상시화** — `score_codelist_axes.py`를 CI 성격으로 | `script/score_codelist_axes.py` (존재) | — | S |
-| BOND-E6 | score floor 튜닝 — 현재 0.45 고정값 | `config.py` | 골든셋 | S |
+| BOND-E6 | score floor 튜닝 — 현재 0.45 고정값 | `src/config.py` | 골든셋 | S |
 
 ---
 
@@ -115,6 +115,6 @@
 python3 script/build_ontology_instances.py    # 적재 + 미매핑 원장
 python3 script/validate_ontology.py ; echo $?  # domain/range 위반 (파이프 금지)
 python3 script/score_codelist_axes.py          # 주최측 정답지 대조
-python3 kb/build_bond_index.py                 # 채권 스키마 벡터 인덱스
+python3 src/kb/build_bond_index.py                 # 채권 스키마 벡터 인덱스
 python3 script/test_bond_agent.py              # 채권 MVP end-to-end
 ```
