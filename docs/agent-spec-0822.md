@@ -1,5 +1,9 @@
 # 에이전트 파일 구조 (LangGraph) — 확정 v2 · 2026-08-22
 
+> **2026-08-24 현행 정정:** RDB는 DuckDB가 아니라 PostgreSQL로 구현됐다. Graph는
+> TBox/ABox TTL 생성·검증까지만 완료됐고 pyoxigraph loader/runtime은 목표 구조다.
+> 데이터 구축 현행은 `docs/docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md`를 우선한다.
+
  `TBox Vector Grounding → Semantic Schema Context → Plan & Routing` 구조
 
 ## 0. v1 → v2 주요 변경
@@ -33,19 +37,19 @@ repo/
 │   │   └── state.py                # State TypedDict + ABSTAIN 코드
 │   │
 │   ├── tools/                      # 런타임 Tool / Engine
-│   │   ├── rdb.py                  # sql(query) -> list[dict]              DuckDB
-│   │   ├── graph.py                # sparql(query) -> list[dict]           pyoxigraph
-│   │   ├── schema.py               # schema_search(...) -> list            pgvector (TBox)
+│   │   ├── rdb.py                  # LogicalPlan -> evidence rows          PostgreSQL
+│   │   ├── graph.py                # [미구현 목표] sparql(...)             pyoxigraph
+│   │   ├── bond_schema.py          # schema_search(...)                    pgvector (TBox)
 │   │   ├── schema_context.py        # TBox → Physical/Business Context
-│   │   ├── content.py              # content_search(...) -> list           콘텐츠 Vector 검색
+│   │   ├── content.py              # [미구현 목표] 콘텐츠 Vector 검색
 │   │   └── validate.py             # TBox/domain/value 검증 → ABSTAIN
 │   │
 │   ├── kb/                         # 빌드 타임 코드
-│   │   ├── build_rdb.py            # CSV/enriched/relations → DuckDB
-│   │   ├── build_graph.py          # ontology/*.ttl → Oxigraph
-│   │   ├── build_schema_index.py   # TBox comment → pgvector
+│   │   ├── build_rdb.py            # CSV/enriched/relations → PostgreSQL
+│   │   ├── build_graph.py          # [미구현 목표] ontology/*.ttl → Oxigraph
+│   │   ├── build_bond_index.py     # TBox comment → pgvector
 │   │   ├── build_schema_catalog.py # RDB table/column/type/PK/FK catalog 생성
-│   │   ├── build_content_index.py  # 서술형 데이터 → Content Vector Index
+│   │   ├── build_content_index.py  # [미구현 목표] Content Vector Index
 │   │   └── ids.py                  # 식별자 정규화 단일 구현
 │   │
 │   ├── api.py                      # FastAPI 진입점
@@ -686,13 +690,13 @@ graph.add_node("answer", answer)
 
 | 계층             | Engine                    | 상태         |
 | -------------- | ------------------------- | ---------- |
-| RDB            | DuckDB                    | 유지         |
-| Graph          | pyoxigraph                | 유지         |
+| RDB            | PostgreSQL                | live DB 12테이블·PK/FK 20개 검증 완료 |
+| Graph          | pyoxigraph                | 목표 — TTL 생성·검증만 구현 |
 | TBox Vector    | **PostgreSQL + pgvector** | FAISS → 이전 |
-| Content Vector | Vector Store              | 후속 확정      |
-| LLM Intent     | HCX-DASH-002              | 유지         |
-| LLM Planner    | HCX-007                   | 유지         |
-| LLM Answer     | HCX-007                   | 유지         |
+| Content Vector | Vector Store              | 미구현        |
+| LLM Query Frame | HCX-007                  | 현재 RDB vertical slice에서 사용 |
+| Planner        | 검증된 metadata 기반 결정적 plan | 별도 Planner LLM 미사용 |
+| Answer         | 결정적 evidence renderer  | `ANSWER_MODEL=HCX-005`는 현재 slice에서 미사용 |
 
 
 ### Schema Vector
@@ -855,4 +859,3 @@ Query Understanding
 → Validation
 → Evidence-based Answer
 ```
-

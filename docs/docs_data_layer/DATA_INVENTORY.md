@@ -1,6 +1,6 @@
 # 데이터 인벤토리
 
-이 파일은 `EDA/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**
+이 파일은 `script/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**
 데이터 구조 변경 시 재실행 후 커밋하면 `git diff`가 그대로 변경 이력이 된다.
 (생성 시각을 넣지 않는 이유: 매번 바뀌면 diff가 노이즈로 덮여 변경 추적이 불가능해진다.)
 
@@ -20,14 +20,14 @@
 | `data/csv/PRFD01N001_fund_pub_axis_sample_20260711.csv` | 원본 | 100 | 11 | — |
 | `data/csv/PRFD01N001_fund_pub_master_20260711.csv` | 원본 | 95,619 | 45 | — |
 | `data/csv/PRFD01N001_fund_pub_schema_20260711.csv` | 원본 | 45 | 5 | — |
-| `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 12 | `EDA/build_bond_enrichment.py` |
-| `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `EDA/build_company_relations.py` |
-| `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
-| `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
-| `data/enriched/holding_code_map.csv` | 파생 | 1,393 | 8 | — |
-| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 10 | `EDA/build_company_relations.py` |
-| `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `EDA/build_etf_holding.py` |
-| `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
+| `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 12 | `script/build_bond_enrichment.py` |
+| `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `script/build_company_relations.py` |
+| `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `script/build_etf_enrichment.py` |
+| `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `script/build_fund_dedup.py` |
+| `data/enriched/holding_code_map.csv` | 파생 | 1,393 | 8 | `script/build_holding_code_map.py` |
+| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 10 | `script/build_company_relations.py` |
+| `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `script/build_etf_holding.py` |
+| `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `script/build_etf_enrichment.py` |
 
 ## 파일별 컬럼
 

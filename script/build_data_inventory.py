@@ -5,7 +5,7 @@ import os
 
 import pandas as pd
 
-OUT = "docs_data_layer/DATA_INVENTORY.md"
+OUT = "docs/docs_data_layer/DATA_INVENTORY.md"
 LAYERS = [("data/csv", "원본"), ("data/enriched", "파생"), ("data/relations", "관계"), ("data/external", "외부")]
 BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하드코딩한다.
     "fund_pub_dedup.csv": "build_fund_dedup.py",
@@ -15,6 +15,7 @@ BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하
     "etf_holding.csv": "build_etf_holding.py",
     "company_master.csv": "build_company_relations.py",
     "company_subsidiary.csv": "build_company_relations.py",
+    "holding_code_map.csv": "build_holding_code_map.py",
 }
 
 files = [(p, layer) for d, layer in LAYERS for p in sorted(glob.glob(f"{d}/*.csv"))]
@@ -23,7 +24,7 @@ frames = {p: pd.read_csv(p, dtype=str, keep_default_na=False) for p, _ in files}
 lines = [
     "# 데이터 인벤토리",
     "",
-    "이 파일은 `EDA/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**",
+    "이 파일은 `script/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**",
     "데이터 구조 변경 시 재실행 후 커밋하면 `git diff`가 그대로 변경 이력이 된다.",
     "(생성 시각을 넣지 않는 이유: 매번 바뀌면 diff가 노이즈로 덮여 변경 추적이 불가능해진다.)",
     "",
@@ -35,7 +36,7 @@ lines = [
 for p, layer in files:
     df = frames[p]
     lines.append(f"| `{p}` | {layer} | {len(df):,} | {len(df.columns)} | "
-                 f"{'`EDA/' + BUILDER[os.path.basename(p)] + '`' if os.path.basename(p) in BUILDER else '—'} |")
+        f"{'`script/' + BUILDER[os.path.basename(p)] + '`' if os.path.basename(p) in BUILDER else '—'} |")
 
 lines += ["", "## 파일별 컬럼", "", "결측률은 빈 문자열 기준. 값 예시는 문서 비대화를 막기 위해 싣지 않는다."]
 for p, _ in files:

@@ -110,7 +110,7 @@ def table_definition(metadata: dict) -> list[dict[str, object]]:
                 "foreign_key": fks.get(name, ""), "unit": b.get("unit", ""),
                 "as_of_basis": as_of, "source_priority": priority,
                 "transformation_rule": transform, "quality_rule": quality,
-                "implementation_status": "빌더 구현; live DB 미확인",
+                "implementation_status": "live DB 검증 완료 (2026-08-24)",
             })
     for name, count, source, desc in VECTOR_TABLES:
         columns = (("term_uri", "text", "용어 URI", "N", "Y"),
@@ -118,7 +118,7 @@ def table_definition(metadata: dict) -> list[dict[str, object]]:
                    ("comment", "text", "TBox 설명", "N", "N"),
                    ("alt_labels", "text[]", "대체 라벨", "N", "N"),
                    ("content", "text", "임베딩 입력 텍스트", "N", "N"),
-                   ("embedding", "vector(1024)", "HyperCLOVA X 임베딩", "N", "N"))
+                   ("embedding", "vector(1024)", "CLOVA Studio bge-m3 임베딩", "N", "N"))
         for order, (column, datatype, column_desc, nullable, pk) in enumerate(columns, 1):
             out.append({
                 "store": "PostgreSQL/pgvector", "schema": "public", "table": name,
@@ -129,7 +129,7 @@ def table_definition(metadata: dict) -> list[dict[str, object]]:
                 "foreign_key": "", "unit": "", "as_of_basis": "ontology schema version",
                 "source_priority": "ontology", "transformation_rule": "URI·label·altLabel·comment 결합 후 임베딩",
                 "quality_rule": "rdfs:comment 없는 resource 제외; embedding 1024차원",
-                "implementation_status": "빌더 구현; live DB 미확인",
+                "implementation_status": "live DB 검증 완료 (2026-08-24)",
             })
     return out
 

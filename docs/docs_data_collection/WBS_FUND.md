@@ -1,5 +1,8 @@
 # WBS — 공모펀드
 
+> **현행 정정(2026-08-24):** 아래는 2026-08-21 시점의 계획 기록이다. RDB는 현재
+> PostgreSQL 빌더로 대체됐다. 최신 구축 상태는 `../docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md`를 따른다.
+
 > 실측 기준 2026-08-21 · 제출 마감 2026-09-06 23:59(`docs/spec_0818.md:508`) · 잔여 16일
 > 모든 수치는 `data/csv/PRFD01N001_fund_pub_master_20260711.csv`(95,619행)와 `data/enriched/fund_pub_dedup.csv`(11,138행)를 pandas(`dtype=str, keep_default_na=False`)로 직접 세었다.
 

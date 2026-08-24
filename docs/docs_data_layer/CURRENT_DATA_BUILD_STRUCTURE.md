@@ -2,14 +2,14 @@
 
 > 현행 코드 기준: 2026-08-24 · 데이터 cutoff: **2026-07-11**
 
-이 문서는 주최측 원천 Excel이 파생·관계 데이터와 RDB·Graph·Vector 스키마로 이어지는 과정을 설명한다. 과거 설계보다 실제 코드와 생성 manifest를 우선한다. DB 서버에 직접 접속해 확인하지 못한 항목은 "적재 완료"가 아니라 **빌더 구현**으로 표시한다.
+이 문서는 주최측 원천 Excel이 파생·관계 데이터와 RDB·Graph·Vector 스키마로 이어지는 과정을 설명한다. 과거 설계보다 실제 코드와 생성 manifest를 우선한다. RDB와 Schema Vector는 2026-08-24에 live PostgreSQL을 읽기 전용으로 대조했다.
 
 ## 1. 현재 상태
 
 | 계층 | 엔진·형식 | 실제 보유 상태 | 런타임 상태 |
 |---|---|---|---|
-| RDB | PostgreSQL | `raw`·`enriched`·`relations` 12테이블 빌더와 catalog 구현 | 현 세션 live DB 미확인 |
-| Schema Vector | PostgreSQL + pgvector | `bond_schema_terms` 130건, `schema_terms_all` 188건 빌더 구현 | 현 세션 live DB 미확인 |
+| RDB | PostgreSQL | `raw`·`enriched`·`relations` 12테이블 빌더와 catalog 구현 | 12테이블·PK/FK 20개·cutoff 위반 0 확인 |
+| Schema Vector | PostgreSQL + pgvector | `bond_schema_terms` 130건, `schema_terms_all` 188건 빌더 구현 | 각 1024차원·embedding NULL 0 확인 |
 | Graph schema | RDF/Turtle | TBox 5파일 커밋 | rdflib 검증 구현 |
 | Graph instances | RDF/Turtle | ABox `instances_*.ttl` 5파일 생성 | pyoxigraph loader·SPARQL runtime 미구현 |
 | Content Vector | 미정 | 해외 ETF 전략 등 후보 데이터만 식별 | 미구현 |
@@ -119,7 +119,7 @@ flowchart LR
 | `public.bond_schema_terms` | `common.ttl + bond_kr.ttl`의 comment 보유 resource | 130 | 1024차원 | 운영 채권 schema grounding |
 | `public.schema_terms_all` | TBox 5파일의 comment 보유 resource | 188 | 1024차원 | 35문항 평가 실험 |
 
-두 테이블 모두 `term_uri`가 PK이며 `label`, `comment`, `alt_labels`, `content`, `embedding`을 저장한다. `rdfs:comment`가 없는 코드리스트를 넣지 않으며 cosine 연산자 `<=>`를 사용한다. 임베딩은 허용된 HyperCLOVA X/CLOVA Studio 경로만 사용한다.
+두 테이블 모두 `term_uri`가 PK이며 `label`, `comment`, `alt_labels`, `content`, `embedding`을 저장한다. `rdfs:comment`가 없는 코드리스트를 넣지 않으며 cosine 연산자 `<=>`를 사용한다. 임베딩은 CLOVA Studio의 `bge-m3`를 사용하고, 질의·답변 LLM은 HyperCLOVA X만 사용한다.
 
 ## 7. 반드시 적용할 품질 규칙
 
@@ -161,6 +161,6 @@ python3 src/kb/build_bond_index.py
 1. `pyoxigraph` 의존성, TTL loader, 영속 store, read-only SPARQL runtime
 2. 해외 ETF 서술형 전략 등 Content Vector 인덱스
 3. Graph·RDB·Vector를 함께 실행하는 routing/runtime 통합
-4. live PostgreSQL snapshot을 문서 생성 시 선택적으로 대조하는 배포 환경 검증
+4. 배포 또는 데이터 재구축 시 live PostgreSQL snapshot 반복 검증
 
 컬럼 단위 물리 정의는 [TABLE_DEFINITION_V1_0.md](TABLE_DEFINITION_V1_0.md)와 [table_definition_v1_0.csv](table_definition_v1_0.csv)를 따른다.

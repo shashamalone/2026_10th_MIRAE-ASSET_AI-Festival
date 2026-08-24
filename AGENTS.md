@@ -34,11 +34,10 @@ data/enriched/   파생 테이블 (재그레인·스칼라 보강)
 data/relations/  롱포맷 관계 테이블 (주어ID, 목적어, source, as_of)
 data/external/   외부 수집 원천 + 사이드카 {원본파일명}.meta.json
 ontology/*.ttl   제출 필수 — 스키마 5파일(common + 4도메인, 커밋) + instances_*.ttl 5파일(생성물, gitignore)
-EDA/*.py         실행 스크립트 (build_/collect_/validate_)
+script/*.py      실행 스크립트 (build_/collect_/validate_/test_)
 EDA/src/*.py     jupytext 노트북 소스 전용
-docs_raw/            EDA 산출 문서 (EDA_REPORT·COLUMN_GUIDE·QUERY_COVERAGE_35)
-docs_data_layer/     데이터 계층 문서 (DATA_LAYER_PLAN·EXTERNAL_DATA_PLAN·EXTERNAL_DATA_SOURCES·DATA_INVENTORY)
-docs_data_collection/ 수집 설계 문서 (HOLDINGS_COLLECTION_DESIGN)
+docs/docs_data_layer/      데이터 계층 문서
+docs/docs_data_collection/ 수집 설계 문서
 expected_question/  예상 평가 질문 35문항
 ```
 
@@ -56,19 +55,19 @@ repo/
 │   │   └── state.py                # State TypedDict + ABSTAIN 코드
 │   │
 │   ├── tools/                      # 런타임 Tool / Engine
-│   │   ├── rdb.py                  # sql(query) -> list[dict]              DuckDB
-│   │   ├── graph.py                # sparql(query) -> list[dict]           pyoxigraph
-│   │   ├── schema.py               # schema_search(...) -> list            pgvector (TBox)
+│   │   ├── rdb.py                  # LogicalPlan -> evidence rows          PostgreSQL
+│   │   ├── graph.py                # [미구현 목표] sparql(...)             pyoxigraph
+│   │   ├── bond_schema.py          # schema_search(...)                    pgvector (TBox)
 │   │   ├── schema_context.py        # TBox → Physical/Business Context
-│   │   ├── content.py              # content_search(...) -> list           콘텐츠 Vector 검색
+│   │   ├── content.py              # [미구현 목표] 콘텐츠 Vector 검색
 │   │   └── validate.py             # TBox/domain/value 검증 → ABSTAIN
 │   │
 │   ├── kb/                         # 빌드 타임 코드
-│   │   ├── build_rdb.py            # CSV/enriched/relations → DuckDB
-│   │   ├── build_graph.py          # ontology/*.ttl → Oxigraph
-│   │   ├── build_schema_index.py   # TBox comment → pgvector
+│   │   ├── build_rdb.py            # CSV/enriched/relations → PostgreSQL
+│   │   ├── build_graph.py          # [미구현 목표] ontology/*.ttl → Oxigraph
+│   │   ├── build_bond_index.py     # TBox comment → pgvector
 │   │   ├── build_schema_catalog.py # RDB table/column/type/PK/FK catalog 생성
-│   │   ├── build_content_index.py  # 서술형 데이터 → Content Vector Index
+│   │   ├── build_content_index.py  # [미구현 목표] Content Vector Index
 │   │   └── ids.py                  # 식별자 정규화 단일 구현
 │   │
 │   ├── api.py                      # FastAPI 진입점
@@ -166,13 +165,11 @@ docs/      = 명세/실험 기록
 
 | 문서                                                   | 내용                              |
 | ---------------------------------------------------- | ------------------------------- |
-| `docs_raw/EDA_REPORT.md`                             | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
-| `docs_raw/COLUMN_GUIDE.md`                           | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
-| `docs_data_layer/DATA_LAYER_PLAN.md`                 | 계층·파일명·출처 규칙의 **단일 기준**         |
-| `docs_data_layer/EXTERNAL_DATA_SOURCES.md`           | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `docs_data_layer/EXTERNAL_DATA_PLAN.md`              | 외부데이터 우선순위(35문항 blocking 기준)    |
-| `docs_raw/QUERY_COVERAGE_35.md`                      | 35문항 커버리지 매트릭스                  |
-| `docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교               |
-| `docs_data_layer/DATA_INVENTORY.md`                  | 자동 생성. 직접 편집 금지                 |
-
-
+| `EDA/EDA_REPORT.md`                                  | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
+| `docs/docs_data_layer/COLUMN_GUIDE.md`               | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
+| `docs/docs_data_layer/DATA_LAYER_PLAN.md`            | 계층·파일명·출처 규칙의 **단일 기준**         |
+| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
+| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`    | 외부데이터 우선순위(35문항 blocking 기준)    |
+| `docs/QUERY_COVERAGE_35.md`                          | 35문항 커버리지 매트릭스                  |
+| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교          |
+| `docs/docs_data_layer/DATA_INVENTORY.md`             | 자동 생성. 직접 편집 금지                 |

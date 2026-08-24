@@ -22,9 +22,9 @@ data/relations/  롱포맷 관계 테이블 (주어ID, 목적어, source, as_of)
 data/external/   외부 수집 원천 (EXTERNAL_DATA_PLAN.md 규칙: as_of ≤ 2026-07-11, 사이드카 JSON)
 ontology/*.ttl   relations + enriched 스키마에서 생성
 
-EDA/*.py         실행 스크립트 (build_*.py 파생 생성, collect_*.py 수집, validate_*.py 검증)
+script/*.py      실행 스크립트 (build_*.py 파생 생성, collect_*.py 수집, validate_*.py 검증)
 EDA/src/*.py     jupytext 노트북 소스 전용 (01~05). 실행 스크립트를 여기 두지 않는다
-docs_raw/ · docs_data_layer/ · docs_data_collection/  문서
+docs/docs_data_layer/ · docs/docs_data_collection/  문서
 ```
 
 ### 파일명 규칙
@@ -39,11 +39,11 @@ docs_raw/ · docs_data_layer/ · docs_data_collection/  문서
 
 ## 외부 원천 → 관계 테이블 파이프라인
 
-`data/external/`은 **원천 보관소**이고 질의에 직접 쓰이지 않는다. 반드시 `EDA/build_*.py`를 거쳐 정규화된 `data/relations/` 또는 `data/enriched/`로 떨어뜨린 뒤 사용한다.
+`data/external/`은 **원천 보관소**이고 질의에 직접 쓰이지 않는다. 반드시 `script/build_*.py`를 거쳐 정규화된 `data/relations/` 또는 `data/enriched/`로 떨어뜨린 뒤 사용한다.
 
 ```
 data/external/{항목}/{파일} + 사이드카 JSON(source, as_of, retrieved_at, url)
-        │  EDA/build_*.py — 식별자 정규화, 조인키 매핑, as_of·source 부여
+        │  script/build_*.py — 식별자 정규화, 조인키 매핑, as_of·source 부여
         ▼
 data/relations/*.csv (관계) 또는 data/enriched/*.csv (스칼라)
         │  ontology 빌드
@@ -58,7 +58,7 @@ ontology/*.ttl
 1. **원본 동결**: `data/csv/`에는 원본 변환본만 둔다. 값 수정·컬럼 추가는 물론 파생 테이블 저장도 금지. 깨진 행(펀드 itm_no=`"`) 배제도 파생 테이블에서만.
 2. **출처 컬럼 필수**: 보강 스칼라에는 `{컬럼}_source`를, 관계 테이블에는 `source`·`as_of`를 붙인다 (`RDB` = 주최측 값, `LSEG` 등 = 외부). 답변 evidence가 이 컬럼을 그대로 인용한다.
 3. **우선순위**: 주최측 값이 0이 아닌 실값이면 주최측 우선 → 결측·0.0 더미면 외부로 보완 → 둘 다 없으면 결측 유지("확인할 수 없음" 대상).
-4. **재현 가능**: 모든 파생 테이블은 `EDA/build_*.py` 스크립트로 생성한다. 수작업 편집 금지.
+4. **재현 가능**: 모든 파생 테이블은 `script/build_*.py` 스크립트로 생성한다. 수작업 편집 금지.
 
 ## 산출물 현황
 
@@ -74,16 +74,16 @@ ontology/*.ttl
 | `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | 외부 DART `corpCode` + KIND 상장법인목록 | `build_company_relations.py` |
 | `data/enriched/holding_code_map.csv` | 편입종목 ticker6 1,393종 식별자 해소: 정확매칭 1,211 / 모ETF 72(`etf_isin`) / 우선주→보통주 20(`common_ticker`) / 미해소 90(대부분 회사채 코드 — 오매칭 위험으로 공란 유지). `match_rule`로 판정 근거 기록 | 내부 파생 (`etf_holding.csv` + `company_master.csv` + 주최측 `PREF01N001`) | `build_holding_code_map.py` |
 | `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (29,524행, 모회사 2,266사) 롱포맷. 자회사는 법인명 문자열이라 `child_corp_code`로 마스터에 되붙임(**행 기준 30.33%** = 8,955/29,524, 판정 근거는 `child_match_rule`: unique_name 7,780 / clean_unique_name 868 / unique_listed 275 / clean_unique_listed 32). 고유 자회사명 기준으로는 **26.48%**(6,572/24,818)다 — **두 수치는 분모가 다를 뿐 둘 다 맞다. 인용할 때 기준을 함께 적는다**. 비상장 동명이인·사명변경은 미매칭 유지. `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | 외부 DART `otrCprInvstmntSttus`(타법인출자현황) | `collect_dart.py` → `build_company_relations.py` |
-| `ontology/instances_*.ttl` | 위 관계·마스터 테이블의 TTL 인스턴스 5파일(1,392,833트리플, 47MB). fp:Holding·fp:SubsidiaryRelation n-ary, 결정적 출력. **gitignore 대상**(재생성 가능·주최측 데이터 파생) | 내부 파생 (위 `data/relations/`·`data/enriched/` 전체) | `build_ontology_instances.py` (검증 `validate_ontology.py`) |
-| `docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | 내부 파생 (위 전체) | `build_data_inventory.py` |
+| `ontology/instances_*.ttl` | 위 관계·마스터 테이블의 TTL 인스턴스 5파일(1,392,793트리플, 약 64MB). fp:Holding·fp:SubsidiaryRelation n-ary, 결정적 출력. **gitignore 대상**(재생성 가능·주최측 데이터 파생) | 내부 파생 (위 `data/relations/`·`data/enriched/` 전체) | `build_ontology_instances.py` (검증 `validate_ontology.py`) |
+| `docs/docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | 내부 파생 (위 전체) | `build_data_inventory.py` |
 
 채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
 
 ## 변경 추적
 
-데이터 구조 변경 이력은 수기 changelog 대신 `docs_data_layer/DATA_INVENTORY.md`의 `git diff`로 관리한다.
+데이터 구조 변경 이력은 수기 changelog 대신 `docs/docs_data_layer/DATA_INVENTORY.md`의 `git diff`로 관리한다.
 
-1. 원본 교체·파생 테이블 추가·컬럼 변경이 생기면 `python3 EDA/build_data_inventory.py`를 재실행한다.
+1. 원본 교체·파생 테이블 추가·컬럼 변경이 생기면 `python3 script/build_data_inventory.py`를 재실행한다.
 2. 갱신된 `DATA_INVENTORY.md`를 함께 커밋한다. `git diff`가 곧 "어느 파일의 어느 컬럼이 언제 바뀌었나"의 답이 된다.
 3. 문서는 직접 편집하지 않는다. 출력은 결정적이어야 하므로 생성 시각 같은 매 실행마다 바뀌는 값을 넣지 않는다(diff 노이즈 방지).
 

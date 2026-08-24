@@ -8,12 +8,12 @@
 
 | Store | 정의 대상 | 상태 |
 |---|---|---|
-| PostgreSQL/RDB | 3 schema, 12 tables, 312 columns | 빌더 구현; live DB 미확인 |
-| PostgreSQL/pgvector | 2 tables, 12 columns | 빌더 구현; live DB 미확인 |
+| PostgreSQL/RDB | 3 schema, 12 tables, 312 columns | live DB 검증 완료 (2026-08-24) |
+| PostgreSQL/pgvector | 2 tables, 12 columns | live DB 검증 완료 (2026-08-24) |
 | RDF Graph | TBox 5 + ABox 5 TTL | TTL 생성·검증 완료; pyoxigraph runtime 미구현 |
 | Content Vector | 해당 없음 | 미구현 |
 
-“구현”은 저장소에 재생성 가능한 코드와 검증 규칙이 있다는 뜻이다. 현 세션에서는 PostgreSQL 접속을 확인하지 못했으므로 실제 배포 DB 적재 완료를 뜻하지 않는다.
+RDB는 원천 예상 행수와 live DB 행수, PK/FK 20개, cutoff 위반 0건을 대조했다. pgvector는 `bond_schema_terms` 130행과 `schema_terms_all` 188행이 모두 1024차원이고 embedding NULL이 없음을 확인했다.
 
 ## 2. PostgreSQL RDB 객체
 
@@ -61,7 +61,7 @@ erDiagram
 | `comment` | text | N | 근거가 되는 TBox 설명 |
 | `alt_labels` | text[] | N | 검색용 대체 라벨 |
 | `content` | text | N | URI·label·altLabel·comment 결합 문자열 |
-| `embedding` | vector(1024) | N | HyperCLOVA X/CLOVA Studio 임베딩 |
+| `embedding` | vector(1024) | N | CLOVA Studio `bge-m3` 임베딩 |
 
 | Table | Rows | Source | Runtime use |
 |---|---:|---|---|

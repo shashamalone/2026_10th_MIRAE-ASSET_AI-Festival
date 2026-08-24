@@ -53,6 +53,14 @@ Agent의 4대 필수 구성요소입니다.
 
 ### RDB vertical slice (현재 구현 범위)
 
+데이터 구축 현행과 전달용 정의서는 아래 문서를 기준으로 한다.
+
+- [현재 데이터 구축 프로세스와 DB 구조](docs/docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md)
+- [DB Table 정의서 v1.0](docs/docs_data_layer/TABLE_DEFINITION_V1_0.md)
+
+현재 RDB와 Schema Vector는 PostgreSQL·pgvector 빌더가 구현돼 있다. Graph는 TBox/ABox
+TTL 생성·검증 단계이며 pyoxigraph runtime은 아직 구현되지 않았다.
+
 평가 질문 중 RDB만으로 답할 수 있는 14문항(`q001~q003`, `q005~q013`,
 `q017~q018`)은 다음 경로로 실행한다.
 
