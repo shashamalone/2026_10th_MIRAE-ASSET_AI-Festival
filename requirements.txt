@@ -12,7 +12,8 @@ requests
 rdflib
 
 # KnowledgeBase
-faiss-cpu         # 스키마 벡터 인덱스 (cosine = 정규화 후 IndexFlatIP)
+psycopg[binary]   # PostgreSQL 드라이버 (스키마 벡터 인덱스)
+pgvector          # vector 타입 + cosine 연산자(<=>). PostgreSQL 확장도 설치 필요
 
 # Agent
 langgraph

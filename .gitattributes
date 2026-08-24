@@ -1,0 +1,11 @@
+# 이 저장소는 Windows 경로(/mnt/c)에 있고 WSL Git 과 Windows Git 이 섞여 쓰인다.
+# Windows Git 의 core.autocrlf 기본값(true)이 체크아웃 때 CRLF 를 넣어,
+# 2026-08-22 에 추적 파일 71개가 내용 변경 없이 통째로 "수정됨"이 된 적이 있다.
+# diff 가 통째로 오염되면 무엇이 실제로 바뀌었는지 볼 수 없다. 그 재발을 막는다.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.pyc  binary
+*.faiss binary
+*.xlsx binary

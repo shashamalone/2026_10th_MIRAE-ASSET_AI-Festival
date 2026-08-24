@@ -7,7 +7,8 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# 런타임 모듈(agent/tools/config/clova)은 저장소 루트가 아니라 src/ 아래에 있다.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from agent.agent_core import ask  # noqa: E402
 
 QUESTIONS = ["채권의 위험등급은 어떻게 정의돼?",

@@ -1,0 +1,128 @@
+{
+ "model": "HCX-DASH-002",
+ "schema_version": "v1-draft",
+ "n": 4,
+ "structure": {
+  "parsed": 4,
+  "schema_ok": 1,
+  "leaks": 0
+ },
+ "slots": {
+  "domain_candidates": {
+   "gold": 5,
+   "pred": 3,
+   "tp": 3,
+   "recall": 0.6,
+   "precision": 1.0
+  },
+  "targets": {
+   "gold": 3,
+   "pred": 1,
+   "tp": 1,
+   "recall": 0.3333333333333333,
+   "precision": 1.0
+  },
+  "entities": {
+   "gold": 2,
+   "pred": 0,
+   "tp": 0,
+   "recall": 0.0,
+   "precision": null
+  },
+  "constraints": {
+   "gold": 7,
+   "pred": 6,
+   "tp": 3,
+   "recall": 0.42857142857142855,
+   "precision": 0.5
+  },
+  "relations": {
+   "gold": 1,
+   "pred": 0,
+   "tp": 0,
+   "recall": 0.0,
+   "precision": null
+  },
+  "ordering": {
+   "gold": 1,
+   "pred": 1,
+   "tp": 1,
+   "recall": 1.0,
+   "precision": 1.0
+  },
+  "computation": {
+   "gold": 0,
+   "pred": 0,
+   "tp": 0,
+   "recall": null,
+   "precision": null
+  },
+  "ambiguity": {
+   "gold": 0,
+   "pred": 0,
+   "tp": 0,
+   "recall": null,
+   "precision": null
+  },
+  "validation_targets": {
+   "gold": 1,
+   "pred": 0,
+   "tp": 0,
+   "recall": 0.0,
+   "precision": null
+  }
+ },
+ "exact": {
+  "task": {
+   "ok": 2,
+   "n": 4,
+   "acc": 0.5
+  },
+  "limit": {
+   "ok": 2,
+   "n": 4,
+   "acc": 0.5
+  },
+  "temporal": {
+   "ok": 4,
+   "n": 4,
+   "acc": 1.0
+  },
+  "entity role": {
+   "ok": 0,
+   "n": 0,
+   "acc": null
+  },
+  "operator": {
+   "ok": 3,
+   "n": 3,
+   "acc": 1.0
+  },
+  "value": {
+   "ok": 3,
+   "n": 3,
+   "acc": 1.0
+  },
+  "unit": {
+   "ok": 1,
+   "n": 1,
+   "acc": 1.0
+  },
+  "sort direction": {
+   "ok": 1,
+   "n": 1,
+   "acc": 1.0
+  },
+  "relation 양끝": {
+   "ok": 0,
+   "n": 0,
+   "acc": null
+  }
+ },
+ "validation": {
+  "recall": "0/1",
+  "fp": "0/3"
+ },
+ "latency_p50": 7.044878244400024,
+ "latency_p95": 7.396214962005615
+}

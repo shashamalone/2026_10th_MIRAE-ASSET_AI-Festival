@@ -1,0 +1,12 @@
+{"question_id":"a01","question":"안전한 채권 추천해줘","domain_candidates":["bond_kr"],"task":["recommendation","filter_rank"],"spans":[["안전한","안전"]]}
+{"question_id":"a02","question":"수익성 좋은 ETF 찾아줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["수익성 좋은","수익성","좋은"]]}
+{"question_id":"a03","question":"규모가 큰 ETF 알려줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["규모가 큰","규모","큰"]]}
+{"question_id":"a04","question":"장기투자에 적합한 상품 추천해줘","domain_candidates":["bond_kr","etf_kr","etf_gl","fund_pub"],"task":["recommendation","filter_rank"],"spans":[["장기투자에 적합한","장기투자","적합한"]]}
+{"question_id":"a05","question":"위험하지 않은 펀드 알려줘","domain_candidates":["fund_pub"],"task":["recommendation","filter_rank"],"spans":[["위험하지 않은","위험"]]}
+{"question_id":"a06","question":"요즘 잘 나가는 반도체 ETF 알려줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["요즘 잘 나가는","잘 나가는","요즘"]],"concrete":["반도체"]}
+{"question_id":"a07","question":"괜찮은 미국 ETF 하나 추천해줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["괜찮은"]],"concrete":["미국"]}
+{"question_id":"a08","question":"안정적인 채권형 ETF 찾아줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["안정적인","안정"]],"concrete":["채권형","채권"]}
+{"question_id":"a09","question":"저평가된 채권 있어?","domain_candidates":["bond_kr"],"task":["recommendation","filter_rank","lookup"],"spans":[["저평가된","저평가"]]}
+{"question_id":"a10","question":"초보자에게 좋은 펀드 추천해줘","domain_candidates":["fund_pub"],"task":["recommendation","filter_rank"],"spans":[["초보자에게 좋은","초보자","좋은"]]}
+{"question_id":"a11","question":"요즘 뜨는 테마 ETF 알려줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["요즘 뜨는","뜨는","요즘"]],"concrete":["테마"]}
+{"question_id":"a12","question":"보수가 합리적인 ETF 골라줘","domain_candidates":["etf_kr","etf_gl"],"task":["recommendation","filter_rank"],"spans":[["보수가 합리적인","합리적인","합리적"]],"concrete":["보수"]}
