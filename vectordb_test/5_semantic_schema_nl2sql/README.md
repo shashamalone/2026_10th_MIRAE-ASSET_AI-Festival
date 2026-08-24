@@ -1,4 +1,4 @@
-# Action 3 — Semantic Schema Context
+# Semantic Schema Context
 
 Planner에 주는 metadata만 A(Physical Schema), B(+TBox), C(+Business Context)로
 바꿔 NL2SQL과 multi-source routing을 비교한다. Gold와 입력 snapshot은 첫 HCX 호출

@@ -8,7 +8,7 @@
 guard 는 장식이 아니라 계약이다. 실측에서 결정적 규칙 두 개가 프롬프트로 못 잡던 것을
 잡았다 — 단일값 in → == 로 operator 88%→100%, 날짜 없는 as_of → latest_snapshot 으로
 temporal 94.1%→100%. 그 규칙들이 살아 있는지 여기서 지킨다.
-전체 35문항 측정은 vectordb_test/5_query_frame_v1/eval_query_frame.py 가 한다.
+전체 35문항 측정은 vectordb_test/4_query_frame_v1/eval_query_frame.py 가 한다.
 """
 import sys
 from pathlib import Path

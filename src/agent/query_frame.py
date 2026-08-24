@@ -6,7 +6,7 @@
 만들어내면 안 된다 — 그건 2·2.5단계의 일이고, 여기서 하면 근거 없는 확정이 된다.
 
 35문항 + 모호질의 12문항 실측으로 확정했다. 근거·전체 수치는
-vectordb_test/5_query_frame_v1/README.md 에 있다. 요약:
+vectordb_test/4_query_frame_v1/4_result_query_frame_v1.md 에 있다. 요약:
 
   구조 유효성      35/35 (보정 전 스키마 준수)
   계약 등급 슬롯    operator·unit·temporal 100% / task·limit 97.1% / value 95.0%

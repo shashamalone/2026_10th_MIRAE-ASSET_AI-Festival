@@ -51,6 +51,26 @@ Agent의 4대 필수 구성요소입니다.
     * [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
     * [환각 방지] 데이터에 없는 내용은 추측하지 않음
 
+### RDB vertical slice (현재 구현 범위)
+
+평가 질문 중 RDB만으로 답할 수 있는 14문항(`q001~q003`, `q005~q013`,
+`q017~q018`)은 다음 경로로 실행한다.
+
+`HyperCLOVA X QueryFrame → verified metadata grounding → deterministic validation → LogicalPlan → constrained PostgreSQL SELECT → evidence 응답`
+
+- QueryFrame은 의미 후보이며 SQL 컬럼·조인의 권위가 아니다. 실제 매핑은
+  `metadata/schema_bindings.json`과 `metadata/business_rules.json`으로 제한한다.
+- 존재하지 않는 등급, 미래 확정값, 도메인 위반, 완전일치 상품 부재 및 실행 오류는
+  추측하지 않고 `ABSTAIN`(`확인할 수 없음`)한다.
+- 응답 필드는 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`로 고정한다.
+- 이 단계에서는 Graph/Vector 검색과 자유 생성 NL2SQL을 사용하지 않는다.
+
+```bash
+python3 src/kb/build_schema_catalog.py --check
+python3 script/test_rdb_vertical_slice.py
+python3 script/test_rdb_vertical_slice.py --db
+```
+
 </br></br>
 
 ---

@@ -1,0 +1,97 @@
+{
+  "experiment": "rdb_vertical_slice_v1",
+  "measured_at": "2026-08-24T20:23:17+09:00",
+  "data_cutoff": "2026-07-11",
+  "question_ids": [
+    "q001",
+    "q002",
+    "q003",
+    "q005",
+    "q006",
+    "q007",
+    "q008",
+    "q009",
+    "q010",
+    "q011",
+    "q012",
+    "q013",
+    "q017",
+    "q018"
+  ],
+  "environment": {
+    "frame_model": "HCX-007",
+    "chat_timeout_seconds": 13,
+    "statement_timeout_ms": 2000,
+    "max_rows": 10000,
+    "worktree_dirty": true
+  },
+  "inputs": {
+    "query_frames": {
+      "path": "vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl",
+      "sha256": "e57dd4f918caf72467bcaacd7b2b6f4bd1ce1fbf084219d520560c12ed307268"
+    },
+    "gold_nl2sql": {
+      "path": "vectordb_test/5_semantic_schema_nl2sql/gold/gold_nl2sql.json",
+      "sha256": "671c7298ce4caa241543ac66b4eadbba9e09d49dece32b8de7f0187f291be9ba"
+    },
+    "schema_bindings": {
+      "path": "metadata/schema_bindings.json",
+      "sha256": "6a8ae73605fa0919f5b7ad3dd895ad794a1dadbd5268fa5f0c7cbd6eb30f6303"
+    },
+    "business_rules": {
+      "path": "metadata/business_rules.json",
+      "sha256": "7a80c5c25fc06bbba5fe6bef3558518f442de3e1636e61ed2cd0b2f68c7899d6"
+    }
+  },
+  "offline": {
+    "static_plans": {
+      "passed": 14,
+      "total": 14
+    },
+    "required_schema_contract": {
+      "passed": 14,
+      "total": 14
+    },
+    "schema_hallucinations": 0,
+    "evidence_complete": {
+      "passed": 14,
+      "total": 14
+    },
+    "langgraph_contract": "pass",
+    "db_execution_exact": {
+      "passed": 14,
+      "total": 14,
+      "source": "current_run"
+    }
+  },
+  "live": {
+    "question_id": "q018",
+    "historical_observation": [
+      {
+        "attempt": 1,
+        "status": "abstain_timeout",
+        "latency_seconds": 12.093,
+        "timeout_seconds": 12,
+        "response_fields": 5,
+        "evidence_count": 0
+      },
+      {
+        "attempt": 2,
+        "status": "abstain_timeout",
+        "latency_seconds": 12.232,
+        "timeout_seconds": 12,
+        "response_fields": 5,
+        "evidence_count": 0
+      },
+      {
+        "attempt": 3,
+        "status": "success",
+        "latency_seconds": 6.56,
+        "timeout_seconds": 13,
+        "response_fields": 5,
+        "evidence_count": 10
+      }
+    ],
+    "current_run": []
+  }
+}

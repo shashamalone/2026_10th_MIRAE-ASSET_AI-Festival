@@ -31,7 +31,7 @@ import query_frame as qf  # noqa: E402
 
 GOLD = HERE / "gold"
 RESULTS = HERE / "results"
-A3 = ROOT / "vectordb_test" / "action3_semantic_schema" / "gold"
+A3 = ROOT / "vectordb_test" / "5_semantic_schema_nl2sql" / "gold"
 
 # ── 텍스트 매칭 ────────────────────────────────────────────────────────────
 # 한국어 자연어를 exact match 로 채점하면 표현 차이로 전부 틀린다. gold 는 별칭

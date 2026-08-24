@@ -1,0 +1,128 @@
+{
+ "model": "HCX-007",
+ "schema_version": "v1-draft",
+ "n": 34,
+ "structure": {
+  "parsed": 34,
+  "schema_ok": 34,
+  "leaks": 1
+ },
+ "slots": {
+  "domain_candidates": {
+   "gold": 45,
+   "pred": 42,
+   "tp": 41,
+   "recall": 0.9111111111111111,
+   "precision": 0.9761904761904762
+  },
+  "targets": {
+   "gold": 38,
+   "pred": 38,
+   "tp": 36,
+   "recall": 0.9473684210526315,
+   "precision": 0.9473684210526315
+  },
+  "entities": {
+   "gold": 31,
+   "pred": 27,
+   "tp": 26,
+   "recall": 0.8387096774193549,
+   "precision": 0.9629629629629629
+  },
+  "constraints": {
+   "gold": 28,
+   "pred": 27,
+   "tp": 18,
+   "recall": 0.6428571428571429,
+   "precision": 0.6666666666666666
+  },
+  "relations": {
+   "gold": 11,
+   "pred": 11,
+   "tp": 10,
+   "recall": 0.9090909090909091,
+   "precision": 0.9090909090909091
+  },
+  "ordering": {
+   "gold": 6,
+   "pred": 5,
+   "tp": 5,
+   "recall": 0.8333333333333334,
+   "precision": 1.0
+  },
+  "computation": {
+   "gold": 10,
+   "pred": 6,
+   "tp": 5,
+   "recall": 0.5,
+   "precision": 0.8333333333333334
+  },
+  "ambiguity": {
+   "gold": 2,
+   "pred": 5,
+   "tp": 2,
+   "recall": 1.0,
+   "precision": 0.4
+  },
+  "validation_targets": {
+   "gold": 5,
+   "pred": 1,
+   "tp": 1,
+   "recall": 0.2,
+   "precision": 1.0
+  }
+ },
+ "exact": {
+  "task": {
+   "ok": 33,
+   "n": 34,
+   "acc": 0.9705882352941176
+  },
+  "limit": {
+   "ok": 33,
+   "n": 34,
+   "acc": 0.9705882352941176
+  },
+  "temporal": {
+   "ok": 33,
+   "n": 33,
+   "acc": 1.0
+  },
+  "entity role": {
+   "ok": 23,
+   "n": 26,
+   "acc": 0.8846153846153846
+  },
+  "operator": {
+   "ok": 18,
+   "n": 18,
+   "acc": 1.0
+  },
+  "value": {
+   "ok": 12,
+   "n": 13,
+   "acc": 0.9230769230769231
+  },
+  "unit": {
+   "ok": 6,
+   "n": 6,
+   "acc": 1.0
+  },
+  "sort direction": {
+   "ok": 4,
+   "n": 5,
+   "acc": 0.8
+  },
+  "relation 양끝": {
+   "ok": 6,
+   "n": 10,
+   "acc": 0.6
+  }
+ },
+ "validation": {
+  "recall": "1/5",
+  "fp": "0/29"
+ },
+ "latency_p50": 4.6212053298950195,
+ "latency_p95": 7.310314416885376
+}

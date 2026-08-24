@@ -39,8 +39,9 @@ BOND_SCORE_FLOOR = 0.45
 EMBEDDING_MODEL = "bge-m3"        # 1024차원, cosine (CLOVA Studio)
 # 1단계 Query Frame 추출. HCX-005·HCX-DASH-002 와 대표 4문항으로 비교해 정했다 —
 # 스키마 준수 4/4 vs 2/4 vs 1/4. DASH-002 의 속도 이점은 프롬프트가 길어지면서
-# 사라졌다(출력 토큰이 지연을 지배한다). 근거: vectordb_test/5_query_frame_v1/README.md
+# 사라졌다(출력 토큰이 지연을 지배한다). 근거: vectordb_test/4_query_frame_v1/4_result_query_frame_v1.md
 FRAME_MODEL = "HCX-007"
 ANSWER_MODEL = "HCX-005"          # 답변 생성
+CHAT_TIMEOUT_SECONDS = 13           # API tail stall은 재시도 없이 ABSTAIN해 15초 E2E를 지킨다
 
 CLOVA_HOST = "https://clovastudio.stream.ntruss.com"
