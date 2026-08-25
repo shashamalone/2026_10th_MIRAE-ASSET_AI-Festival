@@ -9,6 +9,11 @@
 `2026-08-24` 스냅샷은 평가 cutoff 이후의 look-ahead 자료이므로 v2 빌드에
 사용하지 않는다.
 
+엔진별 정의서는 [RDB](docs/docs_data_layer/RDB_DEFINITION_V2_0.md),
+[VectorDB](docs/docs_data_layer/VECTORDB_DEFINITION_V2_0.md),
+[GraphDB](docs/docs_data_layer/GRAPHDB_DEFINITION_V2_0.md)로 분리되어 있으며 모두
+`src/kb/build_catalog_v2.py`에서 자동 생성한다.
+
 ```bash
 python script/build_catalog_v2.py --check
 python script/build_data_platform_v2.py --check

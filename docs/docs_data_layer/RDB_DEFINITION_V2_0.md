@@ -1,8 +1,101 @@
-# TABLE DEFINITION V2.0
+# RDB DEFINITION V2.0
 
-자동 생성 파일입니다. 모든 물리 컬럼은 승인 CSV 스키마 또는 `src/kb/catalog_v2.py`의 단일 카탈로그에서 생성됩니다.
+자동 생성 파일입니다. 직접 편집하지 말고 `python src/kb/build_catalog_v2.py`를 실행합니다.
+물리 정의의 정본은 [단일 카탈로그](../../src/kb/catalog_v2.py)와 [PostgreSQL DDL](../../sql/v2/001_platform_schema.sql)입니다. `vec.*` 상세는 [VectorDB 정의서](VECTORDB_DEFINITION_V2_0.md)가 소유합니다.
 
-## `raw.bond_kr_master`
+- 데이터 버전: `financial-products-2026-07-11`
+- 배포일: `2026-07-11`
+- 외부 근거 cutoff: `2026-07-11`
+
+## 범위와 엔진
+
+- 엔진: PostgreSQL 17
+- 물리 스키마: `meta`, `raw`, `enriched`, `relations`
+- 공개 호환 스키마: `core` 및 코드명 `raw.*` 뷰
+- stage 배포: 동일 DB의 `*_next`에서 검증 후 트랜잭션으로 정식 이름에 승격
+- API 계정: `agent_reader`; 읽기 전용, statement timeout 2초, 최대 100행
+
+## 데이터 스냅샷 계약
+
+- 전체 snapshot SHA-256: `0f27e46933a327bd313458a6ef69c456e956c21921497e216675ebb4b1e0aec0`
+- 공백만 NULL로 변환하고 숫자 0과 내부 코드는 원문 그대로 보존합니다.
+- 원천별 실질 기준일은 파일명 날짜가 아니라 실제 날짜축의 최댓값입니다.
+
+| 코드 | 원천 파일 | 원천 행 | 적재 행 | 열 | PK | 실질 기준일 | SHA-256 |
+|---|---|---:|---:|---:|---|---|---|
+| PRBD01N001 | `PRBD01N001_bond_kr_master_20260711.csv` | 42,394 | 42,394 | 40 | `pd_no` | 2026-02-24 | `e62894688f48c7a56735024d64881e34c1d7bfead3c1b8800c8f2b4d5f47cc3e` |
+| PREF01N001 | `PREF01N001_etf_kr_master_20260711.csv` | 1,734 | 1,734 | 73 | `pd_itm_no` | 2026-06-15 | `0f8a1d0ac3f755f450a5a3ea7ff11c2e1fbe8f2210282d5e7d20c46eca92481f` |
+| PREF02N001 | `PREF02N001_etf_gl_master_20260711.csv` | 5,646 | 5,646 | 49 | `pd_itm_no` | 2026-06-16 | `ada15bc0da0327db226e9ffc2e223e60f71c7f9977e34868af20295aabc166a1` |
+| PRFD01N001 | `PRFD01N001_fund_pub_master_20260711.csv` | 95,619 | 95,618 | 45 | `itm_no, prfd_attr_cd` | 2026-07-11 | `073a5f13c775422dd343bdf870a3184d2743cdde95923e297045dba6b9bb4ed1` |
+
+## 스키마별 책임
+
+| 스키마 | 책임 | 물리 테이블 | 뷰/MV |
+|---|---|---:|---:|
+| `meta` | snapshot, 적재 이력, 컬럼 카탈로그, 상품별 coverage | 4 | 0 |
+| `raw` | 승인 CSV의 공식 컬럼·타입·grain 보존 | 4 | 4 |
+| `enriched` | 공통 상품·지표·식별자와 도메인별 1상품 grain | 11 | 2 |
+| `relations` | 문서·편입·분류·자회사·상품문서 관계 | 5 | 0 |
+| `core` | 기존 Agent 호환 읽기 뷰 | 0 | 5 |
+
+## 테이블 목록
+
+| 스키마 | 테이블 | 종류 | grain | PK | 인덱스 | 상태 |
+|---|---|---|---|---|---|---|
+| `raw` | `bond_kr_master` | table | 국내 채권 상품 | `pd_no` | pd_no | 구현=구현, 배포=미배포 |
+| `raw` | `etf_kr_master` | table | 국내 ETF/ETN 상품 | `pd_itm_no` | pd_itm_no | 구현=구현, 배포=미배포 |
+| `raw` | `etf_gl_master` | table | 해외 ETF/ETN 상품 | `pd_itm_no` | pd_itm_no | 구현=구현, 배포=미배포 |
+| `raw` | `fund_pub_master` | table | 공모펀드 클래스 속성 | `itm_no, prfd_attr_cd` | itm_no,prfd_attr_cd | 구현=구현, 배포=미배포 |
+| `meta` | `dataset_snapshot` | table | 데이터셋 빌드 스냅샷 | `snapshot_id` | PK만 | 구현=구현, 배포=미배포 |
+| `meta` | `load_run` | table | 1회 적재 실행 | `run_id` | PK만 | 구현=구현, 배포=미배포 |
+| `meta` | `column_catalog` | table | 물리 컬럼 1개 | `table_schema, table_name, ordinal_position` | PK만 | 구현=구현, 배포=미배포 |
+| `meta` | `product_coverage` | table | 상품×스냅샷 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `product_master` | table | 공통 상품 1개 | `product_id` | product_type, name, source_table,source_key | 구현=구현, 배포=미배포 |
+| `enriched` | `bond_kr_product` | table | 국내채권 pd_no 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `bond_kr_offer` | table | 채권×시장×기준일×판매 LOT | `pd_no, exchange_market, info_base_dt, info_seq` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `etf_kr` | table | 국내 ETF 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `etf_gl` | table | 해외 ETF 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `etn_kr` | table | 국내 ETN 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `etn_gl` | table | 해외 ETN 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `fund` | table | 펀드 itm_no 1개 | `product_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `product_metric` | table | 상품×지표×기준일×출처×방법 | `metric_id` | product_id,metric_code, metric_code,value DESC WHERE is_available | 구현=구현, 배포=미배포 |
+| `enriched` | `security_master` | table | 증권 1개 | `security_id` | PK만 | 구현=구현, 배포=미배포 |
+| `enriched` | `security_identifier` | table | 증권×식별자 유형×값 | `security_id, id_type, id_value` | id_type,id_value | 구현=구현, 배포=미배포 |
+| `relations` | `source_document` | table | 외부 근거 문서 1개 | `document_id` | PK만 | 구현=구현, 배포=미배포 |
+| `relations` | `product_holding` | table | 상품×편입증권×기준일×문서 | `holding_id` | product_id,as_of, security_id,as_of | 구현=구현, 배포=미배포 |
+| `relations` | `product_classification` | table | 상품×분류 유형×값×기준일 | `classification_id` | PK만 | 구현=구현, 배포=미배포 |
+| `relations` | `company_subsidiary` | table | 기업×자회사×기준일×문서 | `relation_id` | PK만 | 구현=구현, 배포=미배포 |
+| `relations` | `product_document` | table | 상품×문서×관계유형 | `product_id, document_id, relation_type` | PK만 | 구현=구현, 배포=미배포 |
+
+## 뷰와 materialized view
+
+| 이름 | 종류 | 원천 | 목적/필터 |
+|---|---|---|---|
+| `raw.prbd01n001` | view | `raw.bond_kr_master` | 코드명 호환 |
+| `raw.pref01n001` | view | `raw.etf_kr_master` | 코드명 호환 |
+| `raw.pref02n001` | view | `raw.etf_gl_master` | 코드명 호환 |
+| `raw.prfd01n001` | view | `raw.fund_pub_master` | 코드명 호환 |
+| `enriched.fund_pub` | view | `enriched.fund` | offering_type='공모' |
+| `core.bond_kr` | view | `enriched.bond_kr_product` | Agent 호환 |
+| `core.etf_kr` | view | `enriched.etf_kr` | Agent 호환 |
+| `core.etf_gl` | view | `enriched.etf_gl` | Agent 호환 |
+| `core.fund_pub` | view | `enriched.fund_pub` | Agent 호환 |
+| `core.etn` | view | `enriched.etn_kr UNION ALL enriched.etn_gl` | Agent 호환 |
+| `enriched.product_search` | materialized view | `product_master+product_metric+product_coverage` |  |
+
+## 핵심 데이터 규칙
+
+- `buyable_quantity`는 저장·표시 전용이며 구매가능 판정, 필터, 정렬에 사용하지 않습니다.
+- 채권 구매가능 가정은 최신 정본 존재와 명시적 만기 여부만 사용하고 판정 규칙을 함께 저장합니다.
+- 국내 원천의 ETF/ETN은 `pd_grp_no`로 분리하고 ETN에는 편입종목 개념을 적용하지 않습니다.
+- 펀드는 `(itm_no, prfd_attr_cd)` 원천 grain을 보존하고 상품 비교는 `itm_no` 대표행으로 중복 제거합니다.
+- 지표의 0/NULL/기준일 미확보는 `is_available=false`이며 랭킹과 비교에서 제외합니다.
+- `product_coverage.unavailable`은 관계 미확보이며 ‘보유하지 않음’을 뜻하지 않습니다.
+- 주최측에 존재하는 지표 축이 우선이며 축 자체가 없을 때만 cutoff를 통과한 외부값을 사용합니다.
+
+## 물리 테이블 상세
+
+### `raw.bond_kr_master`
 
 - 종류: table
 - 설명: PRBD01N001 공식 원천 42,394행
@@ -11,7 +104,7 @@
 - 인덱스: pd_no
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `pd_no` | `text` | N | 1 |  | 공식 문서 미표기 | pd_std_info_update |  | 빈 값=NULL; 0은 공식 코드/플래그 원문 보존; 의미 추측·임의 필터 금지 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 2 | `pd_exg_mkt` | `text` | Y |  |  | 공식 문서 미표기 | pd_std_info_update |  | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
@@ -54,7 +147,7 @@
 | 39 | `crd_grd` | `text` | Y |  |  | 공식 문서 미표기 | pd_std_info_update |  | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 40 | `crd_grd_dt` | `double precision` | Y |  |  | 공식 문서 미표기 | pd_std_info_update |  | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 
-## `raw.etf_kr_master`
+### `raw.etf_kr_master`
 
 - 종류: table
 - 설명: PREF01N001 공식 원천 1,734행
@@ -63,7 +156,7 @@
 - 인덱스: pd_itm_no
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `cu_base_index` | `text` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt | 기초지수 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 2 | `cu_charge_etc_rt` | `text` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt | 기타비용요율 | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
@@ -139,7 +232,7 @@
 | 72 | `wu_inv_rgn` | `text` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt | 투자지역 | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 73 | `wu_upt_dt` | `text` | Y |  |  | 공식 문서 미표기 | wu_upt_dt | 주간갱신일자 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 
-## `raw.etf_gl_master`
+### `raw.etf_gl_master`
 
 - 종류: table
 - 설명: PREF02N001 공식 원천 5,646행
@@ -148,7 +241,7 @@
 - 인덱스: pd_itm_no
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `cu_base_index` | `text` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt,du_clpr_base_dt,du_nav_base_dt |  | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 2 | `cu_charge_rt` | `numeric` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt,du_clpr_base_dt,du_nav_base_dt |  | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
@@ -200,7 +293,7 @@
 | 48 | `wu_inv_rgn` | `text` | Y |  |  | 공식 문서 미표기 | cu_upt_dt,du_upt_dt,wu_upt_dt,du_clpr_base_dt,du_nav_base_dt |  | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 49 | `wu_upt_dt` | `text` | Y |  |  | 공식 문서 미표기 | wu_upt_dt |  | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 
-## `raw.fund_pub_master`
+### `raw.fund_pub_master`
 
 - 종류: table
 - 설명: PRFD01N001 공식 원천 95,619행
@@ -209,7 +302,7 @@
 - 인덱스: itm_no,prfd_attr_cd
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `bmrk_eng_nm` | `text` | Y |  |  | 공식 문서 미표기 |  | 벤치마크영문명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 2 | `bmrk_nm` | `text` | Y |  |  | 공식 문서 미표기 |  | 벤치마크명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
@@ -257,7 +350,7 @@
 | 44 | `zrin_fd_ivst_risk_gcd` | `text` | Y |  |  | 공식 문서 미표기 |  | 제로인펀드투자위험등급코드 | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 | 45 | `zrin_fd_ivst_risk_grd_nm` | `text` | Y |  |  | 공식 문서 미표기 |  | 제로인펀드투자위험등급명 | 빈 값=NULL; 0은 raw에 보존하되 측정값 비교·랭킹에서는 값 없음 | 주최측(1순위) | 승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL |
 
-## `meta.dataset_snapshot`
+### `meta.dataset_snapshot`
 
 - 종류: table
 - 설명: 버전·배포일·도메인별 실질 기준일·8개 원천 해시
@@ -266,7 +359,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `snapshot_id` | `uuid` | N | 1 |  |  |  | 스냅샷 식별자 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `dataset_version` | `text` | N |  |  |  |  | 데이터 버전 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -277,7 +370,7 @@
 | 7 | `source_hash` | `text` | N |  |  |  |  | 전체 원천 manifest SHA-256 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 8 | `built_at` | `timestamptz` | N |  |  |  |  | 빌드 완료 시각 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `meta.load_run`
+### `meta.load_run`
 
 - 종류: table
 - 설명: 단계·시작/종료·행 수·검증 결과와 실패 사유
@@ -286,7 +379,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `run_id` | `uuid` | N | 1 |  |  |  | 적재 실행 식별자 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `snapshot_id` | `uuid` | N |  | meta.dataset_snapshot.snapshot_id |  |  | 대상 스냅샷 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -299,7 +392,7 @@
 | 9 | `validation_result` | `jsonb` | N |  |  |  |  | 검증 결과 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 10 | `error_message` | `text` | Y |  |  |  |  | 실패 사유 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `meta.column_catalog`
+### `meta.column_catalog`
 
 - 종류: table
 - 설명: 공식 설명·타입·단위·기준일·처리 규칙·출처 우선순위
@@ -308,7 +401,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `table_schema` | `text` | N | 1 |  |  |  | 물리 스키마 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `table_name` | `text` | N | 2 |  |  |  | 물리 테이블 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -328,7 +421,7 @@
 | 16 | `fk_target` | `text` | N |  |  |  |  | 참조 대상 schema.table.column | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 17 | `grain` | `text` | N |  |  |  |  | 테이블 그레인 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `meta.product_coverage`
+### `meta.product_coverage`
 
 - 종류: table
 - 설명: 관계·문서·성과 확보/미확보 상태와 사유
@@ -337,7 +430,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `holdings_status` | `text` | N |  |  |  |  | available/unavailable/not_applicable | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -349,7 +442,7 @@
 | 8 | `as_of` | `date` | N |  |  |  | as_of | 커버리지 판정 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 9 | `source_document_id` | `text` | Y |  | relations.source_document.document_id |  |  | 상태 근거 문서 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.product_master`
+### `enriched.product_master`
 
 - 종류: table
 - 설명: 전 상품 공통 식별자와 유형·국내/해외·통화·활성 상태
@@ -358,7 +451,7 @@
 - 인덱스: product_type, name, source_table,source_key
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 |  |  |  | 도메인 접두 공통 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `source_table` | `text` | N |  |  |  |  | 주최측 코드 테이블 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -373,7 +466,7 @@
 | 11 | `snapshot_date` | `date` | N |  |  |  | effective_as_of | 주최측 배포일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 12 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 도메인 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.bond_kr_product`
+### `enriched.bond_kr_product`
 
 - 종류: table
 - 설명: 최신 offer에서 접은 상품 속성과 보수적 구매가능 가정
@@ -382,7 +475,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `pd_no` | `text` | N |  |  |  |  | 채권 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -398,7 +491,7 @@
 | 12 | `purchasable_rule` | `text` | N |  |  |  |  | BUYABLE_QUANTITY 미사용 판정 규칙 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 13 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 채권 정보 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.bond_kr_offer`
+### `enriched.bond_kr_offer`
 
 - 종류: table
 - 설명: 채권 수익률·가격·판매 LOT; BUYABLE_QUANTITY는 저장 전용
@@ -407,7 +500,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `pd_no` | `text` | N | 1 |  |  |  | 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `exchange_market` | `text` | N | 2 |  |  |  | 시장 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -422,7 +515,7 @@
 | 11 | `trade_price` | `double precision` | Y |  |  |  |  | 거래가격 | NULL 또는 0이면 is_available=false; 비교·랭킹 제외 및 '값 없음' 표시 | 주최측(1순위) | 파생 |
 | 12 | `buyable_quantity` | `numeric(26,8)` | Y |  |  |  |  | 저장 전용 매수가능수량; 판매 판정 사용 금지 | 원본 0/NULL 보존; 판정·필터·정렬 사용 금지 | 주최측(1순위) | 파생 |
 
-## `enriched.etf_kr`
+### `enriched.etf_kr`
 
 - 종류: table
 - 설명: pd_grp_no='ETF'만 명시 분리
@@ -431,7 +524,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `pd_itm_no` | `text` | N |  |  |  |  | 원천 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -445,7 +538,7 @@
 | 10 | `delisting_date` | `date` | Y |  |  |  |  | 상장종료일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 11 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.etf_gl`
+### `enriched.etf_gl`
 
 - 종류: table
 - 설명: pd_grp_no='ETF'만 명시 분리
@@ -454,7 +547,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `pd_itm_no` | `text` | N |  |  |  |  | 원천 RIC 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -467,7 +560,7 @@
 | 9 | `inception_date` | `date` | Y |  |  |  | pd_lstg_dt | 설정일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | yyyymmdd(pd_lstg_dt); 상장일로 해석 금지 |
 | 10 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.etn_kr`
+### `enriched.etn_kr`
 
 - 종류: table
 - 설명: 국내 ETF 원천의 pd_grp_no='ETN' 분리
@@ -476,7 +569,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `pd_itm_no` | `text` | N |  |  |  |  | 원천 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -489,7 +582,7 @@
 | 9 | `delisting_date` | `date` | Y |  |  |  |  | 상장종료일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 10 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.etn_gl`
+### `enriched.etn_gl`
 
 - 종류: table
 - 설명: 해외 ETF 원천의 pd_grp_no='ETN' 분리
@@ -498,7 +591,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `pd_itm_no` | `text` | N |  |  |  |  | 원천 RIC 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -510,7 +603,7 @@
 | 8 | `inception_date` | `date` | Y |  |  |  | pd_lstg_dt | 설정일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | yyyymmdd(pd_lstg_dt); 상장일로 해석 금지 |
 | 9 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.fund`
+### `enriched.fund`
 
 - 종류: table
 - 설명: 공모·사모 전체 보존; fund_pub 뷰에서 공모만 노출
@@ -519,7 +612,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `itm_no` | `text` | N |  |  |  |  | 펀드 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -531,7 +624,7 @@
 | 8 | `currency` | `text` | Y |  |  |  |  | 통화 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 9 | `effective_as_of` | `date` | N |  |  |  | effective_as_of | 성과 실질 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.product_metric`
+### `enriched.product_metric`
 
 - 종류: table
 - 설명: AUM·수익률·보수 등 공통 지표와 값 미확보 상태
@@ -540,7 +633,7 @@
 - 인덱스: product_id,metric_code, metric_code,value DESC WHERE is_available
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `metric_id` | `text` | N | 1 |  |  |  | 결정적 지표 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `product_id` | `text` | N |  | enriched.product_master.product_id |  |  | 공통 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -555,7 +648,7 @@
 | 11 | `unavailable_reason` | `text` | Y |  |  |  |  | NULL/0/권한 미확보 등 사유 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 12 | `source_priority` | `smallint` | N |  |  |  |  | 1=주최측, 2=외부 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.security_master`
+### `enriched.security_master`
 
 - 종류: table
 - 설명: 편입증권·기업의 통합 식별자
@@ -564,7 +657,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `security_id` | `text` | N | 1 |  |  |  | 결정적 증권 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `display_name` | `text` | N |  |  |  |  | 표시명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -572,7 +665,7 @@
 | 4 | `issuer_name` | `text` | Y |  |  |  |  | 발행사명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 5 | `country_code` | `text` | Y |  |  |  |  | 국가 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `enriched.security_identifier`
+### `enriched.security_identifier`
 
 - 종류: table
 - 설명: ISIN·국내 티커·RIC·Bloomberg 표기 통합
@@ -581,14 +674,14 @@
 - 인덱스: id_type,id_value
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `security_id` | `text` | N | 1 | enriched.security_master.security_id |  |  | 증권 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `id_type` | `text` | N | 2 |  |  |  | ISIN/KR_TICKER/RIC/BLOOMBERG | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 3 | `id_value` | `text` | N | 3 |  |  |  | 식별자 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 4 | `is_primary` | `boolean` | N |  |  |  |  | 해당 유형의 대표 식별자 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `relations.source_document`
+### `relations.source_document`
 
 - 종류: table
 - 설명: 문서명·발행기관·발행일·URL·원천 해시
@@ -597,7 +690,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `document_id` | `text` | N | 1 |  |  |  | 결정적 문서 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `title` | `text` | N |  |  |  |  | 문서명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
@@ -609,7 +702,7 @@
 | 8 | `as_of` | `date` | Y |  |  |  | as_of | 문서가 증명하는 기준일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 | 9 | `ingested_at` | `timestamptz` | N |  |  |  |  | 수집 시각 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 
-## `relations.product_holding`
+### `relations.product_holding`
 
 - 종류: table
 - 설명: ETF·펀드 공통 편입관계; 미확보는 coverage로 분리
@@ -618,7 +711,7 @@
 - 인덱스: product_id,as_of, security_id,as_of
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `holding_id` | `text` | N | 1 |  |  |  | 결정적 관계 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `product_id` | `text` | N |  | enriched.product_master.product_id |  |  | 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -629,7 +722,7 @@
 | 7 | `source_document_id` | `text` | N |  | relations.source_document.document_id |  |  | 직접 근거 문서 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 | 8 | `source` | `text` | N |  |  |  |  | 운용사/DART 원천 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 
-## `relations.product_classification`
+### `relations.product_classification`
 
 - 종류: table
 - 설명: 상품↔테마·섹터·지역 관계
@@ -638,7 +731,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `classification_id` | `text` | N | 1 |  |  |  | 결정적 관계 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `product_id` | `text` | N |  | enriched.product_master.product_id |  |  | 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -648,7 +741,7 @@
 | 6 | `source_document_id` | `text` | Y |  | relations.source_document.document_id |  |  | 직접 근거 문서 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 7 | `source` | `text` | N |  |  |  |  | 원천 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `relations.company_subsidiary`
+### `relations.company_subsidiary`
 
 - 종류: table
 - 설명: 기업↔자회사 n-ary 관계와 지분율
@@ -657,7 +750,7 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `relation_id` | `text` | N | 1 |  |  |  | 결정적 관계 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `parent_security_id` | `text` | N |  | enriched.security_master.security_id |  |  | 모회사 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -667,7 +760,7 @@
 | 6 | `source_document_id` | `text` | N |  | relations.source_document.document_id |  |  | DART 근거 문서 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 | 7 | `source` | `text` | N |  |  |  |  | 원천 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
 
-## `relations.product_document`
+### `relations.product_document`
 
 - 종류: table
 - 설명: 상품과 투자설명서·보고서·구성내역 연결
@@ -676,90 +769,16 @@
 - 인덱스: PK만
 - 상태: 구현=구현, 배포=미배포
 
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
+| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 축 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
 |---:|---|---|:---:|---:|---|---|---|---|---|---|---|
 | 1 | `product_id` | `text` | N | 1 | enriched.product_master.product_id |  |  | 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 2 | `document_id` | `text` | N | 2 | relations.source_document.document_id |  |  | 문서 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 3 | `relation_type` | `text` | N | 3 |  |  |  | prospectus/report/holdings | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 
-## `vec.bond_schema_terms`
+## 적재·검증·권한
 
-- 종류: table
-- 설명: common+bond TBox 주석 130행 CLOVA bge-m3 임베딩
-- grain: 채권 TBox grounding term 1개
-- PK: `term_uri`
-- 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
-- 상태: 구현=구현, 배포=미배포
-
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
-|---:|---|---|:---:|---:|---|---|---|---|---|---|---|
-| 1 | `term_uri` | `text` | N | 1 |  |  |  | TBox URI | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 2 | `label` | `text` | N |  |  |  |  | 라벨 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 3 | `comment` | `text` | N |  |  |  |  | 설명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 4 | `alt_labels` | `text[]` | N |  |  |  |  | 대체 표기 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 5 | `content` | `text` | N |  |  |  |  | 임베딩 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 6 | `content_hash` | `text` | N |  |  |  |  | 원문 SHA-256 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 7 | `embedding_model` | `text` | N |  |  |  |  | bge-m3 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 8 | `embedding_dim` | `smallint` | N |  |  |  |  | 1024 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 9 | `embedding` | `vector(1024)` | N |  |  |  |  | CLOVA 임베딩 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-
-## `vec.schema_terms_all`
-
-- 종류: table
-- 설명: 5개 TBox 주석 189행 CLOVA bge-m3 임베딩
-- grain: 전체 TBox grounding term 1개
-- PK: `term_uri`
-- 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
-- 상태: 구현=구현, 배포=미배포
-
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
-|---:|---|---|:---:|---:|---|---|---|---|---|---|---|
-| 1 | `term_uri` | `text` | N | 1 |  |  |  | TBox URI | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 2 | `label` | `text` | N |  |  |  |  | 라벨 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 3 | `comment` | `text` | N |  |  |  |  | 설명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 4 | `alt_labels` | `text[]` | N |  |  |  |  | 대체 표기 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 5 | `content` | `text` | N |  |  |  |  | 임베딩 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 6 | `content_hash` | `text` | N |  |  |  |  | 원문 SHA-256 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 7 | `embedding_model` | `text` | N |  |  |  |  | bge-m3 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 8 | `embedding_dim` | `smallint` | N |  |  |  |  | 1024 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 9 | `embedding` | `vector(1024)` | N |  |  |  |  | CLOVA 임베딩 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-
-## `vec.document_chunk`
-
-- 종류: table
-- 설명: 문서·상품·페이지·발행일·인용 위치가 있는 콘텐츠 임베딩
-- grain: 문서 청크 1개
-- PK: `chunk_id`
-- 인덱스: embedding vector_cosine_ops (HNSW), document_id, product_id
-- 상태: 구현=구현, 배포=미배포
-
-| # | 컬럼 | 타입 | NULL | PK | FK | 단위 | 기준일 | 설명 | 0/결측 | 출처 우선순위 | 변환식 |
-|---:|---|---|:---:|---:|---|---|---|---|---|---|---|
-| 1 | `chunk_id` | `text` | N | 1 |  |  |  | 결정적 청크 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 2 | `document_id` | `text` | N |  | relations.source_document.document_id |  |  | 근거 문서 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 3 | `product_id` | `text` | Y |  | enriched.product_master.product_id |  |  | 연결 상품 ID | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 4 | `page_number` | `integer` | Y |  |  |  |  | 원문 페이지 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 5 | `citation_text` | `text` | N |  |  |  |  | 인용 위치/문장 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 6 | `chunk_text` | `text` | N |  |  |  |  | 임베딩 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 7 | `published_at` | `date` | N |  |  |  | published_at | 문서 발행일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
-| 8 | `source_url` | `text` | N |  |  |  |  | 원문 URL | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측 축 미존재 시 검증된 외부 원천(2순위) | 파생 |
-| 9 | `content_hash` | `text` | N |  |  |  |  | 원문 SHA-256 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 10 | `embedding_model` | `text` | N |  |  |  |  | bge-m3 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 11 | `embedding_dim` | `smallint` | N |  |  |  |  | 1024 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 12 | `embedding` | `vector(1024)` | N |  |  |  |  | CLOVA 임베딩 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-
-## 호환 뷰와 검색 뷰
-
-| 이름 | 종류 | 원천/정의 | 목적/필터 |
-|---|---|---|---|
-| `raw.prbd01n001` | view | `raw.bond_kr_master` | 코드명 호환 |
-| `raw.pref01n001` | view | `raw.etf_kr_master` | 코드명 호환 |
-| `raw.pref02n001` | view | `raw.etf_gl_master` | 코드명 호환 |
-| `raw.prfd01n001` | view | `raw.fund_pub_master` | 코드명 호환 |
-| `enriched.fund_pub` | view | `enriched.fund` | offering_type='공모' |
-| `core.bond_kr` | view | `enriched.bond_kr_product` | Agent 호환 |
-| `core.etf_kr` | view | `enriched.etf_kr` | Agent 호환 |
-| `core.etf_gl` | view | `enriched.etf_gl` | Agent 호환 |
-| `core.fund_pub` | view | `enriched.fund_pub` | Agent 호환 |
-| `core.etn` | view | `enriched.etn_kr UNION ALL enriched.etn_gl` | Agent 호환 |
-| `enriched.product_search` | materialized view | `product_master+product_metric+product_coverage` |  |
+1. 승인 manifest, SHA-256, 행·열, 헤더, PK, cutoff를 검사합니다.
+2. `raw_next` 적재 후 `meta_next`, `enriched_next`, `relations_next`, `core_next`를 생성합니다.
+3. PK 유일성, FK orphan, 지표 날짜축, 0/NULL, 구매가능 규칙을 검증합니다.
+4. 모든 계층 검증 후 `*_next`를 정식 이름으로 승격하고 기존 정식 스키마는 `*_prev`로 보존합니다.
+5. 승격 직후 [읽기 권한 SQL](../../sql/v2/100_readonly_grants.sql)을 다시 적용합니다.

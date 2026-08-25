@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""공식 XLSX+단일 카탈로그에서 v2 정의서 4종을 결정적으로 생성한다."""
+"""승인 CSV·단일 카탈로그·TBox에서 v2 문서/카탈로그를 결정적으로 생성한다."""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kb.catalog_v2 import VIEW_DEFINITIONS, TableDef, build_catalog  # noqa: E402
+from kb.db_definition_docs_v2 import (  # noqa: E402
+    graph_definition_markdown,
+    rdb_definition_markdown,
+    vector_definition_markdown,
+)
 from kb.v2_manifest import (  # noqa: E402
     DATASET_VERSION,
     EXTERNAL_CUTOFF,
@@ -27,6 +32,9 @@ OUTPUTS = {
     "definition_md": DOC_DIR / "TABLE_DEFINITION_V2_0.md",
     "definition_csv": DOC_DIR / "table_definition_v2_0.csv",
     "agent_catalog": ROOT / "metadata" / "schema_catalog.json",
+    "rdb_definition": DOC_DIR / "RDB_DEFINITION_V2_0.md",
+    "vector_definition": DOC_DIR / "VECTORDB_DEFINITION_V2_0.md",
+    "graph_definition": DOC_DIR / "GRAPHDB_DEFINITION_V2_0.md",
 }
 
 
@@ -88,6 +96,12 @@ Git에 넣지 않고 이 카탈로그, 코드, SQL, 문서와 체크섬만 공�
 
 호환 뷰와 materialized view는 `TABLE_DEFINITION_V2_0.md`의 뷰 절을 따릅니다.
 
+## 엔진별 정의서
+
+- [RDB 정의서](RDB_DEFINITION_V2_0.md): PostgreSQL `meta/raw/enriched/relations/core`
+- [VectorDB 정의서](VECTORDB_DEFINITION_V2_0.md): pgvector `vec.*`, embedding·HNSW 계약
+- [GraphDB 정의서](GRAPHDB_DEFINITION_V2_0.md): Oxigraph TBox/ABox, named graph·URI·관계 계약
+
 ## 핵심 의미 규칙
 
 - `buyable_quantity`는 raw/offer 저장 전용이며 구매가능 판정·필터·정렬에 사용하지 않습니다.
@@ -106,7 +120,7 @@ def definition_markdown(catalog: tuple[TableDef, ...]) -> str:
     sections = [
         "# TABLE DEFINITION V2.0",
         "",
-        "자동 생성 파일입니다. 모든 물리 컬럼은 공식 XLSX 또는 `src/kb/catalog_v2.py`의 단일 카탈로그에서 생성됩니다.",
+        "자동 생성 파일입니다. 모든 물리 컬럼은 승인 CSV 스키마 또는 `src/kb/catalog_v2.py`의 단일 카탈로그에서 생성됩니다.",
         "",
     ]
     for table in catalog:
@@ -258,6 +272,9 @@ def build_outputs(data_dir: str | Path | None = None) -> dict[Path, str]:
         OUTPUTS["definition_md"]: definition_markdown(catalog),
         OUTPUTS["definition_csv"]: definition_csv(catalog),
         OUTPUTS["agent_catalog"]: agent_catalog(inspections, catalog),
+        OUTPUTS["rdb_definition"]: rdb_definition_markdown(inspections, catalog),
+        OUTPUTS["vector_definition"]: vector_definition_markdown(catalog),
+        OUTPUTS["graph_definition"]: graph_definition_markdown(),
     }
 
 
@@ -277,7 +294,7 @@ def write_or_check(outputs: dict[Path, str], check: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="v2 데이터 카탈로그 4종 생성")
+    parser = argparse.ArgumentParser(description="v2 데이터 카탈로그와 DB 정의서 생성")
     parser.add_argument("--data-dir", help="2026-07-11 승인 CSV와 _conversion_manifest.json 디렉터리")
     parser.add_argument(
         "--check", action="store_true", help="어떤 파일도 쓰지 않고 재생성 결과만 비교"

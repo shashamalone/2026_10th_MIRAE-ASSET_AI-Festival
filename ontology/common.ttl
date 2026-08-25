@@ -67,13 +67,13 @@ fp:ETF a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
     owl:disjointWith fp:Bond ;
     rdfs:label "상장지수펀드"@ko, "Exchange Traded Fund"@en ;
-    rdfs:comment "거래소 상장 지수연동 펀드. 최신 정본의 국내 1,235종·해외 5,972종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
+    rdfs:comment "거래소 상장 지수연동 펀드. 2026-07-11 정본의 국내 1,202종·해외 5,587종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
 
 fp:ETN a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
     owl:disjointWith fp:ETF, fp:Bond ;
     rdfs:label "상장지수증권"@ko, "Exchange Traded Note"@en ;
-    rdfs:comment "발행 증권사의 채무증권. 최신 정본의 국내 545종·해외 65종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다."@ko .
+    rdfs:comment "발행 증권사의 채무증권. 2026-07-11 정본의 국내 532종·해외 59종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다."@ko .
 
 # 국내/해외 ETF·ETN은 원천·통화·가용 축이 달라 ABox에서 별도 클래스로 유지한다.
 # grounding 중복을 피하기 위해 상세 설명은 각 도메인 온톨로지 헤더에 둔다.

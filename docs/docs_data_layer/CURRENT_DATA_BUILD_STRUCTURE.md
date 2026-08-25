@@ -45,6 +45,12 @@ Git에 넣지 않고 이 카탈로그, 코드, SQL, 문서와 체크섬만 공�
 
 호환 뷰와 materialized view는 `TABLE_DEFINITION_V2_0.md`의 뷰 절을 따릅니다.
 
+## 엔진별 정의서
+
+- [RDB 정의서](RDB_DEFINITION_V2_0.md): PostgreSQL `meta/raw/enriched/relations/core`
+- [VectorDB 정의서](VECTORDB_DEFINITION_V2_0.md): pgvector `vec.*`, embedding·HNSW 계약
+- [GraphDB 정의서](GRAPHDB_DEFINITION_V2_0.md): Oxigraph TBox/ABox, named graph·URI·관계 계약
+
 ## 핵심 의미 규칙
 
 - `buyable_quantity`는 raw/offer 저장 전용이며 구매가능 판정·필터·정렬에 사용하지 않습니다.

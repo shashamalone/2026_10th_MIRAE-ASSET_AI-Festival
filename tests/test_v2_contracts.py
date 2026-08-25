@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import unittest
 from datetime import date
@@ -55,6 +56,37 @@ class SourceContractTest(unittest.TestCase):
         self.assertEqual(payload["dataset_version"], DATASET_VERSION)
         self.assertEqual(payload["snapshot_hash"], snapshot_hash(self.inspections))
         self.assertEqual(payload["business_rules"]["buyable_quantity"], "storage_only_never_use_for_purchasability")
+
+    def test_three_database_definitions_cover_their_owned_objects(self):
+        outputs = build_outputs()
+        rdb_path = ROOT / "docs" / "docs_data_layer" / "RDB_DEFINITION_V2_0.md"
+        vector_path = ROOT / "docs" / "docs_data_layer" / "VECTORDB_DEFINITION_V2_0.md"
+        graph_path = ROOT / "docs" / "docs_data_layer" / "GRAPHDB_DEFINITION_V2_0.md"
+        rdb, vector, graph = (outputs[path] for path in (rdb_path, vector_path, graph_path))
+        catalog = build_catalog(self.inspections)
+        for table in catalog:
+            owner = vector if table.schema == "vec" else rdb
+            other = rdb if table.schema == "vec" else vector
+            heading = f"### `{table.fq_name}`"
+            self.assertEqual(owner.count(heading), 1, table.fq_name)
+            self.assertNotIn(heading, other, table.fq_name)
+        for name in ("common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl"):
+            self.assertIn(f"../../ontology/{name}", graph)
+        for required in ("fp:Holding", "fp:SubsidiaryRelation", "fp:hasAssetType", "named graph"):
+            self.assertIn(required, graph)
+
+    def test_generated_database_definition_links_exist(self):
+        outputs = build_outputs()
+        paths = [
+            ROOT / "docs" / "docs_data_layer" / "RDB_DEFINITION_V2_0.md",
+            ROOT / "docs" / "docs_data_layer" / "VECTORDB_DEFINITION_V2_0.md",
+            ROOT / "docs" / "docs_data_layer" / "GRAPHDB_DEFINITION_V2_0.md",
+        ]
+        for path in paths:
+            for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", outputs[path]):
+                if "://" in target:
+                    continue
+                self.assertTrue((path.parent / target).resolve().exists(), f"{path.name}: {target}")
 
     def test_august_snapshot_is_rejected_before_load(self):
         august = ROOT.parent / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
