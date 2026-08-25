@@ -7,7 +7,7 @@
 출력은 **결정적**이다 — 정렬된 순서, 타임스탬프 없음. 두 번 실행하면 바이트 동일하다.
 
 URI 규칙 (인스턴스 전용 프리픽스 fpi: = http://mafest.ai/instance/)
-    fpi:bond-{PD_NO}          국내채권      fpi:etfkr-{pd_itm_no}  국내ETF
+    fpi:bond-{pd_no}          국내채권      fpi:etfkr-{pd_itm_no}  국내ETF
     fpi:etfgl-{pd_itm_no}     해외ETF/ETN   fpi:fund-{itm_no}      공모펀드
     fpi:corp-{corp_code}      DART 고유번호로 특정된 기업/발행사
     fpi:corp-n-{정규화명}      고유번호 미매칭 기업 (동명이인 5,532종은 특정 불가)
@@ -114,7 +114,8 @@ class Doc:
 
 
 t0 = time.time()
-read = lambda p, **kw: pd.read_csv(ROOT / p, dtype=str, keep_default_na=False, **kw)  # noqa: E731
+read = lambda p, **kw: pd.read_csv(  # noqa: E731
+    ROOT / p, dtype=str, keep_default_na=False, encoding="utf-8-sig", **kw)
 
 # ── 코드리스트 매핑 ─────────────────────────────────────────────────────────
 # 원본 CSV 값("남미/북미") → 온톨로지 개체(fp:Region_Americas) 사전을 **스키마 TTL에서 읽는다**.
@@ -284,38 +285,40 @@ RATING = {"AAA": "AAA", "AA+": "AAp", "AA": "AA", "AA-": "AAm", "A+": "Ap", "A":
           "BBB+": "BBBp", "BBB": "BBB", "BBB-": "BBBm", "BB+": "BBp", "BB": "BB", "BB-": "BBm",
           "B+": "Bp", "B": "B", "B-": "Bm", "CCC": "CCC", "CC": "CC", "C": "C"}
 
-bond = read("data/csv/PRBD01N001_bond_kr_master_20260711.csv")
-_ben = read("data/enriched/bond_kr_enriched.csv").set_index("PD_NO")
+bond = read("data/csv/PRBD01N001_bond_kr_master_20260824.csv")
+_bond_key = ["pd_no", "pd_exg_mkt", "info_seq"]
+_ben = read("data/enriched/bond_kr_enriched.csv").set_index(_bond_key)
 grade = _ben.crd_grd_norm.to_dict()
 MATBUCKET = _ben.maturity_bucket.to_dict()
 
-d_bond = Doc("fp-instances-bond-kr — 국내채권 42,394종",
-             "출처: PRBD01N001_bond_kr_master_20260711.csv + data/enriched/bond_kr_enriched.csv")
-for r in bond.sort_values("PD_NO").itertuples(index=False):
-    g = grade.get(r.PD_NO, "")
-    pairs = [("a", BOND_CLASS.get(r.STD_PD_MCLS_NM, "fp:Bond")),
-             ("rdfs:label", lit(r.PD_NM)),
-             ("fp:productCode", lit(r.PD_NO)),
-             ("fp:productName", lit(r.PD_NM))]
-    if r.PD_PBCM.strip():
-        pairs.append(("fp:issuedBy", company(r.PD_PBCM, kind="Issuer")))
+d_bond = Doc(f"fp-instances-bond-kr — 국내채권 {bond.pd_no.nunique():,}종({len(bond):,}행)",
+             "출처: PRBD01N001_bond_kr_master_20260824.csv + data/enriched/bond_kr_enriched.csv")
+for r in bond.sort_values(_bond_key).itertuples(index=False):
+    key = (r.pd_no, r.pd_exg_mkt, r.info_seq)
+    g = grade.get(key, "")
+    pairs = [("a", BOND_CLASS.get(r.std_pd_mcls_nm, "fp:Bond")),
+             ("rdfs:label", lit(r.pd_nm)),
+             ("fp:productCode", lit(r.pd_no)),
+             ("fp:productName", lit(r.pd_nm))]
+    if r.pd_pbcm.strip():
+        pairs.append(("fp:issuedBy", company(r.pd_pbcm, kind="Issuer")))
     if g in RATING:
         pairs += [("fp:hasCreditRating", f"fp:Rating_{RATING[g]}"), ("fp:ratingStatus", "fp:Rated")]
     else:  # 국공채·개인투자용국채의 등급 결측은 '미평가가 정상'(UnratedByDesign)
         pairs.append(("fp:ratingStatus", "fp:UnratedByDesign"
-                      if BOND_CLASS.get(r.STD_PD_MCLS_NM) == "fp:GovernmentBond" else "fp:RatingUnknown"))
+                      if BOND_CLASS.get(r.std_pd_mcls_nm) == "fp:GovernmentBond" else "fp:RatingUnknown"))
     pairs += links(
         rating_band(g),
-        link("fp:hasRiskGrade", CL_RISK, r.PD_RISK_GCD),
-        link("fp:hasCurrency", CL_CURR, r.CURR_CD),
-        link("fp:hasBondIssuerType", CL_BISSUER, r.STD_PD_MCLS_NM),
-        link("fp:hasIssuanceMarket", CL_MARKET, r.PD_CTRY_CD),
-        link("fp:hasTradingMarket", CL_TRADING, r.PD_EXG_MKT),
-        link("fp:hasMaturityClass", CL_MATURITY, MATBUCKET.get(r.PD_NO, "")))
-    d_bond.add(f"fpi:bond-{esc(r.PD_NO)}", pairs)
+        link("fp:hasRiskGrade", CL_RISK, r.pd_risk_gcd),
+        link("fp:hasCurrency", CL_CURR, r.curr_cd),
+        link("fp:hasBondIssuerType", CL_BISSUER, r.std_pd_mcls_nm),
+        link("fp:hasIssuanceMarket", CL_MARKET, r.pd_ctry_cd),
+        link("fp:hasTradingMarket", CL_TRADING, r.pd_exg_mkt),
+        link("fp:hasMaturityClass", CL_MATURITY, MATBUCKET.get(key, "")))
+    d_bond.add(f"fpi:bond-{esc(r.pd_no)}", pairs)
 
 # ── 2. 국내ETF (ETN 제외) + 편입관계 + 테마 ─────────────────────────────────
-etf_kr = read("data/csv/PREF01N001_etf_kr_master_20260711.csv")
+etf_kr = read("data/csv/PREF01N001_etf_kr_master_20260824.csv")
 etf_kr = etf_kr[etf_kr.pd_grp_no == "ETF"].sort_values("pd_itm_no")
 ETF_URI = {c: f"fpi:etfkr-{esc(c)}" for c in etf_kr.pd_itm_no}
 
@@ -329,8 +332,8 @@ hold = read("data/relations/etf_holding.csv").sort_values(
     ["pd_itm_no", "holding_code_raw", "holding_name", "weight"], kind="stable")
 hold["seq"] = hold.groupby(["pd_itm_no", "holding_code_raw"]).cumcount()  # 동일 (ETF,종목) 1,370건
 theme = read("data/relations/etf_theme.csv").sort_values(["pd_itm_no", "theme"])
-fund = read("data/enriched/fund_pub_dedup.csv").sort_values("itm_no")
-SAME = {k: v for k, v in zip(fund.ksd_itm_no, fund.itm_no) if k in ETF_URI}  # 동일상품 47종
+fund = read("data/csv/PRFD01N001_fund_pub_master_20260824.csv").sort_values("itm_no")
+SAME = {k: v for k, v in zip(fund.ksd_itm_no, fund.itm_no) if k in ETF_URI}
 
 holdings_by_etf, hold_rows = {}, []
 for r in hold.itertuples(index=False):
@@ -385,9 +388,9 @@ missing = {i.strip("<>") for i in theme_iris} - declared
 assert not missing, f"etf_kr.ttl에 없는 테마 URI {len(missing)}건: {sorted(missing)[:5]}"
 
 # ── 3. 해외ETF/ETN ─────────────────────────────────────────────────────────
-etf_gl = read("data/csv/PREF02N001_etf_gl_master_20260711.csv").sort_values("pd_itm_no")
-d_gl = Doc("fp-instances-etf-gl — 해외ETF 5,587종 + ETN 59종",
-           "출처: PREF02N001_etf_gl_master_20260711.csv (pd_grp_no로 ETF/ETN 분리)")
+etf_gl = read("data/csv/PREF02N001_etf_gl_master_20260824.csv").sort_values("pd_itm_no")
+d_gl = Doc(f"fp-instances-etf-gl — 해외ETF·ETN {len(etf_gl):,}종",
+           "출처: PREF02N001_etf_gl_master_20260824.csv (pd_grp_no로 ETF/ETN 분리)")
 for r in etf_gl.itertuples(index=False):
     d_gl.add(f"fpi:etfgl-{esc(r.pd_itm_no)}",
              [("a", "fp:ETN" if r.pd_grp_no == "ETN" else "fp:ETF"),
@@ -403,8 +406,8 @@ for r in etf_gl.itertuples(index=False):
                      link("fp:hasInvestmentRegion", CL_REGION, r.wu_inv_rgn)))
 
 # ── 4. 공모펀드 ────────────────────────────────────────────────────────────
-d_fund = Doc("fp-instances-fund-pub — 공모펀드 11,138종(itm_no dedup)",
-             "출처: data/enriched/fund_pub_dedup.csv. 사모 15종·구분 결측 8종은 fp:PublicFund가"
+d_fund = Doc(f"fp-instances-fund-pub — 펀드 {len(fund):,}종(itm_no 유일)",
+             "출처: PRFD01N001_fund_pub_master_20260824.csv. 사모·구분 결측 상품은 fp:PublicFund가"
              "\n# 공모 한정 클래스이므로 fp:Product로만 선언한다(스키마 fp:PublicFund 주석 준수).")
 for r in fund.itertuples(index=False):
     pub = r.prvo_pbff_desc == "공모"

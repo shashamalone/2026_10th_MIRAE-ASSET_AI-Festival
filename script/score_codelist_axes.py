@@ -94,8 +94,13 @@ print(f"{'도메인':<10}{'축':<26}{'우리 값 있음':>12}{'정답 일치':>1
 print("-" * 104)
 grand_hit = grand_have = 0
 for table, pk, prefix, axes in SPEC:
-    gold = pd.read_csv(ROOT / f"data/csv/{table}_axis_sample_20260711.csv",
-                       dtype=str, keep_default_na=False)
+    paths = list((ROOT / "data/csv").glob(f"{table}_axis_sample_*.csv"))
+    if not paths:
+        print(f"{table.split('_',1)[1]:<10}{'-':<26}{0:>12}{0:>10}{'—':>9}   주최측 axis_sample 미배포")
+        continue
+    if len(paths) != 1:
+        raise SystemExit(f"{table}: axis_sample 파일 {len(paths)}개 — 기준일을 하나로 확정할 수 없음")
+    gold = pd.read_csv(paths[0], dtype=str, keep_default_na=False, encoding="utf-8-sig")
     abox = load_abox(INST[table], prefix)
     for axis, prop in axes:
         if axis not in gold.columns:

@@ -1,10 +1,14 @@
 # 국내ETF 보강 테이블(enriched) + ETF↔테마 관계 테이블 생성
 # 매칭 규칙(05_linkage 검증): lseg 키 == pd_itm_no_ma[1:] (선두 A=ETF/Q=ETN 제거)
 import json
+from pathlib import Path
+
 import pandas as pd
 
-master = pd.read_csv("data/csv/PREF01N001_etf_kr_master_20260711.csv", dtype=str, keep_default_na=False)
-lseg = json.load(open("lseg_static_metadata.json", encoding="utf-8"))
+ROOT = Path(__file__).resolve().parent.parent
+
+master = pd.read_csv(ROOT / "data/csv/PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False, encoding="utf-8-sig")
+lseg = json.load(open(ROOT / "data/lseg_static_metadata.json", encoding="utf-8"))
 
 enr = master[["pd_itm_no", "pd_itm_no_ma", "pd_grp_no", "pd_abrv_nm", "cu_charge_rt"]].copy()
 enr["lseg_key"] = enr["pd_itm_no_ma"].str[1:]

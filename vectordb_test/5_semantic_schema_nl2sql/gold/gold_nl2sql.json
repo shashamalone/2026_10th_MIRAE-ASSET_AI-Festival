@@ -1,31 +1,30 @@
 {
   "meta": {
-    "data_cutoff": "2026-07-11",
-    "expected_queries_sha256": "323574bdebc557abf26211cb7aeace3f939b2cd9375ccc75edf6439a48d64e0b",
-    "catalog_sha256": "859bc233c90363dec379eca7d377bc398d75a3ed94e5b9fc617180522d519852",
+    "data_cutoff": "2026-08-24",
+    "expected_queries_sha256": "c4498ff7f1cee566d7e753efb804e98413ed7bfe35df6dc12d35528d4e409c29",
+    "catalog_sha256": "7a9762840e88adffaceeb849bf27a00ea6d441311db98a4d720e9b4953bc55f0",
     "snapshot": {
-      "data/csv/PRBD01N001_bond_kr_master_20260711.csv": "dff9cd80c10c7f95c445cf7f08b44ef14d9c17fc5188c83c909cc160baf3c524",
-      "data/csv/PREF01N001_etf_kr_master_20260711.csv": "0f8a1d0ac3f755f450a5a3ea7ff11c2e1fbe8f2210282d5e7d20c46eca92481f",
-      "data/csv/PREF02N001_etf_gl_master_20260711.csv": "ada15bc0da0327db226e9ffc2e223e60f71c7f9977e34868af20295aabc166a1",
-      "data/csv/PRFD01N001_fund_pub_master_20260711.csv": "073a5f13c775422dd343bdf870a3184d2743cdde95923e297045dba6b9bb4ed1",
-      "data/enriched/bond_kr_enriched.csv": "f8975346a3459e2cc5ee67430b0b5dfe6143e793da78ee4199f5baa83c861abd",
+      "data/csv/PRBD01N001_bond_kr_master_20260824.csv": "02621aa5e5c1e955b81ce5bc01d70ca91d577e7db2dbae7c9e87036a74ff4c61",
+      "data/csv/PREF01N001_etf_kr_master_20260824.csv": "89359782d5b021e5bf87809147405b1d228f41dd83929936504bf4a7718d1509",
+      "data/csv/PREF02N001_etf_gl_master_20260824.csv": "b168b3b171bc91a08afefb456031a3616c85952e57a47952615336ed6fd3879f",
+      "data/csv/PRFD01N001_fund_pub_master_20260824.csv": "eb0bd982c8b3c41b1f37b0b07ee6a479bebc4348f93d6daec1fd635ac2aeb1f7",
+      "data/enriched/bond_kr_enriched.csv": "165a097ba8d8fd6b3083fe291726fdd10dc4aedf83c291d30ea2d82ce1045849",
       "data/enriched/company_master.csv": "6d8209008d0e804ca992b4366a865ad6707c92f5b5db793eefab9cca0ab048c5",
-      "data/enriched/etf_kr_enriched.csv": "2b8dcc0136ce30a0b0310337b912835f45c3a0f9509e34c55db7bdd409508f98",
-      "data/enriched/fund_pub_dedup.csv": "4a2e5d1c5f35160833211cdfb927a523e123e1b1b6953140bd517a9cfa7b6f5e",
+      "data/enriched/etf_kr_enriched.csv": "75a35676dd7c231a0d72338d14e55c4a455489f4f38e865be512cc2f02ebec6d",
       "data/enriched/holding_code_map.csv": "ced692143a64011d495a7715b73b20096c263c787d1be7574eb9f3ec162b15ad",
-      "data/relations/company_subsidiary.csv": "7f0aba07ee34a9457b44b6d8c2d2ff009330aaca7ba3951286bab2bf686cb6a1",
+      "data/relations/company_subsidiary.csv": "2c5e5d71d1a49b3d88b75f3819a2d052cd5bca52151a477f73180ddd0f174108",
       "data/relations/etf_holding.csv": "37cfb3fbc8be402328aa9d6029a10e9b1556e88ab6a2b16ed8101318094cb72d",
-      "data/relations/etf_theme.csv": "5395c2b520b13f2232eff5c1a4ffa4390e4d7ade031e21325af287721ff82309",
-      "ontology/common.ttl": "56b7678a97e8af3e61186a6f8718c748221bade167baae3de719e1861b17ea71",
-      "ontology/bond_kr.ttl": "bdbf98f24969bb50209e6a40cd2d6e511a33b0800f5d2db7b8ef1967c88bc06a",
-      "ontology/etf_kr.ttl": "7e28f04942eabe175a4630bbfa7d37cf42df9fe8c8a832956a558a893c0a3bc9",
-      "ontology/etf_gl.ttl": "5ca1ea39c83f5aac98241d8234da6ea0bc1152cc148a53bca6e08ef64ffb4e11",
-      "ontology/fund_pub.ttl": "1b7e839dc867dd6cda4b0c77d08282feba3f3a33867485925d553ae4f285c59d",
-      "ontology/instances_bond_kr.ttl": "9c845b5e55cd06975219353b13eff6b7936efc3d3f3ba7915c8cc62464bcad14",
-      "ontology/instances_company.ttl": "719383baa99f7ccd0ecd7965e3bc7bcf0d6cc4a091e4a043b53fff49c23d8d63",
-      "ontology/instances_etf_gl.ttl": "bd65fc44d70e64c79a0ce317a174c931dbc52d478fdea06afbf2634b519196b1",
-      "ontology/instances_etf_kr.ttl": "3b039ea45c4b7d6456a21eaed483dd66ce9f6ef027e9ef5b46e8609403fa4bb8",
-      "ontology/instances_fund_pub.ttl": "c806b941736dadc35c1c8f1fc78f972d14e5c4fa81f7ba9827ca990af8bfba38"
+      "data/relations/etf_theme.csv": "50736c60a0a28e37948a3d8adc8e0a1530f42c429a4e6c3b85fbe15758d1cd7e",
+      "ontology/common.ttl": "f2cc9db37e2094e916e4d07488c610720119ee198cf36e7ff300783cf9a0fb48",
+      "ontology/bond_kr.ttl": "da622312ae2e8d5dc66f4d8861561b654b8a29c6f1771c28705cef6f7707101a",
+      "ontology/etf_kr.ttl": "2555aa0dd9cdd1d53e1834f2efc9cdb52a47b37b4836afb5976e63d7d5733561",
+      "ontology/etf_gl.ttl": "025f02d83e452a2307b5c9e195ace3eb4892e1961dd4a05d496031a89230ddf1",
+      "ontology/fund_pub.ttl": "4d971bd866a7e6b5fb8ca813e8c4ec2720b7901dc74a4cebcacf1850b8de7b67",
+      "ontology/instances_bond_kr.ttl": "0e40072a6f5a92d7d3efd40c9bc8c6df8bf6561e2ffabdfc7117155269a44635",
+      "ontology/instances_company.ttl": "276b2c816ff13b7219ae5670e56b211a05e1bb549445115e326e8488c798b847",
+      "ontology/instances_etf_gl.ttl": "66132c5591a34703080b73ba5195e209ba5424dd31e7bbf406740f8d180fa337",
+      "ontology/instances_etf_kr.ttl": "45f559bce7fd08fafa7c880a7d404b2a84c987087a006924d863a2540473cf68",
+      "ontology/instances_fund_pub.ttl": "00080862fa6dc9153646d62734c740b5d50ccfbd4c03bb181420276f1c726958"
     }
   },
   "count": 28,
@@ -39,13 +38,12 @@
       "required_columns": {
         "all": [
           "buy_yield",
-          "buyable_quantity",
           "crd_grd",
+          "info_base_dt",
           "mat_dt",
           "pd_nm",
           "pd_no",
           "pd_pbcm",
-          "pd_std_info_update",
           "srfc_irt"
         ]
       },
@@ -55,10 +53,9 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": false,
-      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.pd_pbcm,b.crd_grd,b.srfc_irt,b.mat_dt,b.buy_yield,b.buyable_quantity,b.pd_std_info_update FROM raw.bond_kr_master b WHERE b.pd_nm='에스케이하이닉스224-2'",
+      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.pd_pbcm,b.crd_grd,b.srfc_irt,b.mat_dt,b.buy_yield,b.info_base_dt FROM raw.bond_kr_master b WHERE b.pd_nm='에스케이하이닉스224-2'",
       "grounded_concepts": [
         "fp:buyYield",
-        "fp:buyableQuantity",
         "fp:couponRate",
         "fp:creditRatingLabel",
         "fp:hasCouponType",
@@ -74,7 +71,7 @@
     },
     {
       "question_id": "q002",
-      "question": "개인투자용국채 02480-3006의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번호와 데이터 갱신일을 근거로 붙여줘.",
+      "question": "국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번호와 데이터 갱신일을 근거로 붙여줘.",
       "required_tables": [
         "enriched.bond_kr_enriched",
         "raw.bond_kr_master"
@@ -82,11 +79,13 @@
       "required_columns": {
         "all": [
           "after_tax_yield",
+          "info_base_dt",
+          "info_seq",
           "isu_dt",
           "mat_dt",
+          "pd_exg_mkt",
           "pd_nm",
           "pd_no",
-          "pd_std_info_update",
           "remaining_days",
           "srfc_irt"
         ]
@@ -97,10 +96,11 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": false,
-      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.isu_dt,b.mat_dt,e.remaining_days,b.srfc_irt,b.after_tax_yield,b.pd_std_info_update FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no) WHERE b.pd_nm='개인투자용국채 02480-3006'",
+      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.isu_dt,b.mat_dt,e.remaining_days,b.srfc_irt,b.after_tax_yield,b.info_base_dt FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no,pd_exg_mkt,info_seq) WHERE b.pd_nm='국고채권 02000-3106(21-5)'",
       "grounded_concepts": [
         "fp:couponRate",
         "fp:hasCouponType",
+        "fp:hasTradingMarket",
         "fp:issueDate",
         "fp:maturityDate",
         "fp:productCode",
@@ -121,7 +121,9 @@
           "crd_grd",
           "crd_grd_norm",
           "dur",
+          "info_seq",
           "maturity_bucket",
+          "pd_exg_mkt",
           "pd_nm",
           "pd_no",
           "pd_pbcm"
@@ -133,7 +135,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": false,
-      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.bd_knd,b.pd_pbcm,b.crd_grd,e.crd_grd_norm,e.maturity_bucket,b.dur FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no) WHERE b.pd_nm='현대해상화재보험7(후)(콜/후)'",
+      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.bd_knd,b.pd_pbcm,b.crd_grd,e.crd_grd_norm,e.maturity_bucket,b.dur FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no,pd_exg_mkt,info_seq) WHERE b.pd_nm='현대해상화재보험7(후)(콜/후)'",
       "grounded_concepts": [
         "fp:bondKind",
         "fp:creditRatingLabel",
@@ -143,6 +145,7 @@
         "fp:hasCreditRating",
         "fp:hasMaturityClass",
         "fp:hasRatingBand",
+        "fp:hasTradingMarket",
         "fp:issuedBy",
         "fp:maturityBucket",
         "fp:organizationName",
@@ -344,7 +347,7 @@
       "question_id": "q008",
       "question": "미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과 판매 여부를 알려줘. 종목번호와 기준일을 붙여줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup"
+        "raw.fund_pub_master"
       ],
       "required_columns": {
         "all": [
@@ -366,7 +369,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": false,
-      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.or_attr_desc,f.fd_nast_suma,f.fd_mm1_ern_r,f.fd_mm3_ern_r,f.fd_mm6_ern_r,f.fd_yr1_ern_r,f.zrin_fd_ivst_risk_grd_nm,f.sale_yn FROM enriched.fund_pub_dedup f WHERE f.itm_nm='미래에셋코어테크증권자투자신탁(주식) 종류A'",
+      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.or_attr_desc,f.fd_nast_suma,f.fd_mm1_ern_r,f.fd_mm3_ern_r,f.fd_mm6_ern_r,f.fd_yr1_ern_r,f.zrin_fd_ivst_risk_grd_nm,f.sale_yn FROM raw.fund_pub_master f WHERE f.itm_nm='미래에셋코어테크증권자투자신탁(주식) 종류A'",
       "grounded_concepts": [
         "fp:hasAssetType",
         "fp:hasFundType",
@@ -385,7 +388,7 @@
       "question_id": "q009",
       "question": "삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘. 상품 식별번호와 해당 속성의 근거 컬럼을 제시해줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup"
+        "raw.fund_pub_master"
       ],
       "required_columns": {
         "all": [
@@ -405,7 +408,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": false,
-      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.bmrk_nm,f.curr_cd,f.fd_ivst_rgn_desc,f.pers_corp_desc,f.zrin_fd_ivst_risk_grd_nm,f.fd_nast_suma FROM enriched.fund_pub_dedup f WHERE f.itm_nm='삼성 베스트 MMF 법인 제1호'",
+      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.bmrk_nm,f.curr_cd,f.fd_ivst_rgn_desc,f.pers_corp_desc,f.zrin_fd_ivst_risk_grd_nm,f.fd_nast_suma FROM raw.fund_pub_master f WHERE f.itm_nm='삼성 베스트 MMF 법인 제1호'",
       "grounded_concepts": [
         "fp:benchmarkName",
         "fp:eligibleInvestorType",
@@ -423,7 +426,7 @@
       "question_id": "q010",
       "question": "우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·판매 여부·순자산·수익률을 비교해줘. 동일 펀드 판정에 사용한 대표종목번호를 근거로 제시해줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup"
+        "raw.fund_pub_master"
       ],
       "required_columns": {
         "all": [
@@ -442,7 +445,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.mtco_itm_no,f.rptt_ksd_itm_no,f.sale_yn,f.fd_nast_suma,f.fd_yr1_ern_r FROM enriched.fund_pub_dedup f WHERE f.itm_nm IN ('우리반도체BIG2플러스증권투자신탁(채권혼합)ClassC-P','우리반도체BIG2플러스증권투자신탁(채권혼합)ClassC-Pe') ORDER BY f.itm_no",
+      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.mtco_itm_no,f.rptt_ksd_itm_no,f.sale_yn,f.fd_nast_suma,f.fd_yr1_ern_r FROM raw.fund_pub_master f WHERE f.itm_nm IN ('우리반도체BIG2플러스증권투자신탁(채권혼합)ClassC-P','우리반도체BIG2플러스증권투자신탁(채권혼합)ClassC-Pe') ORDER BY f.itm_no",
       "grounded_concepts": [
         "fp:hasClassDifferentiation",
         "fp:hasShareClass",
@@ -464,21 +467,23 @@
       ],
       "required_columns": {
         "all": [
-          "buy_yield",
-          "buyable_quantity",
+          "applied_yield",
           "crd_grd",
           "crd_grd_rank",
           "curr_cd",
+          "info_base_dt",
+          "info_seq",
           "mat_dt",
+          "pd_exg_mkt",
           "pd_nm",
           "pd_no",
           "pd_pbcm",
-          "pd_std_info_update"
+          "remaining_days"
         ]
       },
       "required_filters": [
         {
-          "column": "buyable_quantity",
+          "column": "remaining_days",
           "operator": ">",
           "value": 0
         },
@@ -493,21 +498,22 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.pd_pbcm,b.crd_grd,b.mat_dt,b.buy_yield,b.buyable_quantity,b.pd_std_info_update FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no) WHERE b.curr_cd='KRW' AND b.buyable_quantity>0 AND e.crd_grd_rank<=4 ORDER BY b.buy_yield DESC NULLS LAST,b.pd_no",
+      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.pd_pbcm,b.crd_grd,b.mat_dt,b.applied_yield,b.info_base_dt FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no,pd_exg_mkt,info_seq) WHERE b.curr_cd='KRW' AND e.remaining_days>0 AND e.crd_grd_rank<=4 ORDER BY b.applied_yield DESC NULLS LAST,b.pd_no",
       "grounded_concepts": [
-        "fp:buyYield",
-        "fp:buyableQuantity",
+        "fp:appliedYield",
         "fp:creditRatingLabel",
         "fp:hasCreditRating",
         "fp:hasCurrency",
         "fp:hasRatingBand",
+        "fp:hasTradingMarket",
         "fp:issuedBy",
         "fp:maturityDate",
         "fp:organizationName",
         "fp:productCode",
         "fp:productName",
         "fp:ratingRank",
-        "fp:ratingStatus"
+        "fp:ratingStatus",
+        "fp:remainingDays"
       ]
     },
     {
@@ -569,10 +575,11 @@
       ],
       "required_columns": {
         "all": [
-          "buy_yield",
-          "buyable_quantity",
+          "applied_yield",
           "crd_grd",
           "crd_grd_rank",
+          "info_seq",
+          "pd_exg_mkt",
           "pd_nm",
           "pd_no",
           "remaining_days",
@@ -580,6 +587,11 @@
         ]
       },
       "required_filters": [
+        {
+          "column": "remaining_days",
+          "operator": ">",
+          "value": 0
+        },
         {
           "column": "crd_grd_rank",
           "operator": "<=",
@@ -596,15 +608,15 @@
       "required_limit": 10,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.crd_grd,e.crd_grd_rank,e.remaining_days,b.buy_yield,b.buyable_quantity FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no) WHERE b.std_pd_mcls_nm='회사채' AND b.buyable_quantity>0 AND e.crd_grd_rank<=4 AND e.remaining_days<=1095 ORDER BY b.buy_yield DESC NULLS LAST,b.pd_no LIMIT 10",
+      "gold_sql": "SELECT b.pd_no,b.pd_nm,b.crd_grd,e.crd_grd_rank,e.remaining_days,b.applied_yield FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no,pd_exg_mkt,info_seq) WHERE b.std_pd_mcls_nm='회사채' AND e.remaining_days>0 AND e.crd_grd_rank<=4 AND e.remaining_days<=1095 ORDER BY b.applied_yield DESC NULLS LAST,b.pd_no LIMIT 10",
       "grounded_concepts": [
+        "fp:appliedYield",
         "fp:bondMajorClass",
-        "fp:buyYield",
-        "fp:buyableQuantity",
         "fp:creditRatingLabel",
         "fp:hasBondIssuerType",
         "fp:hasCreditRating",
         "fp:hasRatingBand",
+        "fp:hasTradingMarket",
         "fp:productCode",
         "fp:productName",
         "fp:ratingRank",
@@ -819,7 +831,7 @@
       "question_id": "q019",
       "question": "판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 환헤지 여부, 투자지역, 위험등급과 기준일을 함께 제시해줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup"
+        "raw.fund_pub_master"
       ],
       "required_columns": {
         "all": [
@@ -851,7 +863,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.fd_yr1_ern_r,f.fd_nast_suma,f.exchdg_yn,f.fd_ivst_rgn_desc,f.zrin_fd_ivst_risk_grd_nm FROM enriched.fund_pub_dedup f WHERE f.prvo_pbff_desc='공모' AND f.sale_yn='판매중' AND f.fd_yr1_ern_r>0 AND f.fd_nast_suma>=100000000000 ORDER BY f.fd_yr1_ern_r DESC,f.itm_no",
+      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.fd_yr1_ern_r,f.fd_nast_suma,f.exchdg_yn,f.fd_ivst_rgn_desc,f.zrin_fd_ivst_risk_grd_nm FROM raw.fund_pub_master f WHERE f.prvo_pbff_desc='공모' AND f.sale_yn='판매중' AND f.fd_yr1_ern_r>0 AND f.fd_nast_suma>=100000000000 ORDER BY f.fd_yr1_ern_r DESC,f.itm_no",
       "grounded_concepts": [
         "fp:currencyHedged",
         "fp:hasInvestmentRegion",
@@ -868,8 +880,8 @@
       "question_id": "q020",
       "question": "국내 반도체에 투자하는 ETF와 공모펀드를 통합 검색해 순자산 상위 상품을 비교해줘. 단순히 이름에 반도체가 있다는 이유만으로 확정하지 말고, 기초지수·전략·편입내역 중 확인된 근거와 AUM·수익률 기준일을 제시해줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup",
         "raw.etf_kr_master",
+        "raw.fund_pub_master",
         "relations.etf_theme"
       ],
       "required_columns": {
@@ -895,7 +907,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT 'ETF' AS product_type,k.pd_itm_no AS product_id,k.pd_nm AS product_name,k.du_last_aum AS aum,k.du_er_1y AS return_1y,t.theme AS evidence FROM raw.etf_kr_master k JOIN relations.etf_theme t USING(pd_itm_no) WHERE k.pd_grp_no='ETF' AND t.theme ILIKE '%반도체%' UNION ALL SELECT 'FUND',f.itm_no,f.itm_nm,f.fd_nast_suma,f.fd_yr1_ern_r,COALESCE(f.bmrk_nm,f.or_attr_desc) FROM enriched.fund_pub_dedup f WHERE f.prvo_pbff_desc='공모' AND (f.bmrk_nm ILIKE '%반도체%' OR f.or_attr_desc ILIKE '%반도체%') ORDER BY aum DESC NULLS LAST,product_id",
+      "gold_sql": "SELECT 'ETF' AS product_type,k.pd_itm_no AS product_id,k.pd_nm AS product_name,k.du_last_aum AS aum,k.du_er_1y AS return_1y,t.theme AS evidence FROM raw.etf_kr_master k JOIN relations.etf_theme t USING(pd_itm_no) WHERE k.pd_grp_no='ETF' AND t.theme ILIKE '%반도체%' UNION ALL SELECT 'FUND',f.itm_no,f.itm_nm,f.fd_nast_suma,f.fd_yr1_ern_r,COALESCE(f.bmrk_nm,f.or_attr_desc) FROM raw.fund_pub_master f WHERE f.prvo_pbff_desc='공모' AND (f.bmrk_nm ILIKE '%반도체%' OR f.or_attr_desc ILIKE '%반도체%') ORDER BY aum DESC NULLS LAST,product_id",
       "grounded_concepts": [
         "fp:benchmarkName",
         "fp:hasAssetType",
@@ -1048,7 +1060,7 @@
       "question_id": "q025",
       "question": "국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사용하고 문서명, 발표기관, 발행일과 각 주장에 대응하는 근거 문장을 붙여줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup"
+        "raw.fund_pub_master"
       ],
       "required_columns": {
         "all": [
@@ -1066,7 +1078,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.or_co_xtn_itt_cd,f.or_attr_desc,f.fd_nast_suma,f.sale_yn FROM enriched.fund_pub_dedup f WHERE f.itm_nm ILIKE '%국민성장%' ORDER BY f.itm_no",
+      "gold_sql": "SELECT f.itm_no,f.itm_nm,f.or_co_xtn_itt_cd,f.or_attr_desc,f.fd_nast_suma,f.sale_yn FROM raw.fund_pub_master f WHERE f.itm_nm ILIKE '%국민성장%' ORDER BY f.itm_no",
       "grounded_concepts": [
         "fp:Document",
         "fp:hasAssetType",
@@ -1083,22 +1095,25 @@
       "question_id": "q026",
       "question": "SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과 기업→편입증권→상품 경로를 구분하고 등급·수익률·편입비중·AUM의 기준일과 근거를 제시해줘.",
       "required_tables": [
+        "enriched.bond_kr_enriched",
         "raw.bond_kr_master",
         "raw.etf_kr_master",
         "relations.etf_holding"
       ],
       "required_columns": {
         "all": [
-          "buy_yield",
-          "buyable_quantity",
+          "applied_yield",
           "crd_grd",
           "du_last_aum",
           "holding_code_raw",
+          "info_seq",
+          "pd_exg_mkt",
           "pd_grp_no",
           "pd_itm_no",
           "pd_nm",
           "pd_no",
           "pd_pbcm",
+          "remaining_days",
           "weight"
         ]
       },
@@ -1108,14 +1123,14 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT 'BOND' AS product_type,b.pd_no AS product_id,b.pd_nm AS product_name,b.crd_grd AS rating,b.buy_yield AS yield_value,b.buyable_quantity AS quantity,NULL::numeric AS weight,NULL::numeric AS aum FROM raw.bond_kr_master b WHERE b.pd_pbcm='에스케이하이닉스(주)' AND b.buyable_quantity>0 UNION ALL SELECT 'ETF',k.pd_itm_no,k.pd_nm,NULL,NULL,NULL,h.weight,k.du_last_aum FROM relations.etf_holding h JOIN raw.etf_kr_master k USING(pd_itm_no) WHERE h.holding_code_raw='000660' AND k.pd_grp_no='ETF' ORDER BY aum DESC NULLS LAST,product_id",
+      "gold_sql": "SELECT 'BOND' AS product_type,b.pd_no AS product_id,b.pd_nm AS product_name,b.crd_grd AS rating,b.applied_yield AS yield_value,(e.remaining_days>0) AS sellable,NULL::numeric AS weight,NULL::numeric AS aum FROM raw.bond_kr_master b JOIN enriched.bond_kr_enriched e USING(pd_no,pd_exg_mkt,info_seq) WHERE b.pd_pbcm='에스케이하이닉스(주)' AND e.remaining_days>0 UNION ALL SELECT 'ETF',k.pd_itm_no,k.pd_nm,NULL,NULL,NULL,h.weight,k.du_last_aum FROM relations.etf_holding h JOIN raw.etf_kr_master k USING(pd_itm_no) WHERE h.holding_code_raw='000660' AND k.pd_grp_no='ETF' ORDER BY aum DESC NULLS LAST,product_id",
       "grounded_concepts": [
-        "fp:buyYield",
-        "fp:buyableQuantity",
+        "fp:appliedYield",
         "fp:creditRatingLabel",
         "fp:hasCreditRating",
         "fp:hasHolding",
         "fp:hasRatingBand",
+        "fp:hasTradingMarket",
         "fp:issuedBy",
         "fp:netAssets",
         "fp:organizationName",
@@ -1123,6 +1138,7 @@
         "fp:productGroup",
         "fp:productName",
         "fp:ratingStatus",
+        "fp:remainingDays",
         "fp:sameVehicleAs",
         "fp:securityCode",
         "fp:weight"
@@ -1271,8 +1287,8 @@
       "question_id": "q030",
       "question": "우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 자회사·산업 위험을 알려줘. 클래스 중복은 제거하고 편입기준일, 중복도 계산식, 기업관계 및 위험문서 근거를 제시해줘.",
       "required_tables": [
-        "enriched.fund_pub_dedup",
         "raw.etf_kr_master",
+        "raw.fund_pub_master",
         "relations.etf_theme"
       ],
       "required_columns": {
@@ -1294,7 +1310,7 @@
       "required_limit": null,
       "result_columns": [],
       "order_sensitive": true,
-      "gold_sql": "SELECT 'FUND' AS product_type,f.itm_no AS product_id,f.itm_nm AS product_name,f.fd_nast_suma AS aum,f.mtco_itm_no AS group_key FROM enriched.fund_pub_dedup f WHERE f.itm_nm ILIKE '우리반도체BIG2플러스%' UNION ALL SELECT 'ETF',k.pd_itm_no,k.pd_nm,k.du_last_aum,NULL FROM raw.etf_kr_master k JOIN relations.etf_theme t USING(pd_itm_no) WHERE k.pd_grp_no='ETF' AND t.theme ILIKE '%반도체%' ORDER BY aum DESC NULLS LAST,product_id",
+      "gold_sql": "SELECT 'FUND' AS product_type,f.itm_no AS product_id,f.itm_nm AS product_name,f.fd_nast_suma AS aum,f.mtco_itm_no AS group_key FROM raw.fund_pub_master f WHERE f.itm_nm ILIKE '우리반도체BIG2플러스%' UNION ALL SELECT 'ETF',k.pd_itm_no,k.pd_nm,k.du_last_aum,NULL FROM raw.etf_kr_master k JOIN relations.etf_theme t USING(pd_itm_no) WHERE k.pd_grp_no='ETF' AND t.theme ILIKE '%반도체%' ORDER BY aum DESC NULLS LAST,product_id",
       "grounded_concepts": [
         "fp:Risk",
         "fp:hasClassDifferentiation",

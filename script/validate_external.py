@@ -1,4 +1,4 @@
-# 외부 수집 원천의 as_of 기준일 검증 — 대회 규칙상 2026-07-11 이후 데이터는 미래정보 유출이다.
+# 외부 수집 원천의 as_of 기준일 검증 — 대회 규칙상 2026-08-24 이후 데이터는 미래정보 유출이다.
 # 사이드카 규칙: 원본 파일명 전체에 .meta.json을 덧붙인다 (a.xls → a.xls.meta.json)
 import glob
 import json
@@ -6,7 +6,7 @@ import os
 import sys
 
 EXTERNAL = "data/external"
-CUTOFF = "2026-07-11"
+CUTOFF = "2026-08-24"
 REQUIRED = {"source", "as_of", "retrieved_at", "url"}
 
 

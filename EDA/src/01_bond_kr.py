@@ -36,11 +36,14 @@ SNAPSHOT = pd.Timestamp("2026-08-21")  # info_base_dt 실측값
 
 df = pd.read_csv(CSV / "PRBD01N001_bond_kr_master_20260824.csv", dtype=str, keep_default_na=False)
 schema = pd.read_csv(CSV / "PRBD01N001_bond_kr_schema_20260824.csv", dtype=str, keep_default_na=False)
-# axis_sample은 08-24 배포본 schema.xlsx에서 삭제되었다(Sheet2_Sample 폐지).
-# 주최측 라벨 설계 기준 자체는 변하지 않았으므로 07-11 배포본 파일을 그대로 참조한다.
-axis = pd.read_csv(CSV / "PRBD01N001_bond_kr_axis_sample_20260711.csv", dtype=str, keep_default_na=False)
+# axis_sample은 08-24 배포본에서 제공되지 않는다(schema.xlsx의 Sheet2_Sample 폐지).
+# 08-24 데이터만 사용하는 방침이므로 파일이 없으면 해당 축 대조 셀은 건너뛴다.
+_ax = CSV / "PRBD01N001_bond_kr_axis_sample_20260711.csv"
+axis = pd.read_csv(_ax, dtype=str, keep_default_na=False) if _ax.exists() else None
+if axis is None:
+    print("[skip] PRBD01N001_bond_kr_axis_sample_20260711.csv 없음 — 주최측 축 라벨 대조 셀은 건너뛴다")
 ko = dict(zip(schema.column, schema.comment_ko))
-print(df.shape, schema.shape, axis.shape)
+print(df.shape, schema.shape, axis.shape if axis is not None else '(axis 없음)')
 
 
 # %%
@@ -221,10 +224,10 @@ pd.crosstab(df.std_pd_mcls_nm, df.std_pd_scls_nm.replace("", "(결측)")).replac
 df.groupby(["std_pd_mcls_nm", "std_pd_scls_nm"]).bd_knd.value_counts().rename("건수").head(30)
 
 # %%
-axis_cols = [c for c in axis.columns if c.startswith("axis_")]
+axis_cols = [c for c in axis.columns if c.startswith("axis_")] if axis is not None else []
 pd.DataFrame(
     [{"축": c, "카디널리티": axis[c].nunique(), "값 분포": dict(axis[c].value_counts())} for c in axis_cols]
-)
+) if axis_cols else "axis_sample 미제공 — 대조 생략"
 
 # %%
 # 각 축을 우리 컬럼만으로 재현 가능한지 판정.

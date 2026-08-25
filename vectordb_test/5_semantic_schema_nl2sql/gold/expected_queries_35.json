@@ -1,6 +1,6 @@
 {
-  "source": "expected_question/2026_expected_queries.csv",
-  "source_sha256": "323574bdebc557abf26211cb7aeace3f939b2cd9375ccc75edf6439a48d64e0b",
+  "source": "expected_qa/2026_expected_qa.csv",
+  "source_sha256": "c4498ff7f1cee566d7e753efb804e98413ed7bfe35df6dc12d35528d4e409c29",
   "count": 35,
   "questions": [
     {
@@ -21,7 +21,7 @@
       "answerability": "답변가능",
       "product_category": "채권",
       "difficulty": "하",
-      "question": "개인투자용국채 02480-3006의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번호와 데이터 갱신일을 근거로 붙여줘.",
+      "question": "국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번호와 데이터 갱신일을 근거로 붙여줘.",
       "required_evidence": "상품번호; 발행일; 만기일; 잔존일수; 표면금리; 세후수익률; 갱신일",
       "expected_behavior": "ANSWER"
     },
@@ -351,7 +351,7 @@
       "answerability": "답변불가능",
       "product_category": "전체",
       "difficulty": "-",
-      "question": "2026-07-11 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 편입비중을 알려줘.",
+      "question": "2026-08-24 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 편입비중을 알려줘.",
       "required_evidence": "모델 출시일; 데이터 기준일; 상품 연결 문서와 편입내역 존재 여부",
       "expected_behavior": "ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF"
     },

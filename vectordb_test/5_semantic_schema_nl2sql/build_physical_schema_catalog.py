@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""PostgreSQL 12테이블에서 A 조건 Physical Schema Catalog를 추출한다."""
+"""PostgreSQL 11테이블에서 A 조건 Physical Schema Catalog를 추출한다."""
 from __future__ import annotations
 
 import hashlib
@@ -60,8 +60,8 @@ def collect(conn) -> list[dict]:
             "primary_key": key["primary_key"], "references": key["references"],
             "identity": identity == "YES", "ordinal": pos,
         })
-    if len(tables) != 12:
-        raise RuntimeError(f"12테이블이 아님: {len(tables)} {sorted(tables)}")
+    if len(tables) != 11:
+        raise RuntimeError(f"11테이블이 아님: {len(tables)} {sorted(tables)}")
     return [{"table": name, "columns": cols} for name, cols in sorted(tables.items())]
 
 
@@ -76,7 +76,7 @@ def main() -> None:
                 psycopg.sql.SQL("SELECT count(*) FROM {}.{}").format(
                     psycopg.sql.Identifier(schema), psycopg.sql.Identifier(table))).fetchone()[0]
     payload = {"condition": "A", "engine": "postgresql", "server_version": version,
-               "data_cutoff": "2026-07-11", "tables": tables, "row_counts": counts}
+               "data_cutoff": "2026-08-24", "tables": tables, "row_counts": counts}
     payload["catalog_sha256"] = digest(payload)
     OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"PASS {OUT.relative_to(ROOT)} — {len(tables)} tables sha={payload['catalog_sha256'][:12]}")

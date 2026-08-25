@@ -23,7 +23,7 @@ import pandas as pd
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
-MASTER = ROOT / "data/csv/PREF01N001_etf_kr_master_20260711.csv"
+MASTER = ROOT / "data/csv/PREF01N001_etf_kr_master_20260824.csv"
 OUTDIR = ROOT / "data/external/etf_kr_holdings"
 AS_OF = "2026-07-10"
 YMD = AS_OF.replace("-", "")

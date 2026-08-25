@@ -6,7 +6,7 @@ OUT = "data/enriched/holding_code_map.csv"
 
 h = pd.read_csv("data/relations/etf_holding.csv", dtype=str, keep_default_na=False)
 cm = pd.read_csv("data/enriched/company_master.csv", dtype=str, keep_default_na=False)
-etf = pd.read_csv("data/csv/PREF01N001_etf_kr_master_20260711.csv", dtype=str, keep_default_na=False)
+etf = pd.read_csv("data/csv/PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 listed = cm[cm.stock_code != ""].set_index("stock_code")
 etf_by_ticker = etf[etf.pd_grp_no == "ETF"].assign(ticker=etf.pd_itm_no_ma.str[1:]).set_index("ticker")

@@ -198,8 +198,9 @@ if errors:
 print(f"  {'merged':24s} {len(inst):8,d} triples  ({time.time() - t0:.0f}s)")
 
 # --- A) 개체 수 ↔ 원천 CSV 행수 ---------------------------------------------
-read = lambda p: pd.read_csv(ROOT / p, dtype=str, keep_default_na=False)  # noqa: E731
-etf_kr_csv = read("data/csv/PREF01N001_etf_kr_master_20260711.csv")
+read = lambda p: pd.read_csv(  # noqa: E731
+    ROOT / p, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+etf_kr_csv = read("data/csv/PREF01N001_etf_kr_master_20260824.csv")
 
 def typed(cls):
     return len(set(inst.subjects(RDF.type, fp(cls))))
@@ -209,13 +210,13 @@ def subclass_typed(*classes):
 
 expected = [
     ("국내채권", subclass_typed("GovernmentBond", "CorporateBond", "SpecialBond", "Bond"),
-     len(read("data/csv/PRBD01N001_bond_kr_master_20260711.csv"))),
+     read("data/csv/PRBD01N001_bond_kr_master_20260824.csv").pd_no.nunique()),
     ("국내ETF", len({s for s in inst.subjects(RDF.type, fp("ETF")) if "etfkr-" in str(s)}),
      (etf_kr_csv.pd_grp_no == "ETF").sum()),
     ("해외ETF·ETN", len({s for s in inst.subjects(RDF.type, None) if "etfgl-" in str(s)}),
-     len(read("data/csv/PREF02N001_etf_gl_master_20260711.csv"))),
+     len(read("data/csv/PREF02N001_etf_gl_master_20260824.csv"))),
     ("공모펀드", len({s for s in inst.subjects(RDF.type, None) if "fund-" in str(s)}),
-     len(read("data/enriched/fund_pub_dedup.csv"))),
+     len(read("data/csv/PRFD01N001_fund_pub_master_20260824.csv"))),
     ("편입관계(fp:Holding)", typed("Holding"), len(read("data/relations/etf_holding.csv"))),
     ("테마관계(fp:relatedToTheme)", len(list(inst.triples((None, fp("relatedToTheme"), None)))),
      len(read("data/relations/etf_theme.csv"))),

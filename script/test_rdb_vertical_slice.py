@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from config import BOND_DSN  # noqa: E402
 from agent.agent_core import APP, to_response  # noqa: E402
+from agent.nodes import render_answer  # noqa: E402
 from tools import rdb  # noqa: E402
 from tools.schema_context import ground, metadata  # noqa: E402
 from tools.validate import validate_query  # noqa: E402
@@ -64,9 +65,13 @@ def static_test() -> dict[str, dict]:
         referenced += [x["binding"] for x in resolved_for_compile(plan).get("entities") or []
                        if x.get("binding")]
         actual_columns = {bindings[x]["column"] for x in referenced}
+        actual_tables = {bindings[x]["table"] for x in referenced}
+        for join in schema.get("joins") or []:
+            if {join["left"], join["right"]} <= actual_tables:
+                actual_columns.update(join.get("left_keys") or [join["left_key"]])
+                actual_columns.update(join.get("right_keys") or [join["right_key"]])
         required_columns = set(golds[qid]["required_columns"]["all"])
         assert required_columns <= actual_columns, (qid, required_columns - actual_columns)
-        actual_tables = {bindings[x]["table"] for x in referenced}
         assert actual_tables == set(golds[qid]["required_tables"]), (qid, actual_tables)
         assert len(compiled.evidence) == len(compiled.columns), qid
         assert all(x["source_table"] and x["source_column"] and x["as_of"] for x in compiled.evidence), qid
@@ -74,7 +79,8 @@ def static_test() -> dict[str, dict]:
 
     q017 = plans["q017"]
     assert next(x for x in q017["filters"] if x["binding"] == "etf_gl.net_assets")["value"] == 100_000_000_000
-    assert next(x for x in plans["q013"]["filters"] if x["binding"] == "bond.remaining_days")["value"] == 1095
+    assert next(x for x in plans["q013"]["filters"]
+                if x["binding"] == "bond.remaining_days" and x["operator"] == "<=")["value"] == 1095
     assert next(x for x in plans["q011"]["filters"] if x["binding"] == "bond.rating_rank") == {
         "binding": "bond.rating_rank", "operator": "<=", "value": 4,
         "unit": "rank", "raw": "신용등급이 AA- 이상인"}
@@ -115,9 +121,17 @@ def db_test(plans: dict[str, dict]) -> None:
             cur = conn.execute(golds[qid]["gold_sql"])
             columns = [x.name for x in cur.description]
             gold_rows = [dict(zip(columns, row)) for row in cur.fetchall()]
-            assert set(actual["columns"]) == set(columns), qid
-            assert comparable(actual["rows"], golds[qid]["order_sensitive"]) == \
-                   comparable(gold_rows, golds[qid]["order_sensitive"]), qid
+            assert set(actual["columns"]) == set(columns), {
+                "question_id": qid, "actual_columns": actual["columns"],
+                "gold_columns": columns,
+            }
+            actual_cmp = comparable(actual["rows"], golds[qid]["order_sensitive"])
+            gold_cmp = comparable(gold_rows, golds[qid]["order_sensitive"])
+            assert actual_cmp == gold_cmp, {
+                "question_id": qid, "actual_count": len(actual["rows"]),
+                "gold_count": len(gold_rows), "actual_first": actual["rows"][:1],
+                "gold_first": gold_rows[:1],
+            }
             passed += 1
     print(f"PASS DB execution accuracy — {passed}/14")
 
@@ -145,6 +159,12 @@ def graph_contract_test() -> None:
             patch("agent.nodes.rdb.execute", side_effect=AssertionError("RDB must not run")):
         response = to_response(APP.invoke(initial("q031")))
     assert "확인할 수 없음" in response["answer"] and "AAAA" in response["answer"]
+    many = render_answer({
+        "abstain": None, "results": {"rows": [{"x": i} for i in range(101)]},
+        "evidence": [{"source_column": "x", "label": "값", "source_table": "raw.test",
+                      "as_of": "2026-08-24"}],
+    })["answer"].splitlines()
+    assert len(many) == 6 and many[0] == "총 101건 중 정렬 기준 상위 5건입니다.", many
     print("PASS LangGraph contract — success executes RDB, ABSTAIN skips RDB, response fields 5/5")
 
 

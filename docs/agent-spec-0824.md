@@ -11,18 +11,18 @@
 ## 0. v1 → v3 주요 변경
 
 
-| 변경            | v1            | v3                                                    |
-| ------------- | ------------- | ----------------------------------------------------- |
-| Schema Vector | FAISS         | **PostgreSQL + pgvector**                             |
-| Vector 대상     | TBox + 확장 검토  | **comment가 풍부한 TBox 중심**                              |
-| 코드리스트 91건     | Vector 포함 검토  | **Schema Vector에서 제외**                                |
-| 2단계 출력        | `schema_hits` | TBox 의미 후보. 현행 RDB slice에서는 아직 호출하지 않음              |
-| 2→3단계         | 바로 Planner    | **2.5단계 필요성 확인. 최소 verified context 계약은 Action 4에서 검증** |
-| RDB Schema 연결 | Planner 판단    | **Planner가 물리 schema를 만들지 않고 binding ID를 executor가 해소**   |
-| Planner 역할    | DB 구조까지 추론 가능 | 현행 RDB slice는 LLM Planner 없이 결정적 LogicalPlan을 사용             |
-| Action 3      | 실험 전 상태       | **A/B/C 완료. 어느 조건도 운영 채택하지 않음**                        |
-| RDB slice    | 없음            | 저장 Frame 이후 DB exact 14/14, evidence 14/14, hallucination 0       |
-| Live 상태      | 없음            | stability 7/70(10%), latency qualification 8/14. 운영 SLA 미달        |
+| 변경            | v1            | v3                                                          |
+| ------------- | ------------- | ----------------------------------------------------------- |
+| Schema Vector | FAISS         | **PostgreSQL + pgvector**                                   |
+| Vector 대상     | TBox + 확장 검토  | **comment가 풍부한 TBox 중심**                                    |
+| 코드리스트 91건     | Vector 포함 검토  | **Schema Vector에서 제외**                                      |
+| 2단계 출력        | `schema_hits` | TBox 의미 후보. 현행 RDB slice에서는 아직 호출하지 않음                      |
+| 2→3단계         | 바로 Planner    | **2.5단계 필요성 확인. 최소 verified context 계약은 Action 4에서 검증**     |
+| RDB Schema 연결 | Planner 판단    | **Planner가 물리 schema를 만들지 않고 binding ID를 executor가 해소**     |
+| Planner 역할    | DB 구조까지 추론 가능 | 현행 RDB slice는 LLM Planner 없이 결정적 LogicalPlan을 사용            |
+| Action 3      | 실험 전 상태       | **A/B/C 완료. 어느 조건도 운영 채택하지 않음**                             |
+| RDB slice     | 없음            | 저장 Frame 이후 DB exact 14/14, evidence 14/14, hallucination 0 |
+| Live 상태       | 없음            | stability 7/70(10%), latency qualification 8/14. 운영 SLA 미달  |
 
 
 221 혼합 인덱스 실험에서 기존 TBox 용어끼리의 Top-1 역전은 0건이었지만, 신규 코드값이 상위 슬롯을 점유하면서 Top-5 comment 근거 커버리지가 100%→68.6%로 감소했다. 따라서 Schema Vector는 TBox 의미 grounding에 집중한다.
@@ -30,6 +30,8 @@
 ---
 
 # 1. 현행·목표 트리 구조
+
+### 최종 트리구조
 
 ```text
 repo/
@@ -43,7 +45,7 @@ repo/
 │   ├── tools/                      # 런타임 Tool / Engine
 │   │   ├── rdb.py                  # LogicalPlan -> evidence rows          PostgreSQL
 │   │   ├── graph.py                # [미구현 목표] sparql(...)             pyoxigraph
-│   │   ├── bond_schema.py          # schema_search(...)                    pgvector (TBox)
+│   │   ├── schema.py          # schema_search(...)                    pgvector (TBox)
 │   │   ├── schema_context.py        # Query Frame → verified RDB context
 │   │   ├── content.py              # [미구현 목표] 콘텐츠 Vector 검색
 │   │   └── validate.py             # TBox/domain/value 검증 → ABSTAIN
@@ -51,7 +53,7 @@ repo/
 │   ├── kb/                         # 빌드 타임 코드
 │   │   ├── build_rdb.py            # CSV/enriched/relations → PostgreSQL
 │   │   ├── build_graph.py          # [미구현 목표] ontology/*.ttl → Oxigraph
-│   │   ├── build_bond_index.py     # TBox comment → pgvector
+│   │   ├── build_index.py     # TBox comment → pgvector
 │   │   ├── build_schema_catalog.py # RDB table/column/type/PK/FK catalog 생성
 │   │   ├── build_content_index.py  # [미구현 목표] Content Vector Index
 │   │   └── ids.py                  # [미구현 목표] 식별자 정규화 단일 구현
@@ -104,6 +106,35 @@ script/    = 실행/검증
 docs/      = 명세/실험 기록
 ```
 
+### MVP(채권데이터 테스트)
+
+```yaml
+<저장소 루트>
+├── src/                               런타임 코드. 08-22 src/ 이전 (docs/spec_0818.md:374)
+│   ├── src/agent/
+│   │   ├── agent_core.py              LangGraph 조립 + 진입점 ask()
+│   │   ├── nodes.py                   노드 3종 + 프롬프트 2종
+│   │   └── state.py                   노드 간에 오가는 데이터 형태
+│   ├── src/tools/
+│   │   └── bond_schema.py             벡터 검색 (LLM 미사용)
+│   ├── src/kb/
+│   │   └── build_bond_index.py        TTL → pgvector 적재 (오프라인, 1회)
+│   ├── clova.py                       CLOVA Studio 클라이언트 (chat + embedding)
+│   ├── config.py                      경로·모델·임계값 상수
+│   └── api.py                         ← 미생성 (§3-1 (3))
+├── artifacts/                         ← .gitignore 대상. 전부 재생성 가능
+│   ├── (bond.faiss 삭제)              벡터는 PostgreSQL mafest.bond_schema_terms
+│   ├── bond_terms.json                벡터 ↔ 용어 대응표
+│   └── embed_cache.json               임베딩 캐시 (지시서 트리에 없던 것)
+├── ontology/
+│   ├── bond_kr.ttl                    채권 전용 스키마 (39)  ← 지시서의 bond.ttl에서 변경
+│   └── common.ttl                     4개 도메인 공통 스키마 (91)  ← 추가
+└── script/
+    └── test_bond_agent.py             end-to-end 실행 확인
+```
+
+
+
 ### 주의
 
 루트에 아래 이름을 만들지 않는다.
@@ -135,7 +166,7 @@ HCX-007 Query Frame 1회
 → 결정적 답변 렌더링
 ```
 
-- 대상: `q001`, `q002`, `q003`, `q005`~`q013`, `q017`, `q018`
+- 대상: `q001`, `q002`, `q003`, `q005`~`q013`,` q017`,` q018`
 - 데이터: PostgreSQL 12테이블, binding 74개, verified JOIN 2개
 - 저장 Query Frame 이후: DB Gold exact 14/14, evidence 14/14, schema hallucination 0
 - 현행 LangGraph는 `bond_schema.py`의 TBox Vector Search를 호출하지 않는다.
@@ -297,15 +328,17 @@ FTS = 필요 시 정확 용어 보조
 
 Action 3은 아래 세 조건을 비교했고 모두 운영 기준에 실패했다.
 
-| 지표 | A Physical | B +TBox | C +Binding/Rule |
-|---|---:|---:|---:|
-| Table Accuracy | 19.0% | 26.2% | **40.5%** |
-| Required Column Recall | 36.8% | 32.0% | 36.6% |
-| SQL Executability | 19.0% | 23.8% | 22.6% |
-| Execution Accuracy | 0.0% | 0.0% | 0.0% |
-| Hallucinated Schema Rate | 59.5% | 48.8% | **42.9%** |
-| Engine Selection Accuracy | 13.3% | 12.4% | **24.8%** |
-| Dependency Accuracy | 23.8% | 19.0% | 21.0% |
+
+| 지표                        | A Physical | B +TBox | C +Binding/Rule |
+| ------------------------- | ----------: | -------: | ---------------: |
+| Table Accuracy            | 19.0%      | 26.2%   | **40.5%**       |
+| Required Column Recall    | 36.8%      | 32.0%   | 36.6%           |
+| SQL Executability         | 19.0%      | 23.8%   | 22.6%           |
+| Execution Accuracy        | 0.0%       | 0.0%    | 0.0%            |
+| Hallucinated Schema Rate  | 59.5%      | 48.8%   | **42.9%**       |
+| Engine Selection Accuracy | 13.3%      | 12.4%   | **24.8%**       |
+| Dependency Accuracy       | 23.8%      | 19.0%   | 21.0%           |
+
 
 C는 table 후보와 hallucination을 상대적으로 개선했지만 실행 결과는 0%였다. 따라서
 full physical schema와 binding hint를 LLM prompt에 넣는 방식은 채택하지 않는다.
@@ -435,7 +468,7 @@ LogicalPlan 후보다. `ground_query`는 같은 객체를 `metadata_context`와 
 1. Catalog: 12 tables, 74 bindings, 2 joins, forbidden binding 0, TBox integrity PASS.
 2. RDB 14 저장 Frame: context 14/14, unresolved 0, required binding recall 100%.
 3. q011/q013 등급 방향·1095일·매수가능, q012 ETF 상태, q017 큰 수/단위,
-   q018 `NULLS LAST` 규칙 PASS.
+018 `NULLS LAST` 규칙 PASS.
 4. Planner-facing payload의 `table`, `column`, SQL, physical JOIN key, full catalog 누출 0.
 5. 동일 Frame+metadata 반복 결과 byte-identical 100%, local resolver p95 ≤50ms 기록.
 6. 미지원 capability에 가짜 Graph/Vector source 생성 0, 완전일치 상품 유사 대체 0.
@@ -452,7 +485,7 @@ upstream qualification으로 관리한다.
 
 1. 파일 탐색을 현 배포본과 일치시키되 `data/csv` 값은 수정하지 않는다.
 2. 파일명의 배포일과 값의 `as_of`를 구분하고 실제 값이 cutoff `2026-07-11`을
-   넘지 않는지 다시 검증한다.
+지 않는지 다시 검증한다.
 3. Gate 1의 catalog 검증을 재통과한 뒤 그 snapshot hash를 Action 4 입력으로 고정한다.
 
 ---
@@ -626,14 +659,15 @@ validator에는 아직 구현되지 않았다. 출시일 근거가 없으면 날
 현행 RDB slice는 6노드다.
 
 
-| 노드 | 단계 | LLM | Tool |
-|---|---|---|---|
-| `extract_query_frame` | 1 | HCX-007 1회 | `query_frame` |
-| `ground_query` | 현행 2.5 | 0 | `schema_context` |
-| `validate_query` | 검증 | 0 | `validate` |
-| `execute_rdb` | 실행 | 0 | `rdb.execute` |
-| `verify_results` | 검증 | 0 | evidence contract |
-| `render_answer` | 답변 | 0 | deterministic renderer |
+| 노드                    | 단계     | LLM        | Tool                   |
+| --------------------- | ------ | ---------- | ---------------------- |
+| `extract_query_frame` | 1      | HCX-007 1회 | `query_frame`          |
+| `ground_query`        | 현행 2.5 | 0          | `schema_context`       |
+| `validate_query`      | 검증     | 0          | `validate`             |
+| `execute_rdb`         | 실행     | 0          | `rdb.execute`          |
+| `verify_results`      | 검증     | 0          | evidence contract      |
+| `render_answer`       | 답변     | 0          | deterministic renderer |
+
 
 `search_bond_schema`, Graph/Content, HCX Planner/answer는 현재 graph에 없다.
 `validate_query`도 완성된 ontology validator가 아니라 taxonomy·future year·일부 domain
@@ -713,7 +747,7 @@ Executor-private registry는 이미 다음 두 파일로 관리한다.
 
 - `metadata/schema_bindings.json`: version 1, 4 domains, 74 RDB bindings, JOIN 2개
 - `metadata/business_rules.json`: cutoff/as_of, rating rank 19개, ETF 필수 필터,
-  범주값·정렬·금지 컬럼 3개, max rows 10,000, max joins 3, timeout 2,000ms
+범주값·정렬·금지 컬럼 3개, max rows 10,000, max joins 3, timeout 2,000ms
 
 ## 자동 생성 가능
 
@@ -874,3 +908,4 @@ Query Understanding
 → Validation
 → Evidence-based Answer
 ```
+

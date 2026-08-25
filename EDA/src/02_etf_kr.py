@@ -38,10 +38,14 @@ CSV = ROOT / "data" / "csv"
 
 df = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False)
 schema = pd.read_csv(CSV / "PREF01N001_etf_kr_schema_20260824.csv", dtype=str, keep_default_na=False)
-# axis_sample은 08-24 배포본 schema.xlsx에서 삭제되었다(Sheet2_Sample 폐지). 07-11 파일을 그대로 참조한다.
-axis = pd.read_csv(CSV / "PREF01N001_etf_kr_axis_sample_20260711.csv", dtype=str, keep_default_na=False)
+# axis_sample은 08-24 배포본에서 제공되지 않는다(schema.xlsx의 Sheet2_Sample 폐지).
+# 08-24 데이터만 사용하는 방침이므로 파일이 없으면 해당 축 대조 셀은 건너뛴다.
+_ax = CSV / "PREF01N001_etf_kr_axis_sample_20260711.csv"
+axis = pd.read_csv(_ax, dtype=str, keep_default_na=False) if _ax.exists() else None
+if axis is None:
+    print("[skip] PREF01N001_etf_kr_axis_sample_20260711.csv 없음 — 주최측 축 라벨 대조 셀은 건너뛴다")
 ko = dict(zip(schema.column, schema.comment_ko))  # 컬럼 -> 한글 코멘트
-print(df.shape, schema.shape, axis.shape)
+print(df.shape, schema.shape, axis.shape if axis is not None else '(axis 없음)')
 
 
 # %%
@@ -245,8 +249,8 @@ pd.crosstab(etf.pd_sect_cd.replace("", "(결측)"), etf.wu_inv_ast_type)
 pd.crosstab(df.pd_pen_tr_yn, df.pd_pen_risk_nm)
 
 # %%
-axis_cols = [c for c in axis.columns if c.startswith("axis_")]
-pd.DataFrame([{"축": c, "값 분포": dict(axis[c].value_counts())} for c in axis_cols])
+axis_cols = [c for c in axis.columns if c.startswith("axis_")] if axis is not None else []
+pd.DataFrame([{"축": c, "값 분포": dict(axis[c].value_counts())} for c in axis_cols]) if axis_cols else "axis_sample 미제공 — 대조 생략"
 
 # %%
 pd.DataFrame(

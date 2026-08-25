@@ -84,8 +84,9 @@ def render_answer(state: State) -> dict:
         return {"answer": "주어진 조건과 완전일치하는 상품을 확인할 수 없습니다."}
     evidence = state.get("evidence") or []
     by_col = {e["source_column"]: e for e in evidence}
-    lines = []
-    for row in rows:
+    sampled = len(rows) > 100
+    lines = [f"총 {len(rows):,}건 중 정렬 기준 상위 5건입니다."] if sampled else []
+    for row in rows[:5] if sampled else rows:
         values = []
         for column, raw in row.items():
             e = by_col[column]

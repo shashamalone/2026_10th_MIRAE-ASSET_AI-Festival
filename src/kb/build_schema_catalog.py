@@ -29,18 +29,17 @@ TABLE_DEF = ROOT / "docs/docs_data_layer/table_definition_v1_0.csv"
 FP = "http://mafest.ai/product#"
 
 TABLE_META = {
-    "raw.bond_kr_master": ("국내채권 원본 마스터", "채권 1건/행", "2026-02-24 (실질 기준일)", "organizer", "원본 CSV 무변경 적재", "PD_NO 유일"),
-    "raw.etf_kr_master": ("국내 ETF·ETN 원본 마스터", "상품 1건/행", "2026-06-15", "organizer", "원본 CSV 무변경 적재", "잘못된 pd_itm_no='KR' 1행 제외; ETF 질의는 pd_grp_no='ETF' 필수"),
-    "raw.etf_gl_master": ("해외 ETF·ETN 원본 마스터", "상품 1건/행", "2026-06-14 (NAV; 종가는 행별 기준일)", "organizer", "원본 CSV 무변경 적재", "문장형 sentinel은 NULL 취급 필요"),
-    "raw.fund_pub_master": ("공모펀드 원본 마스터", "펀드-속성코드 1건/행", "2026-07-11 (원천에 기준일 컬럼 없음)", "organizer", "원본 CSV 무변경 적재", "PK=(itm_no,prfd_attr_cd); itm_no='\"' 깨진 1행 제외"),
-    "enriched.bond_kr_enriched": ("채권 등급·잔존만기·판매가능 파생", "채권 1건/행", "2026-07-11 (잔존만기 재계산)", "derived_from_organizer", "채권 원본에서 결정적으로 파생", "pd_no PK/FK; 등급 rank 1~19"),
+    "raw.bond_kr_master": ("국내채권 원본 마스터", "채권 거래·정보차수 1건/행", "2026-08-21 (info_base_dt)", "organizer", "원본 CSV 무변경 적재", "PK=(pd_no,pd_exg_mkt,info_seq); pd_no 중복 그룹 포함 행 2,463건"),
+    "raw.etf_kr_master": ("국내 ETF·ETN 원본 마스터", "상품 1건/행", "2026-08-21 (가격·기준가)", "organizer", "원본 CSV 무변경 적재", "ETF 질의는 pd_grp_no='ETF' 필수"),
+    "raw.etf_gl_master": ("해외 ETF·ETN 원본 마스터", "상품 1건/행", "2026-08-21 (종가 최빈값; 행별 기준일)", "organizer", "원본 CSV 무변경 적재", "문장형 sentinel은 NULL 취급 필요"),
+    "raw.fund_pub_master": ("펀드 원본 마스터", "펀드 1건/행", "2026-08-21 (원천에 기준일 컬럼 없음)", "organizer", "원본 CSV 무변경 적재", "itm_no PK; prfd_attr_cds는 원천에 집약된 속성 목록"),
+    "enriched.bond_kr_enriched": ("채권 등급·잔존만기·만기미도래 파생", "채권 거래·정보차수 1건/행", "2026-08-21 (잔존만기 재계산)", "derived_from_organizer", "채권 원본에서 결정적으로 파생", "PK/FK=(pd_no,pd_exg_mkt,info_seq); 등급 rank 1~19"),
     "enriched.etf_kr_enriched": ("국내 ETF·ETN LSEG 스칼라 보강", "상품 1건/행", "LSEG 수집시점 미확인", "organizer_then_external", "주최측 실값 우선, 결측·0.0 더미만 LSEG 보완", "pd_itm_no='KR' 1행 제외; charge_rt_source 필수"),
-    "enriched.fund_pub_dedup": ("공모펀드 1행화", "펀드 1건/행", "2026-07-11 (원천에 기준일 컬럼 없음)", "derived_from_organizer", "속성코드를 prfd_attr_cds로 집약", "itm_no PK; 순자산 집계는 이 테이블 사용"),
-    "enriched.company_master": ("DART 기업 고유번호 마스터", "기업 1건/행", "2026-07-11 이하", "external", "DART corpCode와 KIND에서 생성", "corp_code PK; 법인명 정규화 규칙 고정"),
+    "enriched.company_master": ("DART 기업 고유번호 마스터", "기업 1건/행", "2026-08-24 이하", "external", "DART corpCode와 KIND에서 생성", "corp_code PK; 법인명 정규화 규칙 고정"),
     "enriched.holding_code_map": ("편입종목 식별자 해소표", "원본 편입코드 1건/행", "2026-07-10", "derived", "정확히 확정 가능한 ticker·ETF·우선주만 매핑", "미해소는 공란 유지; match_rule 보존"),
     "relations.etf_theme": ("국내 ETF-테마 관계", "ETF-테마 1건/행", "확인할 수 없음", "external", "LSEG themes를 롱포맷 변환", "as_of 추정 금지"),
     "relations.etf_holding": ("국내 ETF-편입종목 관계", "ETF-편입종목 1건/행", "2026-07-10", "external", "운용사 원천을 공통 롱포맷으로 변환", "룩어헤드 현재가·등락 제외; holding_id identity"),
-    "relations.company_subsidiary": ("기업-자회사 출자 관계", "출자관계 1건/행", "공시 접수일 (2026-07-11 이하)", "external", "DART 타법인출자현황을 롱포맷 변환", "미확정 자회사 코드는 공란; relation_id identity"),
+    "relations.company_subsidiary": ("기업-자회사 출자 관계", "출자관계 1건/행", "공시 접수일 (2026-08-24 이하)", "external", "DART 타법인출자현황을 롱포맷 변환", "미확정 자회사 코드는 공란; relation_id identity"),
 }
 
 VECTOR_TABLES = (
@@ -64,7 +63,9 @@ def catalog() -> dict:
                            + [{"name": n, "datatype": dt} for n, dt in t.types.items()],
                 "primary_key": list(t.primary_key),
                 "foreign_keys": [
-                    {"column": c, "references_table": rt, "references_column": rc}
+                    {"columns": list(c) if isinstance(c, tuple) else [c],
+                     "references_table": rt,
+                     "references_columns": list(rc) if isinstance(rc, tuple) else [rc]}
                     for c, rt, rc in t.foreign_keys
                 ],
             }
@@ -78,14 +79,14 @@ def source_labels(table: str) -> dict[str, str]:
         "raw.bond_kr_master": "PRBD01N001", "enriched.bond_kr_enriched": "PRBD01N001",
         "raw.etf_kr_master": "PREF01N001", "enriched.etf_kr_enriched": "PREF01N001",
         "raw.etf_gl_master": "PREF02N001",
-        "raw.fund_pub_master": "PRFD01N001", "enriched.fund_pub_dedup": "PRFD01N001",
+        "raw.fund_pub_master": "PRFD01N001",
     }
     code = codes.get(table)
     if not code:
         return {}
-    path = next((ROOT / "data/csv").glob(f"{code}_*_schema_20260711.csv"))
+    path = next((ROOT / "data/csv").glob(f"{code}_*_schema_20260824.csv"))
     with path.open(encoding="utf-8-sig", newline="") as f:
-        return {r["column"].lower(): r["name_ko"] for r in csv.DictReader(f)}
+        return {r["column"].lower(): r["comment_ko"] for r in csv.DictReader(f)}
 
 
 def table_definition(metadata: dict) -> list[dict[str, object]]:
@@ -94,7 +95,11 @@ def table_definition(metadata: dict) -> list[dict[str, object]]:
     for table in TABLES:
         desc, grain, as_of, priority, transform, quality = TABLE_META[table.fq]
         labels = source_labels(table.fq)
-        fks = {c: f"{rt}.{rc}" for c, rt, rc in table.foreign_keys}
+        fks = {
+            c: f"{rt}.{'/'.join(rc if isinstance(rc, tuple) else (rc,))}"
+            for cols, rt, rc in table.foreign_keys
+            for c in (cols if isinstance(cols, tuple) else (cols,))
+        }
         columns = ([(table.identity, "bigint")] if table.identity else []) + list(table.types.items())
         row_count = sum(row is not None for _, row in rows(table))
         for order, (name, datatype) in enumerate(columns, 1):
@@ -176,17 +181,20 @@ def validate(cat: dict, metadata: dict, rules: dict) -> None:
             if spec[key] not in ids:
                 bad.append(f"{d}: 없는 {key} binding {spec[key]}")
     for j in metadata.get("joins") or []:
-        if j["left"] not in tables or j["left_key"] not in tables.get(j["left"], set()):
-            bad.append(f"JOIN left 오류 {j['left']}.{j['left_key']}")
-        if j["right"] not in tables or j["right_key"] not in tables.get(j["right"], set()):
-            bad.append(f"JOIN right 오류 {j['right']}.{j['right_key']}")
+        left_keys = j.get("left_keys") or [j.get("left_key")]
+        right_keys = j.get("right_keys") or [j.get("right_key")]
+        if len(left_keys) != len(right_keys) or not left_keys:
+            bad.append(f"JOIN key 수 오류 {j['left']} ↔ {j['right']}")
+        for key in left_keys:
+            if j["left"] not in tables or key not in tables.get(j["left"], set()):
+                bad.append(f"JOIN left 오류 {j['left']}.{key}")
+        for key in right_keys:
+            if j["right"] not in tables or key not in tables.get(j["right"], set()):
+                bad.append(f"JOIN right 오류 {j['right']}.{key}")
     paths = {f"{b['table']}.{b['column']}" for b in bindings}
     forbidden = set(rules["forbidden_columns"])
     if paths & forbidden:
         bad.append(f"금지 컬럼 binding {sorted(paths & forbidden)}")
-    if any(b["id"].startswith("fund.") and b["table"] == "raw.fund_pub_master"
-           for b in bindings):
-        bad.append("펀드 binding은 fund_pub_dedup만 사용해야 함")
     referenced = {
         x["binding"]
         for xs in rules.get("mandatory_filters", {}).values() for x in xs
@@ -200,8 +208,8 @@ def validate(cat: dict, metadata: dict, rules: dict) -> None:
     missing = referenced - set(ids)
     if missing:
         bad.append(f"rule이 없는 binding 참조 {sorted(missing)}")
-    if rules.get("data_cutoff") != "2026-07-11":
-        bad.append("data cutoff는 2026-07-11이어야 함")
+    if rules.get("data_cutoff") != "2026-08-24":
+        bad.append("data cutoff는 2026-08-24여야 함")
     if bad:
         raise ValueError("\n".join(bad))
     print(f"PASS schema catalog — tables={len(tables)} bindings={len(bindings)} "

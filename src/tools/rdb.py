@@ -52,6 +52,15 @@ def _binding_expr(binding: dict, aliases: dict[str, str]):
                                     sql.Identifier(binding["column"]))
 
 
+def _join_keys(rule: dict) -> tuple[list[str], list[str]]:
+    """08-24 복합키 join과 기존 단일키 binding을 둘 다 받는다."""
+    left = rule.get("left_keys") or [rule["left_key"]]
+    right = rule.get("right_keys") or [rule["right_key"]]
+    if len(left) != len(right) or not left:
+        raise ValueError(f"JOIN key 오류: {left} ↔ {right}")
+    return left, right
+
+
 def resolve_entities(conn, plan: dict) -> tuple[dict, dict | None]:
     """모호한 class 조합을 실제 canonical 상품명으로 바꾼다. 유사명 대체는 하지 않는다."""
     if not plan.get("entities"):
@@ -108,10 +117,15 @@ def compile_plan(plan: dict) -> CompiledQuery:
         if not rule:
             raise ValueError(f"허용되지 않은 JOIN: {base} ↔ {table}")
         left, right = rule["left"], rule["right"]
-        joins.append(sql.SQL(" JOIN {} {} ON {}.{} = {}.{}").format(
-            _qtable(right), sql.Identifier(aliases[right]),
-            sql.Identifier(aliases[left]), sql.Identifier(rule["left_key"]),
-            sql.Identifier(aliases[right]), sql.Identifier(rule["right_key"])))
+        left_keys, right_keys = _join_keys(rule)
+        on = sql.SQL(" AND ").join(
+            sql.SQL("{}.{} = {}.{}").format(
+                sql.Identifier(aliases[left]), sql.Identifier(lk),
+                sql.Identifier(aliases[right]), sql.Identifier(rk))
+            for lk, rk in zip(left_keys, right_keys)
+        )
+        joins.append(sql.SQL(" JOIN {} {} ON {}").format(
+            _qtable(right), sql.Identifier(aliases[right]), on))
     if len(joins) > rules["max_joins"]:
         raise ValueError("JOIN 상한 초과")
 

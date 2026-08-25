@@ -5,26 +5,12 @@ qualification한다. 운영 src/**는 이 실험에서 변경하지 않는다.
 
 ```
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --dry-run
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage prompt --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage token --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage schema --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage connection --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage queue --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage timeout --write-results
-
-
 python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage qualification --write-results
 ```
 

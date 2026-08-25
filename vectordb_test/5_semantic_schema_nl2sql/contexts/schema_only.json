@@ -2,7 +2,7 @@
   "condition": "A",
   "engine": "postgresql",
   "server_version": "18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)",
-  "data_cutoff": "2026-07-11",
+  "data_cutoff": "2026-08-24",
   "tables": [
     {
       "table": "enriched.bond_kr_enriched",
@@ -13,26 +13,36 @@
           "nullable": false,
           "primary_key": true,
           "references": [
-            "raw.bond_kr_master.pd_no"
+            "raw.bond_kr_master.pd_no",
+            "raw.bond_kr_master.pd_exg_mkt",
+            "raw.bond_kr_master.info_seq"
           ],
           "identity": false,
           "ordinal": 1
         },
         {
-          "name": "evco_grd_count",
-          "datatype": "integer",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
+          "name": "pd_exg_mkt",
+          "datatype": "text",
+          "nullable": false,
+          "primary_key": true,
+          "references": [
+            "raw.bond_kr_master.pd_no",
+            "raw.bond_kr_master.pd_exg_mkt",
+            "raw.bond_kr_master.info_seq"
+          ],
           "identity": false,
           "ordinal": 2
         },
         {
-          "name": "evco_grd_agree",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
+          "name": "info_seq",
+          "datatype": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "references": [
+            "raw.bond_kr_master.info_seq",
+            "raw.bond_kr_master.pd_exg_mkt",
+            "raw.bond_kr_master.pd_no"
+          ],
           "identity": false,
           "ordinal": 3
         },
@@ -285,416 +295,6 @@
       ]
     },
     {
-      "table": "enriched.fund_pub_dedup",
-      "columns": [
-        {
-          "name": "bmrk_eng_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 1
-        },
-        {
-          "name": "bmrk_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 2
-        },
-        {
-          "name": "curr_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 3
-        },
-        {
-          "name": "exchdg_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 4
-        },
-        {
-          "name": "fd_estb_ctry_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 5
-        },
-        {
-          "name": "fd_ivst_rgn_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 6
-        },
-        {
-          "name": "fd_mm18_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 7
-        },
-        {
-          "name": "fd_mm1_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 8
-        },
-        {
-          "name": "fd_mm3_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 9
-        },
-        {
-          "name": "fd_mm6_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 10
-        },
-        {
-          "name": "fd_nast_suma",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 11
-        },
-        {
-          "name": "fd_set_pcd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 12
-        },
-        {
-          "name": "fd_wk1_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 13
-        },
-        {
-          "name": "fd_yr1_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 14
-        },
-        {
-          "name": "fd_yr2_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 15
-        },
-        {
-          "name": "fd_yr3_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 16
-        },
-        {
-          "name": "fd_yr5_ern_r",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 17
-        },
-        {
-          "name": "frc_bpr_itm_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 18
-        },
-        {
-          "name": "fss_itm_no",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 19
-        },
-        {
-          "name": "hdge_fd_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 20
-        },
-        {
-          "name": "int_dvd_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 21
-        },
-        {
-          "name": "itm_abrv_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 22
-        },
-        {
-          "name": "itm_eabrv_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 23
-        },
-        {
-          "name": "itm_eng_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 24
-        },
-        {
-          "name": "itm_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 25
-        },
-        {
-          "name": "itm_no",
-          "datatype": "text",
-          "nullable": false,
-          "primary_key": true,
-          "references": [],
-          "identity": false,
-          "ordinal": 26
-        },
-        {
-          "name": "kofia_fd_ccd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 27
-        },
-        {
-          "name": "ksd_itm_no",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 28
-        },
-        {
-          "name": "mtco_itm_no",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 29
-        },
-        {
-          "name": "ofsfd_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 30
-        },
-        {
-          "name": "or_attr_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 31
-        },
-        {
-          "name": "or_co_xtn_itt_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 32
-        },
-        {
-          "name": "ovrs_fd_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 33
-        },
-        {
-          "name": "pers_corp_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 34
-        },
-        {
-          "name": "pfiv_sale_cntl_tcd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 35
-        },
-        {
-          "name": "prvo_fd_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 36
-        },
-        {
-          "name": "prvo_pbff_desc",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 37
-        },
-        {
-          "name": "rptt_ksd_itm_no",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 38
-        },
-        {
-          "name": "sale_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 39
-        },
-        {
-          "name": "std_itm_no",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 40
-        },
-        {
-          "name": "thco_sale_yn",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 41
-        },
-        {
-          "name": "trusc_xtn_itt_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 42
-        },
-        {
-          "name": "zrin_fd_ivst_risk_gcd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 43
-        },
-        {
-          "name": "zrin_fd_ivst_risk_grd_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 44
-        },
-        {
-          "name": "prfd_attr_cds",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 45
-        }
-      ]
-    },
-    {
       "table": "enriched.holding_code_map",
       "columns": [
         {
@@ -779,301 +379,13 @@
       "table": "raw.bond_kr_master",
       "columns": [
         {
-          "name": "pd_no",
-          "datatype": "text",
-          "nullable": false,
-          "primary_key": true,
-          "references": [],
-          "identity": false,
-          "ordinal": 1
-        },
-        {
-          "name": "pd_exg_mkt",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 2
-        },
-        {
-          "name": "pd_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 3
-        },
-        {
-          "name": "pd_abrv_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 4
-        },
-        {
-          "name": "pd_eng_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 5
-        },
-        {
-          "name": "pd_abrv_eng_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 6
-        },
-        {
-          "name": "pd_ctry_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 7
-        },
-        {
-          "name": "pd_pbcm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 8
-        },
-        {
-          "name": "std_pd_mcls_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 9
-        },
-        {
-          "name": "std_pd_scls_nm",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 10
-        },
-        {
-          "name": "bd_knd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 11
-        },
-        {
-          "name": "curr_cd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 12
-        },
-        {
-          "name": "isu_bal_amt",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 13
-        },
-        {
-          "name": "isu_dt",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 14
-        },
-        {
-          "name": "mat_dt",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 15
-        },
-        {
-          "name": "srfc_irt",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 16
-        },
-        {
-          "name": "pd_evco_crd_grd",
-          "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 17
-        },
-        {
-          "name": "pd_risk_gcd",
-          "datatype": "bigint",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 18
-        },
-        {
-          "name": "pd_std_info_update",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 19
-        },
-        {
-          "name": "buy_yield",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 20
-        },
-        {
-          "name": "corp_pretax_yield",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 21
-        },
-        {
-          "name": "corp_after_tax_yield",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 22
-        },
-        {
           "name": "after_tax_yield",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 23
-        },
-        {
-          "name": "pref_tax_yield",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 24
-        },
-        {
-          "name": "avg_annual_tax_yield",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 25
-        },
-        {
-          "name": "depo_equiv_yield_154",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 26
-        },
-        {
-          "name": "buyable_quantity",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 27
-        },
-        {
-          "name": "remaining_days",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 28
-        },
-        {
-          "name": "dur",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 29
-        },
-        {
-          "name": "cov",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 30
-        },
-        {
-          "name": "ndy_dur",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 31
-        },
-        {
-          "name": "ndy_cov",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 32
-        },
-        {
-          "name": "eval_price",
-          "datatype": "double precision",
-          "nullable": true,
-          "primary_key": false,
-          "references": [],
-          "identity": false,
-          "ordinal": 33
+          "ordinal": 1
         },
         {
           "name": "applied_yield",
@@ -1082,43 +394,124 @@
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 34
+          "ordinal": 2
         },
         {
-          "name": "dirty",
+          "name": "avg_annual_tax_yield",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 35
+          "ordinal": 3
         },
         {
-          "name": "ndy_eval_price",
+          "name": "bdbns_abl_chnl_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 4
+        },
+        {
+          "name": "bdbns_abl_chnl_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 5
+        },
+        {
+          "name": "bd_inrt_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 6
+        },
+        {
+          "name": "bd_intp_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 7
+        },
+        {
+          "name": "bd_knd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 8
+        },
+        {
+          "name": "bd_ofr_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 9
+        },
+        {
+          "name": "bd_tisu_a",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 10
+        },
+        {
+          "name": "buyable_quantity",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 36
+          "ordinal": 11
         },
         {
-          "name": "ndy_applied_yield",
+          "name": "buy_yield",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 37
+          "ordinal": 12
         },
         {
-          "name": "ndy_dirty",
+          "name": "corp_after_tax_yield",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 38
+          "ordinal": 13
+        },
+        {
+          "name": "corp_pretax_yield",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 14
+        },
+        {
+          "name": "cov",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 15
         },
         {
           "name": "crd_grd",
@@ -1127,16 +520,385 @@
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 39
+          "ordinal": 16
         },
         {
           "name": "crd_grd_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 17
+        },
+        {
+          "name": "curr_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 18
+        },
+        {
+          "name": "depo_equiv_yield_154",
           "datatype": "double precision",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
+          "ordinal": 19
+        },
+        {
+          "name": "depo_equiv_yield_495",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 20
+        },
+        {
+          "name": "dirty",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 21
+        },
+        {
+          "name": "dur",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 22
+        },
+        {
+          "name": "eval_price",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 23
+        },
+        {
+          "name": "exg_close_price",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 24
+        },
+        {
+          "name": "exg_close_price_base_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 25
+        },
+        {
+          "name": "exg_close_yield",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 26
+        },
+        {
+          "name": "exrt_grte_ern_r",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 27
+        },
+        {
+          "name": "exrt_grte_ern_r_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 28
+        },
+        {
+          "name": "exrt_rpy_r",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 29
+        },
+        {
+          "name": "info_base_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 30
+        },
+        {
+          "name": "info_seq",
+          "datatype": "bigint",
+          "nullable": false,
+          "primary_key": true,
+          "references": [],
+          "identity": false,
+          "ordinal": 31
+        },
+        {
+          "name": "isu_bal_amt",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 32
+        },
+        {
+          "name": "isu_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 33
+        },
+        {
+          "name": "mat_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 34
+        },
+        {
+          "name": "ndy_applied_yield",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 35
+        },
+        {
+          "name": "ndy_cov",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 36
+        },
+        {
+          "name": "ndy_dirty",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 37
+        },
+        {
+          "name": "ndy_dur",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 38
+        },
+        {
+          "name": "ndy_eval_price",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 39
+        },
+        {
+          "name": "pd_abrv_eng_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
           "ordinal": 40
+        },
+        {
+          "name": "pd_abrv_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 41
+        },
+        {
+          "name": "pd_ctry_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 42
+        },
+        {
+          "name": "pd_eng_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 43
+        },
+        {
+          "name": "pd_exg_mkt",
+          "datatype": "text",
+          "nullable": false,
+          "primary_key": true,
+          "references": [],
+          "identity": false,
+          "ordinal": 44
+        },
+        {
+          "name": "pd_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 45
+        },
+        {
+          "name": "pd_no",
+          "datatype": "text",
+          "nullable": false,
+          "primary_key": true,
+          "references": [],
+          "identity": false,
+          "ordinal": 46
+        },
+        {
+          "name": "pd_pbcm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 47
+        },
+        {
+          "name": "pd_pen_tr_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 48
+        },
+        {
+          "name": "pd_risk_gcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 49
+        },
+        {
+          "name": "pd_risk_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 50
+        },
+        {
+          "name": "pd_std_info_update",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 51
+        },
+        {
+          "name": "pref_tax_yield",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 52
+        },
+        {
+          "name": "remaining_days",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 53
+        },
+        {
+          "name": "sale_yield_base_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 54
+        },
+        {
+          "name": "srfc_irt",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 55
+        },
+        {
+          "name": "std_pd_mcls_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 56
+        },
+        {
+          "name": "std_pd_scls_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 57
+        },
+        {
+          "name": "trade_price",
+          "datatype": "double precision",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 58
         }
       ]
     },
@@ -1334,7 +1096,7 @@
         },
         {
           "name": "du_nav_base_dt",
-          "datatype": "timestamp without time zone",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1671,8 +1433,8 @@
           "ordinal": 9
         },
         {
-          "name": "du_clpr",
-          "datatype": "numeric",
+          "name": "du_chas_errt_base_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1680,7 +1442,7 @@
           "ordinal": 10
         },
         {
-          "name": "du_diff_rt",
+          "name": "du_clpr",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1689,7 +1451,7 @@
           "ordinal": 11
         },
         {
-          "name": "du_er_1d",
+          "name": "du_diff_rt",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1698,8 +1460,8 @@
           "ordinal": 12
         },
         {
-          "name": "du_er_1m",
-          "datatype": "numeric",
+          "name": "du_diff_rt_base_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1707,7 +1469,7 @@
           "ordinal": 13
         },
         {
-          "name": "du_er_1y",
+          "name": "du_er_1d",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1716,7 +1478,7 @@
           "ordinal": 14
         },
         {
-          "name": "du_er_3m",
+          "name": "du_er_1m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1725,7 +1487,7 @@
           "ordinal": 15
         },
         {
-          "name": "du_er_6m",
+          "name": "du_er_1y",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1734,7 +1496,7 @@
           "ordinal": 16
         },
         {
-          "name": "du_er_ytd",
+          "name": "du_er_3m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1743,7 +1505,7 @@
           "ordinal": 17
         },
         {
-          "name": "du_hpr",
+          "name": "du_er_6m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1752,7 +1514,7 @@
           "ordinal": 18
         },
         {
-          "name": "du_last_aum",
+          "name": "du_er_ytd",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1761,7 +1523,7 @@
           "ordinal": 19
         },
         {
-          "name": "du_last_nav",
+          "name": "du_hpr",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1770,7 +1532,7 @@
           "ordinal": 20
         },
         {
-          "name": "du_lpr",
+          "name": "du_last_aum",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1779,7 +1541,7 @@
           "ordinal": 21
         },
         {
-          "name": "du_nav_rnf_amt",
+          "name": "du_last_nav",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1788,7 +1550,7 @@
           "ordinal": 22
         },
         {
-          "name": "du_nav_yday",
+          "name": "du_lpr",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1797,8 +1559,8 @@
           "ordinal": 23
         },
         {
-          "name": "du_upt_dt",
-          "datatype": "timestamp without time zone",
+          "name": "du_nav_base_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1806,7 +1568,7 @@
           "ordinal": 24
         },
         {
-          "name": "du_val_1d",
+          "name": "du_nav_rnf_amt",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1815,7 +1577,7 @@
           "ordinal": 25
         },
         {
-          "name": "du_val_1m",
+          "name": "du_nav_yday",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1824,8 +1586,8 @@
           "ordinal": 26
         },
         {
-          "name": "du_val_5d",
-          "datatype": "numeric",
+          "name": "du_upt_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1833,7 +1595,7 @@
           "ordinal": 27
         },
         {
-          "name": "du_vol_1d",
+          "name": "du_val_1d",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1842,7 +1604,7 @@
           "ordinal": 28
         },
         {
-          "name": "du_vol_avg_1m",
+          "name": "du_val_1m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1851,7 +1613,7 @@
           "ordinal": 29
         },
         {
-          "name": "du_vol_avg_5d",
+          "name": "du_val_5d",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1860,7 +1622,7 @@
           "ordinal": 30
         },
         {
-          "name": "nru_mkt_diff_rt",
+          "name": "du_vlty_1m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1869,7 +1631,7 @@
           "ordinal": 31
         },
         {
-          "name": "nru_mkt_inav",
+          "name": "du_vlty_1y",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1878,8 +1640,8 @@
           "ordinal": 32
         },
         {
-          "name": "pd_abrv_nm",
-          "datatype": "text",
+          "name": "du_vlty_3m",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1887,7 +1649,7 @@
           "ordinal": 33
         },
         {
-          "name": "pd_circ_net_tamt",
+          "name": "du_vlty_6m",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1896,8 +1658,8 @@
           "ordinal": 34
         },
         {
-          "name": "pd_circ_stk_cnt",
-          "datatype": "numeric",
+          "name": "du_vlty_base_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1905,8 +1667,8 @@
           "ordinal": 35
         },
         {
-          "name": "pd_curr_cd",
-          "datatype": "text",
+          "name": "du_vol_1d",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1914,8 +1676,8 @@
           "ordinal": 36
         },
         {
-          "name": "pd_curr_nm",
-          "datatype": "text",
+          "name": "du_vol_avg_1m",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1923,7 +1685,7 @@
           "ordinal": 37
         },
         {
-          "name": "pd_divd_amt_pshr",
+          "name": "du_vol_avg_5d",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1932,8 +1694,8 @@
           "ordinal": 38
         },
         {
-          "name": "pd_dvid_cycl",
-          "datatype": "text",
+          "name": "fn_average_coupon",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1941,7 +1703,7 @@
           "ordinal": 39
         },
         {
-          "name": "pd_dvid_yield",
+          "name": "fn_average_maturity",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -1950,7 +1712,7 @@
           "ordinal": 40
         },
         {
-          "name": "pd_exg_mkt_cd",
+          "name": "fn_average_quality",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -1959,7 +1721,7 @@
           "ordinal": 41
         },
         {
-          "name": "pd_exg_mkt_nm",
+          "name": "fn_base_dt",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -1968,8 +1730,8 @@
           "ordinal": 42
         },
         {
-          "name": "pd_grp_no",
-          "datatype": "text",
+          "name": "fn_effective_duration",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1977,17 +1739,17 @@
           "ordinal": 43
         },
         {
-          "name": "pd_itm_no",
-          "datatype": "text",
-          "nullable": false,
-          "primary_key": true,
+          "name": "fn_effective_maturity",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
           "references": [],
           "identity": false,
           "ordinal": 44
         },
         {
-          "name": "pd_itm_no_ma",
-          "datatype": "text",
+          "name": "fn_modified_duration",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -1995,7 +1757,7 @@
           "ordinal": 45
         },
         {
-          "name": "pd_lst_price",
+          "name": "fn_nominal_maturity",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2004,8 +1766,8 @@
           "ordinal": 46
         },
         {
-          "name": "pd_lst_stk_cnt",
-          "datatype": "numeric",
+          "name": "fn_portfolio_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2013,7 +1775,7 @@
           "ordinal": 47
         },
         {
-          "name": "pd_lste_dt",
+          "name": "pd_abrv_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2022,8 +1784,8 @@
           "ordinal": 48
         },
         {
-          "name": "pd_lstg_dt",
-          "datatype": "text",
+          "name": "pd_circ_net_tamt",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2031,8 +1793,8 @@
           "ordinal": 49
         },
         {
-          "name": "pd_mkt_id",
-          "datatype": "text",
+          "name": "pd_circ_stk_cnt",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2040,7 +1802,7 @@
           "ordinal": 50
         },
         {
-          "name": "pd_mkt_nm",
+          "name": "pd_curr_cd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2049,8 +1811,8 @@
           "ordinal": 51
         },
         {
-          "name": "pd_nav_pshr",
-          "datatype": "numeric",
+          "name": "pd_curr_nm",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2058,7 +1820,7 @@
           "ordinal": 52
         },
         {
-          "name": "pd_net_ast_pshr",
+          "name": "pd_divd_amt_ann",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2067,7 +1829,7 @@
           "ordinal": 53
         },
         {
-          "name": "pd_net_prft_pshr",
+          "name": "pd_divd_amt_pshr",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2076,8 +1838,8 @@
           "ordinal": 54
         },
         {
-          "name": "pd_net_rt_ast_pshr",
-          "datatype": "numeric",
+          "name": "pd_dvid_base_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2085,8 +1847,8 @@
           "ordinal": 55
         },
         {
-          "name": "pd_net_tamt",
-          "datatype": "numeric",
+          "name": "pd_dvid_cycl",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2094,8 +1856,8 @@
           "ordinal": 56
         },
         {
-          "name": "pd_nm",
-          "datatype": "text",
+          "name": "pd_dvid_inc_dist",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2103,8 +1865,8 @@
           "ordinal": 57
         },
         {
-          "name": "pd_pen_risk_nm",
-          "datatype": "text",
+          "name": "pd_dvid_nav",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2112,8 +1874,8 @@
           "ordinal": 58
         },
         {
-          "name": "pd_pen_tr_yn",
-          "datatype": "text",
+          "name": "pd_dvid_pay_cnt",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2121,7 +1883,7 @@
           "ordinal": 59
         },
         {
-          "name": "pd_risk_cd",
+          "name": "pd_dvid_pay_months",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2130,7 +1892,7 @@
           "ordinal": 60
         },
         {
-          "name": "pd_risk_nm",
+          "name": "pd_dvid_prc_base_dt",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2139,7 +1901,7 @@
           "ordinal": 61
         },
         {
-          "name": "pd_sale_yn",
+          "name": "pd_dvid_tax_basis",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2148,8 +1910,8 @@
           "ordinal": 62
         },
         {
-          "name": "pd_sect_cd",
-          "datatype": "text",
+          "name": "pd_dvid_yield",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2157,7 +1919,7 @@
           "ordinal": 63
         },
         {
-          "name": "pd_sect_nm",
+          "name": "pd_exg_mkt_cd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2166,7 +1928,7 @@
           "ordinal": 64
         },
         {
-          "name": "pd_spac_yn",
+          "name": "pd_exg_mkt_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2175,8 +1937,8 @@
           "ordinal": 65
         },
         {
-          "name": "pd_stk_cnt",
-          "datatype": "numeric",
+          "name": "pd_grp_no",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2184,7 +1946,7 @@
           "ordinal": 66
         },
         {
-          "name": "pd_tr_yn",
+          "name": "pd_isin_cd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2193,17 +1955,17 @@
           "ordinal": 67
         },
         {
-          "name": "ru_mkt_price",
-          "datatype": "numeric",
-          "nullable": true,
-          "primary_key": false,
+          "name": "pd_itm_no",
+          "datatype": "text",
+          "nullable": false,
+          "primary_key": true,
           "references": [],
           "identity": false,
           "ordinal": 68
         },
         {
-          "name": "ru_mkt_volume",
-          "datatype": "numeric",
+          "name": "pd_itm_no_ma",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2211,8 +1973,8 @@
           "ordinal": 69
         },
         {
-          "name": "wu_core_yn",
-          "datatype": "text",
+          "name": "pd_lst_stk_cnt",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2220,7 +1982,7 @@
           "ordinal": 70
         },
         {
-          "name": "wu_inv_ast_type",
+          "name": "pd_lste_dt",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2229,7 +1991,7 @@
           "ordinal": 71
         },
         {
-          "name": "wu_inv_rgn",
+          "name": "pd_lstg_dt",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2238,13 +2000,238 @@
           "ordinal": 72
         },
         {
-          "name": "wu_upt_dt",
+          "name": "pd_mkt_id",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
           "ordinal": 73
+        },
+        {
+          "name": "pd_mkt_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 74
+        },
+        {
+          "name": "pd_net_tamt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 75
+        },
+        {
+          "name": "pd_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 76
+        },
+        {
+          "name": "pd_pen_risk_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 77
+        },
+        {
+          "name": "pd_pen_tr_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 78
+        },
+        {
+          "name": "pd_ric",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 79
+        },
+        {
+          "name": "pd_risk_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 80
+        },
+        {
+          "name": "pd_risk_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 81
+        },
+        {
+          "name": "pd_sale_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 82
+        },
+        {
+          "name": "pd_sect_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 83
+        },
+        {
+          "name": "pd_spac_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 84
+        },
+        {
+          "name": "pd_stk_cnt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 85
+        },
+        {
+          "name": "pd_ticker",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 86
+        },
+        {
+          "name": "pd_tr_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 87
+        },
+        {
+          "name": "ref_ast_type",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 88
+        },
+        {
+          "name": "ref_base_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 89
+        },
+        {
+          "name": "ref_base_index",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 90
+        },
+        {
+          "name": "ref_fund_mgmt_co",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 91
+        },
+        {
+          "name": "ref_geo_focus",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 92
+        },
+        {
+          "name": "ru_mkt_price",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 93
+        },
+        {
+          "name": "ru_mkt_volume",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 94
+        },
+        {
+          "name": "wu_core_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 95
+        },
+        {
+          "name": "wu_inv_ast_type",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 96
+        },
+        {
+          "name": "wu_inv_rgn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 97
+        },
+        {
+          "name": "wu_upt_dt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 98
         }
       ]
     },
@@ -2270,8 +2257,8 @@
           "ordinal": 2
         },
         {
-          "name": "curr_cd",
-          "datatype": "text",
+          "name": "bns_bpr",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2279,7 +2266,7 @@
           "ordinal": 3
         },
         {
-          "name": "exchdg_yn",
+          "name": "curr_cd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2288,7 +2275,7 @@
           "ordinal": 4
         },
         {
-          "name": "fd_estb_ctry_cd",
+          "name": "exchdg_yn",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2297,7 +2284,7 @@
           "ordinal": 5
         },
         {
-          "name": "fd_ivst_rgn_desc",
+          "name": "fd_daily_bas_dt",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2306,8 +2293,8 @@
           "ordinal": 6
         },
         {
-          "name": "fd_mm18_ern_r",
-          "datatype": "numeric",
+          "name": "fd_estb_ctry_cd",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2315,8 +2302,8 @@
           "ordinal": 7
         },
         {
-          "name": "fd_mm1_ern_r",
-          "datatype": "numeric",
+          "name": "fd_ivst_rgn_desc",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2324,8 +2311,8 @@
           "ordinal": 8
         },
         {
-          "name": "fd_mm3_ern_r",
-          "datatype": "numeric",
+          "name": "fd_last_dstb_actg_bss_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2333,8 +2320,8 @@
           "ordinal": 9
         },
         {
-          "name": "fd_mm6_ern_r",
-          "datatype": "numeric",
+          "name": "fd_last_dstb_actg_eot_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2342,7 +2329,7 @@
           "ordinal": 10
         },
         {
-          "name": "fd_nast_suma",
+          "name": "fd_last_dstb_r",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2351,8 +2338,8 @@
           "ordinal": 11
         },
         {
-          "name": "fd_set_pcd",
-          "datatype": "text",
+          "name": "fd_mm18_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2360,7 +2347,7 @@
           "ordinal": 12
         },
         {
-          "name": "fd_wk1_ern_r",
+          "name": "fd_mm1_ern_r",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2369,7 +2356,7 @@
           "ordinal": 13
         },
         {
-          "name": "fd_yr1_ern_r",
+          "name": "fd_mm3_ern_r",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2378,7 +2365,7 @@
           "ordinal": 14
         },
         {
-          "name": "fd_yr2_ern_r",
+          "name": "fd_mm6_ern_r",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2387,7 +2374,7 @@
           "ordinal": 15
         },
         {
-          "name": "fd_yr3_ern_r",
+          "name": "fd_nast_suma",
           "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
@@ -2396,8 +2383,8 @@
           "ordinal": 16
         },
         {
-          "name": "fd_yr5_ern_r",
-          "datatype": "numeric",
+          "name": "fd_price_bas_dt",
+          "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2405,8 +2392,8 @@
           "ordinal": 17
         },
         {
-          "name": "frc_bpr_itm_yn",
-          "datatype": "text",
+          "name": "fd_prsv_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2414,8 +2401,8 @@
           "ordinal": 18
         },
         {
-          "name": "fss_itm_no",
-          "datatype": "text",
+          "name": "fd_sbpr",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2423,7 +2410,7 @@
           "ordinal": 19
         },
         {
-          "name": "hdge_fd_yn",
+          "name": "fd_set_pcd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2432,8 +2419,8 @@
           "ordinal": 20
         },
         {
-          "name": "int_dvd_desc",
-          "datatype": "text",
+          "name": "fd_wk1_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2441,8 +2428,8 @@
           "ordinal": 21
         },
         {
-          "name": "itm_abrv_nm",
-          "datatype": "text",
+          "name": "fd_yr1_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2450,8 +2437,8 @@
           "ordinal": 22
         },
         {
-          "name": "itm_eabrv_nm",
-          "datatype": "text",
+          "name": "fd_yr2_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2459,8 +2446,8 @@
           "ordinal": 23
         },
         {
-          "name": "itm_eng_nm",
-          "datatype": "text",
+          "name": "fd_yr3_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2468,8 +2455,8 @@
           "ordinal": 24
         },
         {
-          "name": "itm_nm",
-          "datatype": "text",
+          "name": "fd_yr5_ern_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2477,16 +2464,16 @@
           "ordinal": 25
         },
         {
-          "name": "itm_no",
+          "name": "frc_bpr_itm_yn",
           "datatype": "text",
-          "nullable": false,
-          "primary_key": true,
+          "nullable": true,
+          "primary_key": false,
           "references": [],
           "identity": false,
           "ordinal": 26
         },
         {
-          "name": "kofia_fd_ccd",
+          "name": "fss_itm_no",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2495,7 +2482,7 @@
           "ordinal": 27
         },
         {
-          "name": "ksd_itm_no",
+          "name": "han_clas_fee_type",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2504,7 +2491,7 @@
           "ordinal": 28
         },
         {
-          "name": "mtco_itm_no",
+          "name": "han_clas_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2513,7 +2500,7 @@
           "ordinal": 29
         },
         {
-          "name": "ofsfd_yn",
+          "name": "han_clas_policies",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2522,7 +2509,7 @@
           "ordinal": 30
         },
         {
-          "name": "or_attr_desc",
+          "name": "han_clas_sales_channel",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2531,7 +2518,7 @@
           "ordinal": 31
         },
         {
-          "name": "or_co_xtn_itt_cd",
+          "name": "hdge_fd_yn",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2540,7 +2527,7 @@
           "ordinal": 32
         },
         {
-          "name": "ovrs_fd_desc",
+          "name": "int_dvd_desc",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2549,7 +2536,7 @@
           "ordinal": 33
         },
         {
-          "name": "pers_corp_desc",
+          "name": "itm_abrv_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2558,7 +2545,7 @@
           "ordinal": 34
         },
         {
-          "name": "pfiv_sale_cntl_tcd",
+          "name": "itm_eabrv_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2567,16 +2554,16 @@
           "ordinal": 35
         },
         {
-          "name": "prfd_attr_cd",
+          "name": "itm_eng_nm",
           "datatype": "text",
-          "nullable": false,
-          "primary_key": true,
+          "nullable": true,
+          "primary_key": false,
           "references": [],
           "identity": false,
           "ordinal": 36
         },
         {
-          "name": "prvo_fd_desc",
+          "name": "itm_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2585,16 +2572,16 @@
           "ordinal": 37
         },
         {
-          "name": "prvo_pbff_desc",
+          "name": "itm_no",
           "datatype": "text",
-          "nullable": true,
-          "primary_key": false,
+          "nullable": false,
+          "primary_key": true,
           "references": [],
           "identity": false,
           "ordinal": 38
         },
         {
-          "name": "rptt_ksd_itm_no",
+          "name": "kofia_fd_ccd",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2603,7 +2590,7 @@
           "ordinal": 39
         },
         {
-          "name": "sale_yn",
+          "name": "ksd_itm_no",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2612,7 +2599,7 @@
           "ordinal": 40
         },
         {
-          "name": "std_itm_no",
+          "name": "mtco_itm_no",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2621,7 +2608,7 @@
           "ordinal": 41
         },
         {
-          "name": "thco_sale_yn",
+          "name": "ofsfd_yn",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2630,8 +2617,8 @@
           "ordinal": 42
         },
         {
-          "name": "trusc_xtn_itt_cd",
-          "datatype": "text",
+          "name": "ofwk_trus_rwrd_r",
+          "datatype": "numeric",
           "nullable": true,
           "primary_key": false,
           "references": [],
@@ -2639,7 +2626,7 @@
           "ordinal": 43
         },
         {
-          "name": "zrin_fd_ivst_risk_gcd",
+          "name": "or_attr_desc",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
@@ -2648,13 +2635,283 @@
           "ordinal": 44
         },
         {
+          "name": "or_co_rwrd_r",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 45
+        },
+        {
+          "name": "or_co_xtn_itt_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 46
+        },
+        {
+          "name": "ovrs_fd_desc",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 47
+        },
+        {
+          "name": "pers_corp_desc",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 48
+        },
+        {
+          "name": "pfiv_sale_cntl_tcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 49
+        },
+        {
+          "name": "prfd_attr_cds",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 50
+        },
+        {
+          "name": "prfd_attr_cnt",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 51
+        },
+        {
+          "name": "prfd_attr_search_text",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 52
+        },
+        {
+          "name": "prvo_fd_desc",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 53
+        },
+        {
+          "name": "prvo_pbff_desc",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 54
+        },
+        {
+          "name": "rptt_ksd_itm_no",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 55
+        },
+        {
+          "name": "sale_co_rwrd_r",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 56
+        },
+        {
+          "name": "sale_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 57
+        },
+        {
+          "name": "std_itm_no",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 58
+        },
+        {
+          "name": "thco_sale_yn",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 59
+        },
+        {
+          "name": "trusc_rwrd_r",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 60
+        },
+        {
+          "name": "trusc_xtn_itt_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 61
+        },
+        {
+          "name": "zrin_attr_nms",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 62
+        },
+        {
+          "name": "zrin_btyp_cd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 63
+        },
+        {
+          "name": "zrin_btyp_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 64
+        },
+        {
+          "name": "zrin_dmst_bd_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 65
+        },
+        {
+          "name": "zrin_dmst_stk_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 66
+        },
+        {
+          "name": "zrin_etc_ast_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 67
+        },
+        {
+          "name": "zrin_fd_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 68
+        },
+        {
+          "name": "zrin_fd_ivst_risk_gcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 69
+        },
+        {
           "name": "zrin_fd_ivst_risk_grd_nm",
           "datatype": "text",
           "nullable": true,
           "primary_key": false,
           "references": [],
           "identity": false,
-          "ordinal": 45
+          "ordinal": 70
+        },
+        {
+          "name": "zrin_liqt_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 71
+        },
+        {
+          "name": "zrin_ovrs_bd_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 72
+        },
+        {
+          "name": "zrin_ovrs_stk_cmst_rt",
+          "datatype": "numeric",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 73
+        },
+        {
+          "name": "zrin_pcd",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 74
+        },
+        {
+          "name": "zrin_ptn_nm",
+          "datatype": "text",
+          "nullable": true,
+          "primary_key": false,
+          "references": [],
+          "identity": false,
+          "ordinal": 75
         }
       ]
     },
@@ -2890,18 +3147,17 @@
     }
   ],
   "row_counts": {
-    "enriched.bond_kr_enriched": 42394,
+    "enriched.bond_kr_enriched": 21882,
     "enriched.company_master": 118709,
-    "enriched.etf_kr_enriched": 1733,
-    "enriched.fund_pub_dedup": 11138,
+    "enriched.etf_kr_enriched": 1779,
     "enriched.holding_code_map": 1393,
-    "raw.bond_kr_master": 42394,
-    "raw.etf_gl_master": 5646,
-    "raw.etf_kr_master": 1733,
-    "raw.fund_pub_master": 95618,
-    "relations.company_subsidiary": 29524,
+    "raw.bond_kr_master": 21882,
+    "raw.etf_gl_master": 6037,
+    "raw.etf_kr_master": 1779,
+    "raw.fund_pub_master": 23676,
+    "relations.company_subsidiary": 30097,
     "relations.etf_holding": 47016,
     "relations.etf_theme": 5646
   },
-  "catalog_sha256": "859bc233c90363dec379eca7d377bc398d75a3ed94e5b9fc617180522d519852"
+  "catalog_sha256": "7a9762840e88adffaceeb849bf27a00ea6d441311db98a4d720e9b4953bc55f0"
 }

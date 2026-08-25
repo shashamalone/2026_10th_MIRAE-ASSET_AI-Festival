@@ -397,6 +397,13 @@ print("테마명에 등장하는 발행사:", [c for c in iss_uniq if len(c) >= 
 # 주최측 분류 라벨 100행을 마스터 컬럼 기반 규칙으로 재현해 본다.
 
 # %%
+AXIS_OK = all((CSV / f"{c}_axis_sample_20260711.csv").exists() for c in
+               ["PRBD01N001_bond_kr", "PREF01N001_etf_kr", "PRFD01N001_fund_pub"])
+if not AXIS_OK:
+    print("[skip] axis_sample이 08-24 배포본에 없고 로컬에도 없다 — §6 축 재현율은 건너뛴다.")
+    print("       마지막 실측치는 EDA_REPORT_0825.md §8에 보존되어 있다(19축 평균 91.5%, 재현 불가 2축).")
+
+
 def recall_table(sample, master, left, right, rules, domain):
     # 샘플에서 axis_*와 조인키만 남겨 마스터 컬럼과의 이름 충돌(_x/_y)을 피한다
     s = sample[[left] + [c for c in sample.columns if c.startswith("axis_")]]
@@ -417,8 +424,7 @@ def recall_table(sample, master, left, right, rules, domain):
 
 
 # --- bond ---
-# axis_sample은 08-24 배포본에 없다. 07-11 파일을 그대로 쓴다.
-b_s = R("PRBD01N001_bond_kr_axis_sample_20260711.csv")
+b_s = R("PRBD01N001_bond_kr_axis_sample_20260711.csv") if AXIS_OK else None
 
 
 def b_maturity(r):
@@ -454,13 +460,14 @@ b_rules = {
                         "-"),
     "axis_issuerCategory": (None, "발행사 업종/섹터 분류 (금융 vs 비금융, 정부기관 여부)"),
 }
-bond_rec = recall_table(b_s, bond, "pd_no", "pd_no", b_rules, "bond_kr")
+bond_rec = recall_table(b_s, bond, "pd_no", "pd_no", b_rules, "bond_kr") if AXIS_OK else pd.DataFrame()
 
 # --- etf_kr ---
-e_s = R("PREF01N001_etf_kr_axis_sample_20260711.csv")
+e_s = R("PREF01N001_etf_kr_axis_sample_20260711.csv") if AXIS_OK else None
 # axis 샘플 100행에는 ETN이 섞여 있으므로 ETF+ETN 전체 마스터에 붙인다
-_sample_grp = etf_kr_all[etf_kr_all.pd_itm_no.isin(set(e_s.pd_itm_no))].pd_grp_no.value_counts().to_dict()
-print("etf_kr axis 샘플 구성:", _sample_grp)
+if AXIS_OK:
+    print("etf_kr axis 샘플 구성:",
+          etf_kr_all[etf_kr_all.pd_itm_no.isin(set(e_s.pd_itm_no))].pd_grp_no.value_counts().to_dict())
 etf_lseg = (etf_kr_all.assign(lseg_key=etf_kr_all.pd_itm_no_ma.str[1:])
             .merge(lseg_df, on="lseg_key", how="left"))
 etf_lseg["base_market"] = etf_lseg.base_market.fillna("")
@@ -481,10 +488,10 @@ e_rules = {
     # ★ 08-24 ref_base_index 신설 — 지수명으로 구성 범위를 근사
     "axis_underlyingScope": (None, "기초지수 구성종목 수 (ref_base_index로 지수명은 확보, 구성 범위는 여전히 없음)"),
 }
-etf_rec = recall_table(e_s, etf_lseg, "pd_itm_no", "pd_itm_no", e_rules, "etf_kr")
+etf_rec = recall_table(e_s, etf_lseg, "pd_itm_no", "pd_itm_no", e_rules, "etf_kr") if AXIS_OK else pd.DataFrame()
 
 # --- fund_pub ---
-f_s = R("PRFD01N001_fund_pub_axis_sample_20260711.csv")
+f_s = R("PRFD01N001_fund_pub_axis_sample_20260711.csv") if AXIS_OK else None
 FT = {"주식형": "SecuritiesFund", "채권형": "SecuritiesFund", "주식혼합": "MixedAssetsFund",
       "채권혼합": "MixedAssetsFund", "MMF": "MoneyMarketFund", "재간접": "SecuritiesFund",
       "혼합자산": "MixedAssetsFund", "부동산": "RealEstateFund", "특별자산": "SpecialAssetsFund"}
@@ -504,10 +511,10 @@ f_rules = {
     "axis_issuanceType": (lambda r: "UnitType" if "C102" in str(r.prfd_attr_cds) else "AdditionalType",
                           "속성코드 0개 펀드(52.4%)는 판정 불가 → 기본값 AdditionalType"),
 }
-fund_rec = recall_table(f_s, fund, "itm_no", "itm_no", f_rules, "fund_pub")
+fund_rec = recall_table(f_s, fund, "itm_no", "itm_no", f_rules, "fund_pub") if AXIS_OK else pd.DataFrame()
 
 axis_all = pd.concat([bond_rec, etf_rec, fund_rec], ignore_index=True)
-axis_all
+axis_all if len(axis_all) else "axis_sample 미제공 — 재현율 대조 생략(마지막 실측: 19축 평균 91.5%)"
 
 # %% [markdown]
 # > **시사점(08-24):** 재현 불가 축이 **4개 → 2개**로 줄었다. `axis_redemptionType`(80%)·`axis_issuanceType`(93%)은 신설 `prfd_attr_cds`의 코드 라벨(`C103 개방`·`C101 추가`·`C102 단위`)로 재현되고, `axis_couponType`은 채권 `bd_inrt_tcd`·`bd_intp_tcd`로 97.1%가 된다. 남은 재현 불가는 **`axis_issuerCategory`(발행사 업종)와 `axis_underlyingScope`(지수 구성 범위)** 둘뿐이다.
@@ -708,7 +715,9 @@ pd.DataFrame(
          f"etf_kr {etf_kr_all.cu_fund_mgmt_co.nunique()}→{etf_kr_all.cu_fund_mgmt_co[etf_kr_all.cu_fund_mgmt_co!=''].map(norm_co).nunique()}종 (상품명 오염 {int(dirty.sum())}건)"),
         ("기업 접점", "pd_pbcm ↔ 상품명 문자열", f"발행사 {len(iss_uniq)}종 중 상품명 등장 {len(hits_df)}종 → 실현 불가"),
         ("axis 재현", "마스터 컬럼 규칙",
-         f"재현 시도 {int(axis_all['재현율(%)'].notna().sum())}축 평균 {axis_all['재현율(%)'].mean():.1f}%, 재현 불가 {int(axis_all['재현율(%)'].isna().sum())}축"),
+         (f"재현 시도 {int(axis_all['재현율(%)'].notna().sum())}축 평균 {axis_all['재현율(%)'].mean():.1f}%, "
+          f"재현 불가 {int(axis_all['재현율(%)'].isna().sum())}축") if len(axis_all)
+         else "axis_sample 미제공 — 생략(마지막 실측 19축 평균 91.5%, 재현 불가 2축)"),
         ("질의 커버리지", f"{len(matrix)}개 평가 질의(주최측 예시 + 교차질의)",
          " / ".join(f"{k} {v}" for k, v in matrix["현재 가능 여부"].value_counts().items())),
     ],

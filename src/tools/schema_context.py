@@ -92,6 +92,13 @@ def _constraint(c: dict, domain: str) -> tuple[dict | None, str | None]:
     raw = c.get("raw") or ""
     if "최신" in raw and ("갱신" in raw or "기준" in raw):
         return None, None
+    # 08-24 배포분의 buyable_quantity는 무효다. 기존 평가 문항의 명시적
+    # '매수가능수량 > 0' 표현도 값을 조회하지 않고 만기 미도래 정의로 치환한다.
+    compact = norm(raw)
+    if domain == "bond_kr" and any(
+            x in compact for x in ("매수가능", "매수할수있는", "구매가능")):
+        return {"binding": "bond.remaining_days", "operator": ">", "value": 0,
+                "unit": "day", "raw": raw}, None
     binding_id = best_binding(c.get("field_text") or raw, domain, "filter")
     if not binding_id:
         binding_id = best_binding(raw, domain, "filter")
@@ -112,8 +119,6 @@ def _constraint(c: dict, domain: str) -> tuple[dict | None, str | None]:
         op = {">=": "<=", ">": "<", "<=": ">=", "<": ">"}.get(op, op)
     elif binding_id == "bond.remaining_days" and c.get("unit") == "년":
         value = int(value * 365)
-    elif binding_id == "bond.buyable_quantity" and "매수" in raw and "가능" in raw:
-        op, value = ">", 0
     elif binding_id in rules.get("categorical_values", {}):
         mapped = rules["categorical_values"][binding_id].get(str(value))
         if mapped is None:
@@ -166,6 +171,13 @@ def ground(question: str, frame: dict) -> dict:
     for item in rules.get("mandatory_filters", {}).get(domain, []):
         _append_unique(filters, dict(item))
     qn = norm(question)
+    purchase_redefined = domain == "bond_kr" and any(
+        x in qn for x in ("매수가능", "매수할수있는", "구매가능"))
+    if purchase_redefined:
+        selected = [x for x in selected if x != "bond.buyable_quantity"]
+        if frame.get("task") != "lookup":
+            selected = ["bond.applied_yield" if x == "bond.buy_yield" else x
+                        for x in selected]
     for target in rules.get("target_filters", []):
         if target["domain"] == domain and any(norm(p) in qn for p in target["phrases"]):
             for item in target["filters"]:
@@ -218,6 +230,10 @@ def ground(question: str, frame: dict) -> dict:
         # 같은 값일 때 결과를 결정적으로 만들기 위한 ID tie-breaker.
         if not any(x["binding"] == spec["id"] for x in order):
             order.append({"binding": spec["id"], "direction": "asc"})
+    if purchase_redefined and frame.get("task") != "lookup":
+        for item in order:
+            if item["binding"] == "bond.buy_yield":
+                item["binding"] = "bond.applied_yield"
 
     referenced = selected + [x.get("binding") for x in filters + order]
     concepts = list(dict.fromkeys(bindings[x]["concept_uri"] for x in referenced

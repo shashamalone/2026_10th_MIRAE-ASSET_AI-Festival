@@ -35,7 +35,7 @@
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내 ETF·ETN 온톨로지"@ko, "Korean Domestic ETF/ETN Ontology"@en ;
     rdfs:comment "국내 ETF·ETN 마스터(PREF01N001)와 LSEG 보강 테이블 기반 스키마. ETF/ETN 분리, 총보수 보완 경로, 레버리지·연금·판매 축, 테마 개체 176종을 정의한다."@ko ;
-    dcterms:source "PREF01N001_etf_kr_master_20260711.csv, data/enriched/etf_kr_enriched.csv, data/relations/etf_theme.csv" .
+    dcterms:source "PREF01N001_etf_kr_master_20260824.csv, data/enriched/etf_kr_enriched.csv, data/relations/etf_theme.csv" .
 
 ################################################################################
 # 1. 분류축 클래스 — 주최측 axis_* 라벨 7종

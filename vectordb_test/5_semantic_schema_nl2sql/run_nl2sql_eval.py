@@ -87,7 +87,7 @@ def load_inputs(gold_name: str) -> tuple[dict, dict, dict]:
 def new_raw(kind: str, hashes: dict) -> dict:
     return {"meta": {"kind": kind, "model": MODEL, "temperature": 0.1, "seed": 0,
                      "top_p": 0.8, "max_completion_tokens": 4096,
-                     "api_timeout_seconds": 120, "data_cutoff": "2026-07-11",
+                     "api_timeout_seconds": 120, "data_cutoff": "2026-08-24",
                      "hashes": hashes,
                      "repeat_rule": "run1 전체; 오류 또는 A/B/C primary 결과 차이 문항만 run2-3"},
             "runs": []}

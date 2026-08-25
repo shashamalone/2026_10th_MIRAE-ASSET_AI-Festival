@@ -4,10 +4,10 @@
     "bond_kr": {"base_table": "raw.bond_kr_master", "alias": "b", "id": "bond.product_code", "name": "bond.product_name", "entity_fields": ["bond.product_name", "bond.product_code"]},
     "etf_kr": {"base_table": "raw.etf_kr_master", "alias": "k", "id": "etf_kr.product_code", "name": "etf_kr.product_name", "entity_fields": ["etf_kr.short_name", "etf_kr.product_name", "etf_kr.product_code"]},
     "etf_gl": {"base_table": "raw.etf_gl_master", "alias": "g", "id": "etf_gl.product_code", "name": "etf_gl.product_name", "entity_fields": ["etf_gl.ticker", "etf_gl.product_code", "etf_gl.product_name"]},
-    "fund_pub": {"base_table": "enriched.fund_pub_dedup", "alias": "f", "id": "fund.product_code", "name": "fund.product_name", "entity_fields": ["fund.product_name", "fund.short_name", "fund.product_code"]}
+    "fund_pub": {"base_table": "raw.fund_pub_master", "alias": "f", "id": "fund.product_code", "name": "fund.product_name", "entity_fields": ["fund.product_name", "fund.short_name", "fund.product_code"]}
   },
   "joins": [
-    {"left": "raw.bond_kr_master", "right": "enriched.bond_kr_enriched", "left_key": "pd_no", "right_key": "pd_no", "cardinality": "one_to_one"},
+    {"left": "raw.bond_kr_master", "right": "enriched.bond_kr_enriched", "left_keys": ["pd_no","pd_exg_mkt","info_seq"], "right_keys": ["pd_no","pd_exg_mkt","info_seq"], "cardinality": "one_to_one"},
     {"left": "raw.etf_kr_master", "right": "enriched.etf_kr_enriched", "left_key": "pd_itm_no", "right_key": "pd_itm_no", "cardinality": "one_to_one"}
   ],
   "bindings": [
@@ -22,9 +22,10 @@
     {"id":"bond.coupon_rate","concept_uri":"fp:couponRate","domain":"bond_kr","label":"표면금리","aliases":["표면금리","표면 이율"],"table":"raw.bond_kr_master","column":"srfc_irt","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
     {"id":"bond.credit_rating","concept_uri":"fp:creditRatingLabel","domain":"bond_kr","label":"원신용등급","aliases":["신용등급","원등급","원신용등급","원본 등급값"],"table":"raw.bond_kr_master","column":"crd_grd","datatype":"text","usage":["select"]},
     {"id":"bond.buy_yield","concept_uri":"fp:buyYield","domain":"bond_kr","label":"매수수익률","aliases":["매수수익률","수익률"],"table":"raw.bond_kr_master","column":"buy_yield","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
+    {"id":"bond.applied_yield","concept_uri":"fp:appliedYield","domain":"bond_kr","label":"민평수익률","aliases":["민평수익률","민평금리"],"table":"raw.bond_kr_master","column":"applied_yield","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
     {"id":"bond.after_tax_yield","concept_uri":null,"domain":"bond_kr","label":"세후수익률","aliases":["세후수익률"],"table":"raw.bond_kr_master","column":"after_tax_yield","datatype":"numeric","usage":["select"],"unit":"%"},
-    {"id":"bond.buyable_quantity","concept_uri":"fp:buyableQuantity","domain":"bond_kr","label":"매수가능수량","aliases":["매수가능수량","매수 가능 수량","매수 가능한","매수 가능"],"table":"raw.bond_kr_master","column":"buyable_quantity","datatype":"numeric","usage":["select","filter"]},
-    {"id":"bond.update_date","concept_uri":null,"domain":"bond_kr","label":"기준정보갱신일","aliases":["최신 상품정보 갱신일","갱신일","기준일","데이터 갱신일"],"table":"raw.bond_kr_master","column":"pd_std_info_update","datatype":"text","usage":["select"]},
+    {"id":"bond.buyable_quantity","concept_uri":null,"domain":"bond_kr","label":"매수가능수량(무효)","aliases":["매수가능수량","매수 가능 수량"],"table":"raw.bond_kr_master","column":"buyable_quantity","datatype":"numeric","usage":[]},
+    {"id":"bond.update_date","concept_uri":null,"domain":"bond_kr","label":"데이터 기준일","aliases":["최신 상품정보 갱신일","갱신일","기준일","데이터 갱신일"],"table":"raw.bond_kr_master","column":"info_base_dt","datatype":"text","usage":["select"]},
     {"id":"bond.duration","concept_uri":"fp:duration","domain":"bond_kr","label":"듀레이션","aliases":["듀레이션"],"table":"raw.bond_kr_master","column":"dur","datatype":"numeric","usage":["select","filter","sort"]},
     {"id":"bond.rating_norm","concept_uri":"fp:creditRatingLabel","domain":"bond_kr","label":"온톨로지 신용등급","aliases":["온톨로지 분류값","정규화 등급"],"table":"enriched.bond_kr_enriched","column":"crd_grd_norm","datatype":"text","usage":["select"]},
     {"id":"bond.rating_rank","concept_uri":"fp:ratingRank","domain":"bond_kr","label":"신용등급 서열","aliases":["신용등급","등급 서열","등급 서열 규칙","AA- 이상"],"table":"enriched.bond_kr_enriched","column":"crd_grd_rank","datatype":"integer","usage":["select","filter","sort"],"unit":"rank"},
@@ -71,22 +72,22 @@
     {"id":"etf_gl.strategy","concept_uri":"fp:strategyText","domain":"etf_gl","label":"운용전략","aliases":["운용전략","전략 원문"],"table":"raw.etf_gl_master","column":"cu_strtegy","datatype":"text","usage":["select"]},
     {"id":"etf_gl.currency","concept_uri":"fp:hasCurrency","domain":"etf_gl","label":"통화 단위","aliases":["통화 단위","통화"],"table":"raw.etf_gl_master","column":"pd_trd_ccy","datatype":"text","usage":["select"]},
 
-    {"id":"fund.product_code","concept_uri":"fp:productCode","domain":"fund_pub","label":"종목번호","aliases":["종목번호","상품 식별번호","상품번호"],"table":"enriched.fund_pub_dedup","column":"itm_no","datatype":"text","usage":["select","filter","sort"]},
-    {"id":"fund.product_name","concept_uri":"fp:productName","domain":"fund_pub","label":"상품명","aliases":["상품명","펀드명"],"table":"enriched.fund_pub_dedup","column":"itm_nm","datatype":"text","usage":["select","filter"]},
-    {"id":"fund.short_name","concept_uri":"fp:productShortName","domain":"fund_pub","label":"상품약어명","aliases":["상품약어명"],"table":"enriched.fund_pub_dedup","column":"itm_abrv_nm","datatype":"text","usage":["filter"]},
-    {"id":"fund.type","concept_uri":"fp:hasFundType","domain":"fund_pub","label":"펀드 유형","aliases":["펀드 유형"],"table":"enriched.fund_pub_dedup","column":"or_attr_desc","datatype":"text","usage":["select"]},
-    {"id":"fund.net_assets","concept_uri":"fp:netAssets","domain":"fund_pub","label":"순자산","aliases":["순자산","AUM"],"table":"enriched.fund_pub_dedup","column":"fd_nast_suma","datatype":"numeric","usage":["select","filter","sort"],"unit":"KRW"},
-    {"id":"fund.return_1m","concept_uri":"fp:return1M","domain":"fund_pub","label":"1개월 수익률","aliases":["1개월 수익률"],"table":"enriched.fund_pub_dedup","column":"fd_mm1_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
-    {"id":"fund.return_3m","concept_uri":"fp:return3M","domain":"fund_pub","label":"3개월 수익률","aliases":["3개월 수익률"],"table":"enriched.fund_pub_dedup","column":"fd_mm3_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
-    {"id":"fund.return_6m","concept_uri":"fp:return6M","domain":"fund_pub","label":"6개월 수익률","aliases":["6개월 수익률"],"table":"enriched.fund_pub_dedup","column":"fd_mm6_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
-    {"id":"fund.return_1y","concept_uri":"fp:return1Y","domain":"fund_pub","label":"1년 수익률","aliases":["1년 수익률","수익률"],"table":"enriched.fund_pub_dedup","column":"fd_yr1_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
-    {"id":"fund.risk","concept_uri":"fp:riskGradeLabel","domain":"fund_pub","label":"위험등급","aliases":["위험등급"],"table":"enriched.fund_pub_dedup","column":"zrin_fd_ivst_risk_grd_nm","datatype":"text","usage":["select"]},
-    {"id":"fund.sale_status","concept_uri":"fp:saleStatus","domain":"fund_pub","label":"판매 여부","aliases":["판매 여부","판매 상태"],"table":"enriched.fund_pub_dedup","column":"sale_yn","datatype":"text","usage":["select","filter"]},
-    {"id":"fund.benchmark","concept_uri":"fp:benchmarkName","domain":"fund_pub","label":"벤치마크","aliases":["벤치마크","비교지수"],"table":"enriched.fund_pub_dedup","column":"bmrk_nm","datatype":"text","usage":["select"]},
-    {"id":"fund.currency","concept_uri":"fp:hasCurrency","domain":"fund_pub","label":"통화","aliases":["통화"],"table":"enriched.fund_pub_dedup","column":"curr_cd","datatype":"text","usage":["select"]},
-    {"id":"fund.region","concept_uri":"fp:hasInvestmentRegion","domain":"fund_pub","label":"투자지역","aliases":["투자지역"],"table":"enriched.fund_pub_dedup","column":"fd_ivst_rgn_desc","datatype":"text","usage":["select"]},
-    {"id":"fund.investor_type","concept_uri":"fp:eligibleInvestorType","domain":"fund_pub","label":"개인·법인 구분","aliases":["개인·법인 구분","개인 법인 구분"],"table":"enriched.fund_pub_dedup","column":"pers_corp_desc","datatype":"text","usage":["select"]},
-    {"id":"fund.manager_code","concept_uri":"fp:managerItemCode","domain":"fund_pub","label":"운용사 종목번호","aliases":["모펀드","운용사 종목번호"],"table":"enriched.fund_pub_dedup","column":"mtco_itm_no","datatype":"text","usage":["select"]},
-    {"id":"fund.representative_code","concept_uri":"fp:representativeKsdCode","domain":"fund_pub","label":"대표종목번호","aliases":["대표종목번호","대표 예탁원 종목번호"],"table":"enriched.fund_pub_dedup","column":"rptt_ksd_itm_no","datatype":"text","usage":["select"]}
+    {"id":"fund.product_code","concept_uri":"fp:productCode","domain":"fund_pub","label":"종목번호","aliases":["종목번호","상품 식별번호","상품번호"],"table":"raw.fund_pub_master","column":"itm_no","datatype":"text","usage":["select","filter","sort"]},
+    {"id":"fund.product_name","concept_uri":"fp:productName","domain":"fund_pub","label":"상품명","aliases":["상품명","펀드명"],"table":"raw.fund_pub_master","column":"itm_nm","datatype":"text","usage":["select","filter"]},
+    {"id":"fund.short_name","concept_uri":"fp:productShortName","domain":"fund_pub","label":"상품약어명","aliases":["상품약어명"],"table":"raw.fund_pub_master","column":"itm_abrv_nm","datatype":"text","usage":["filter"]},
+    {"id":"fund.type","concept_uri":"fp:hasFundType","domain":"fund_pub","label":"펀드 유형","aliases":["펀드 유형"],"table":"raw.fund_pub_master","column":"or_attr_desc","datatype":"text","usage":["select"]},
+    {"id":"fund.net_assets","concept_uri":"fp:netAssets","domain":"fund_pub","label":"순자산","aliases":["순자산","AUM"],"table":"raw.fund_pub_master","column":"fd_nast_suma","datatype":"numeric","usage":["select","filter","sort"],"unit":"KRW"},
+    {"id":"fund.return_1m","concept_uri":"fp:return1M","domain":"fund_pub","label":"1개월 수익률","aliases":["1개월 수익률"],"table":"raw.fund_pub_master","column":"fd_mm1_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
+    {"id":"fund.return_3m","concept_uri":"fp:return3M","domain":"fund_pub","label":"3개월 수익률","aliases":["3개월 수익률"],"table":"raw.fund_pub_master","column":"fd_mm3_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
+    {"id":"fund.return_6m","concept_uri":"fp:return6M","domain":"fund_pub","label":"6개월 수익률","aliases":["6개월 수익률"],"table":"raw.fund_pub_master","column":"fd_mm6_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
+    {"id":"fund.return_1y","concept_uri":"fp:return1Y","domain":"fund_pub","label":"1년 수익률","aliases":["1년 수익률","수익률"],"table":"raw.fund_pub_master","column":"fd_yr1_ern_r","datatype":"numeric","usage":["select","filter","sort"],"unit":"%"},
+    {"id":"fund.risk","concept_uri":"fp:riskGradeLabel","domain":"fund_pub","label":"위험등급","aliases":["위험등급"],"table":"raw.fund_pub_master","column":"zrin_fd_ivst_risk_grd_nm","datatype":"text","usage":["select"]},
+    {"id":"fund.sale_status","concept_uri":"fp:saleStatus","domain":"fund_pub","label":"판매 여부","aliases":["판매 여부","판매 상태"],"table":"raw.fund_pub_master","column":"sale_yn","datatype":"text","usage":["select","filter"]},
+    {"id":"fund.benchmark","concept_uri":"fp:benchmarkName","domain":"fund_pub","label":"벤치마크","aliases":["벤치마크","비교지수"],"table":"raw.fund_pub_master","column":"bmrk_nm","datatype":"text","usage":["select"]},
+    {"id":"fund.currency","concept_uri":"fp:hasCurrency","domain":"fund_pub","label":"통화","aliases":["통화"],"table":"raw.fund_pub_master","column":"curr_cd","datatype":"text","usage":["select"]},
+    {"id":"fund.region","concept_uri":"fp:hasInvestmentRegion","domain":"fund_pub","label":"투자지역","aliases":["투자지역"],"table":"raw.fund_pub_master","column":"fd_ivst_rgn_desc","datatype":"text","usage":["select"]},
+    {"id":"fund.investor_type","concept_uri":"fp:eligibleInvestorType","domain":"fund_pub","label":"개인·법인 구분","aliases":["개인·법인 구분","개인 법인 구분"],"table":"raw.fund_pub_master","column":"pers_corp_desc","datatype":"text","usage":["select"]},
+    {"id":"fund.manager_code","concept_uri":"fp:managerItemCode","domain":"fund_pub","label":"운용사 종목번호","aliases":["모펀드","운용사 종목번호"],"table":"raw.fund_pub_master","column":"mtco_itm_no","datatype":"text","usage":["select"]},
+    {"id":"fund.representative_code","concept_uri":"fp:representativeKsdCode","domain":"fund_pub","label":"대표종목번호","aliases":["대표종목번호","대표 예탁원 종목번호"],"table":"raw.fund_pub_master","column":"rptt_ksd_itm_no","datatype":"text","usage":["select"]}
   ]
 }
