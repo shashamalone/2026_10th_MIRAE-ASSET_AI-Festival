@@ -11,10 +11,26 @@
 # ---
 
 # %% [markdown]
-# # 05. 도메인 간 연결(Linkage) EDA
+# # 05. 도메인 간 연결(Linkage) EDA — 2026-08-24 배포본
 #
 # 온톨로지(.ttl) 설계에 직결되는 **도메인 간 조인 키·엔티티 통합·평가질의 커버리지**를 검증한다.
 # 대상: 국내채권 / 국내ETF(+ETN) / 해외ETF / 공모펀드 / LSEG 정적 메타데이터.
+#
+# 2026-07-11 배포본 대비 이 노트북에 영향을 주는 변경:
+# - 공모펀드가 **1행 = 1펀드**가 되어 dedup이 불필요해졌다(무해한 no-op으로 유지).
+# - 국내ETF에 `ref_base_index`(결측 2.2%)·`pd_isin_cd`·`pd_ric`·`ref_fund_mgmt_co`가 신설되어
+#   **지수·운용사 엔티티 통합 난이도가 크게 낮아졌다.**
+# - 국내채권 컬럼이 소문자로 바뀌고 `bd_inrt_tcd`·`bd_intp_tcd`가 신설되어 axis 재현 규칙이 달라진다.
+# - `axis_sample`은 08-24 배포본에서 제공되지 않아 07-11 파일을 그대로 쓴다.
+#   **채권 샘플 100행 중 69행만 새 마스터에 존재**하므로(만기 도래분 삭제) 재현율은 그 69행 기준이다.
+#
+# 주최측 추가 안내(2026-08-24) — 커버리지 판정에 직접 반영한다:
+# - 평가는 **35문항**(상 10 / 중 10 / 하 10 + 답변불가 5).
+# - **교차질의**가 포함된다. 예: "삼성전자를 보유한 국내/해외ETF와 공모펀드를 1년 수익률 기준 TOP10"
+#   → ETF와 펀드를 **한 랭킹으로 합쳐야** 하므로 상품군 간 수익률 정의·기준일 정합이 필수다.
+# - 공시·시장데이터는 **2026-08-24까지** 발행분 사용 가능(구 기준 07-11에서 이동).
+# - `BUYABLE_QUANTITY`는 **무효**. 상장폐지·리스팅 종료 제외 종목은 모두 "구매 가능"으로 간주한다.
+# - 응답시간 기준은 비공개, **300초 초과 시 미응답 처리**. 늦더라도 300초 내 응답과는 점수 차등.
 
 # %%
 import json
@@ -38,24 +54,24 @@ def R(name):
     return pd.read_csv(CSV / name, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
-bond = R("PRBD01N001_bond_kr_master_20260711.csv")
-etf_kr_all = R("PREF01N001_etf_kr_master_20260711.csv")
-etf_gl = R("PREF02N001_etf_gl_master_20260711.csv")
-fund_raw = R("PRFD01N001_fund_pub_master_20260711.csv")
+bond = R("PRBD01N001_bond_kr_master_20260824.csv")
+etf_kr_all = R("PREF01N001_etf_kr_master_20260824.csv")
+etf_gl = R("PREF02N001_etf_gl_master_20260824.csv")
+fund_raw = R("PRFD01N001_fund_pub_master_20260824.csv")
 
-# 공모펀드는 (itm_no, prfd_attr_cd) 롱포맷 -> itm_no 기준 dedup 필수
+# 08-24 배포본은 itm_no가 단독 유일키다. dedup은 무해한 no-op으로 남겨 방어한다.
 fund = fund_raw.drop_duplicates("itm_no").reset_index(drop=True)
 
 # 국내ETF 마스터에는 ETN이 섞여 있다
 etf_kr = etf_kr_all[etf_kr_all.pd_grp_no == "ETF"].reset_index(drop=True)
 etn_kr = etf_kr_all[etf_kr_all.pd_grp_no == "ETN"].reset_index(drop=True)
 
-lseg = json.loads((ROOT / "lseg_static_metadata.json").read_text(encoding="utf-8"))
-theme_list = json.loads((ROOT / "theme_list.json").read_text(encoding="utf-8"))
+lseg = json.loads((ROOT / "data" / "lseg_static_metadata.json").read_text(encoding="utf-8"))
+theme_list = json.loads((ROOT / "data" / "theme_list.json").read_text(encoding="utf-8"))
 
 pd.DataFrame(
     [
-        ("bond_kr", len(bond), bond.PD_NO.nunique()),
+        ("bond_kr", len(bond), bond.pd_no.nunique()),
         ("etf_kr(ETF)", len(etf_kr), etf_kr.pd_itm_no.nunique()),
         ("etf_kr(ETN)", len(etn_kr), etn_kr.pd_itm_no.nunique()),
         ("etf_gl", len(etf_gl), etf_gl.pd_itm_no.nunique()),
@@ -68,16 +84,18 @@ pd.DataFrame(
 )
 
 # %% [markdown]
-# 롱포맷 검증: 같은 `itm_no` 내에서 실제로 값이 달라지는 컬럼이 `prfd_attr_cd` 뿐인지 확인한다.
+# 그레인 재검증: 08-24 배포본에서 `itm_no`가 단독 유일키인지, 채권 그레인이 무엇인지 확인한다.
 
 # %%
-_g = fund_raw[fund_raw.itm_no == "KR5114601001"]
-_varying = _g.nunique()
-print("샘플 itm_no 행 수:", len(_g))
-print("값이 2개 이상인 컬럼:", _varying[_varying > 1].to_dict())
+print("fund itm_no 단독 유일키 :", fund_raw.itm_no.is_unique, "(07-11: False)")
+print("fund dedup 손실 행       :", len(fund_raw) - len(fund))
+print()
+print("bond pd_no 단독 유일키   :", bond.pd_no.is_unique, "(07-11: True)")
+print("bond (pd_no,pd_exg_mkt,info_seq) 중복:", int(bond.duplicated(["pd_no", "pd_exg_mkt", "info_seq"]).sum()))
+print("bond 고유 종목(pd_no)    :", bond.pd_no.nunique(), "/", len(bond), "행")
 
 # %% [markdown]
-# > **시사점:** `prfd_attr_cd`만 변하므로 `itm_no` dedup은 무손실이다. 온톨로지에서 펀드 노드는 `itm_no` 1개 = 1 인스턴스, `prfd_attr_cd`는 다중값 속성으로 모델링한다.
+# > **시사점:** 두 도메인의 그레인이 **정반대로 바뀌었다.** 공모펀드는 롱포맷이 해소되어 1행=1펀드가 되었고, 국내채권은 반대로 `pd_no`가 유일키에서 내려와 **`(pd_no, pd_exg_mkt, info_seq)`** 가 유일키가 되었다(같은 채권이 장내/장외로 이중 게시). 교차 집계에서 "상품 개수"를 셀 때 **채권만 `DISTINCT pd_no`가 필요**하다.
 
 # %% [markdown]
 # ---
@@ -268,9 +286,11 @@ def norm_idx(s):
     return s.upper()
 
 
+# ★ 08-24: etf_kr은 cu_base_index(95.5% 결측) 대신 신설 ref_base_index(2.2% 결측)를 쓴다.
 src = {
     "fund.bmrk_nm": fund.bmrk_nm,
-    "etf_kr.cu_base_index": etf_kr.cu_base_index,
+    "etf_kr.cu_base_index(구)": etf_kr.cu_base_index,
+    "etf_kr.ref_base_index(신)": etf_kr.ref_base_index,
     "etf_gl.cu_base_index": etf_gl.cu_base_index,
 }
 sets, rows = {}, []
@@ -282,23 +302,27 @@ for name, s in src.items():
 idx_df = pd.DataFrame(rows, columns=["소스", "행수", "결측", "sentinel", "정규화 전 고유", "정규화 후 고유"])
 display(idx_df)
 
-a, b, c = sets["fund.bmrk_nm"], sets["etf_kr.cu_base_index"], sets["etf_gl.cu_base_index"]
+a, b_old, b, c = (sets["fund.bmrk_nm"], sets["etf_kr.cu_base_index(구)"],
+                  sets["etf_kr.ref_base_index(신)"], sets["etf_gl.cu_base_index"])
 overlap = pd.DataFrame(
     [
-        ("fund ∩ etf_kr", len(a & b)),
+        ("fund ∩ etf_kr (구 cu_base_index)", len(a & b_old)),
+        ("fund ∩ etf_kr (신 ref_base_index)", len(a & b)),
         ("fund ∩ etf_gl", len(a & c)),
-        ("etf_kr ∩ etf_gl", len(b & c)),
-        ("3자 교집합", len(a & b & c)),
-        ("합집합 (지수 노드 후보)", len(a | b | c)),
+        ("etf_kr(신) ∩ etf_gl", len(b & c)),
+        ("3자 교집합(신 기준)", len(a & b & c)),
+        ("합집합 (지수 노드 후보, 신 기준)", len(a | b | c)),
     ],
     columns=["관계", "고유 지수 수"],
 )
 display(overlap)
-print("교집합 예시(fund ∩ etf_kr):", sorted(a & b)[:10])
-print("교집합 예시(fund ∩ etf_gl):", sorted(a & c)[:10])
+print("교집합 예시(fund ∩ etf_kr 신):", sorted(a & b)[:8])
+print("교집합 예시(etf_kr 신 ∩ etf_gl):", sorted(b & c)[:8])
 
 # %% [markdown]
-# > **시사점:** 지수 노드 후보는 **2,124종**이지만 도메인 간 교집합은 극히 얕다 — `fund ∩ etf_kr` 17종, `fund ∩ etf_gl`·`etf_kr ∩ etf_gl`·3자 교집합은 **모두 0종**. 국내(`KOSPI200`, `MSCI KOREA`)와 해외(`S&P 500 TR`)의 표기 체계가 달라 대소문자·공백 정규화만으로는 절대 붙지 않는다. 또한 `etf_gl.cu_base_index`는 **2,705행(47.9%)이 sentinel 문자열**이라 결측으로 처리해야 하고, `etf_kr.cu_base_index`는 유효값이 19종뿐이다. 지수를 공유 엔티티로 쓰려면 **별칭(alias) 매핑 테이블이 필수** — `.ttl`에서는 `:Index` 노드 + `skos:altLabel`로 설계한다.
+# > **시사점(08-24):** 국내ETF 기초지수가 `cu_base_index`(유효 19종) → **`ref_base_index`(905종, 결측 2.2%)** 로 바뀌면서 지수 엔티티의 공급원이 하나 더 생겼다. 07-11 배포본에서 "국내ETF는 기초지수 95% 결측이라 지수 연결 사실상 불가"로 판정했던 부분이 **해소**된다. 도메인 간 교집합도 `etf_kr ∩ etf_gl`이 0종 → 실측치로 늘었다.
+# >
+# > 다만 **별칭 매핑 필요성 자체는 그대로다.** 국내(`KOSPI200`)와 해외(`S&P 500 TR`) 표기 체계가 다르고, `etf_gl.cu_base_index`는 여전히 **2,920행(48.4%)이 sentinel 문자열**이라 결측 처리해야 한다. 펀드 `bmrk_nm`은 합성 벤치마크(`A 50% + B 50%`) 문자열이라 분해가 선행되어야 한다. `.ttl`에서는 `:Index` 노드 + `skos:altLabel` + `:BenchmarkComposition` 중간 노드 설계를 유지한다.
 
 # %% [markdown]
 # ---
@@ -321,7 +345,7 @@ def norm_co(s):
 
 # 운용사 컬럼에 상품명이 그대로 들어간 오염 행 (언어 무관 판정)
 is_dirty = lambda s: s.str.contains("상장지수투자신탁|투자신탁|ETF Trust|Fund$", regex=True)
-DIRTY = is_dirty(etf_kr_all.cu_fund_mgmt_co)
+dirty = is_dirty(etf_kr_all.cu_fund_mgmt_co)
 co_rows = []
 for name, s in [("etf_kr.cu_fund_mgmt_co", etf_kr_all.cu_fund_mgmt_co),
                 ("etf_gl.cu_fund_mgmt_co", etf_gl.cu_fund_mgmt_co)]:
@@ -332,7 +356,7 @@ co_rows.append(("fund.mtco_itm_no (코드)", fund.mtco_itm_no.nunique(), fund.mt
 co_df = pd.DataFrame(co_rows, columns=["소스", "정규화 전 고유", "정규화 후 고유", "오염 의심(상품명 혼입)"])
 display(co_df)
 
-print("오염 사례:", etf_kr_all.loc[DIRTY, "cu_fund_mgmt_co"].head(3).tolist())
+print("오염 사례:", etf_kr_all.loc[dirty, "cu_fund_mgmt_co"].head(3).tolist())
 print("\n정규화 전후 예시:")
 ex = ["메리츠증권 주식회사", "KB증권(주)", "삼성", "미래에셋TIGER", "NH-Amundi", "iM에셋"]
 display(pd.DataFrame({"원본": ex, "정규화": [norm_co(x) for x in ex]}))
@@ -350,9 +374,9 @@ def norm_corp(s):
     return s
 
 
-issuers = bond.PD_PBCM[bond.PD_PBCM != ""].map(norm_corp)
+issuers = bond.pd_pbcm[bond.pd_pbcm != ""].map(norm_corp)
 iss_uniq = sorted(set(issuers) - {""})
-print("채권 발행사 고유(정규화 후):", len(iss_uniq), "/ 원본:", bond.PD_PBCM.nunique())
+print("채권 발행사 고유(정규화 후):", len(iss_uniq), "/ 원본:", bond.pd_pbcm.nunique())
 
 name_blob = " ".join(etf_kr.pd_nm) + " " + " ".join(fund.itm_nm) + " " + " ".join(etf_gl.pd_nm)
 theme_blob = " ".join(theme_list)
@@ -364,7 +388,7 @@ display(hits_df.head(15))
 print("테마명에 등장하는 발행사:", [c for c in iss_uniq if len(c) >= 3 and c in theme_blob])
 
 # %% [markdown]
-# > **시사점:** 채권 발행사 7,994종 중 ETF/펀드 상품명에 등장하는 것은 **25종(0.31%)** 뿐이고, 그마저 `OCI`·`디에스`·`피닉스`처럼 **부분문자열 오탐**이 대부분이다(테마명 등장은 0종). ETF/펀드에 **구성종목(holdings) 데이터가 없어** 기업 노드로 채권-ETF-펀드를 잇는 것은 현재 데이터만으로 **실현 불가**다. `:Company` 노드는 채권 발행사(`PD_PBCM`)에 한정해 세우고, ETF/펀드와의 연결은 외부 구성종목 소스 확보를 전제로 별도 단계로 미룬다.
+# > **시사점:** 채권 발행사 7,994종 중 ETF/펀드 상품명에 등장하는 것은 **25종(0.31%)** 뿐이고, 그마저 `OCI`·`디에스`·`피닉스`처럼 **부분문자열 오탐**이 대부분이다(테마명 등장은 0종). ETF/펀드에 **구성종목(holdings) 데이터가 없어** 기업 노드로 채권-ETF-펀드를 잇는 것은 현재 데이터만으로 **실현 불가**다. `:Company` 노드는 채권 발행사(`pd_pbcm`)에 한정해 세우고, ETF/펀드와의 연결은 외부 구성종목 소스 확보를 전제로 별도 단계로 미룬다.
 
 # %% [markdown]
 # ---
@@ -376,8 +400,10 @@ print("테마명에 등장하는 발행사:", [c for c in iss_uniq if len(c) >= 
 def recall_table(sample, master, left, right, rules, domain):
     # 샘플에서 axis_*와 조인키만 남겨 마스터 컬럼과의 이름 충돌(_x/_y)을 피한다
     s = sample[[left] + [c for c in sample.columns if c.startswith("axis_")]]
-    mg = s.merge(master, left_on=left, right_on=right, how="inner")
-    assert len(mg) == len(s), f"{domain}: 조인 실패 {len(s) - len(mg)}행"
+    mg = s.merge(master, left_on=left, right_on=right, how="inner").drop_duplicates(left)
+    # axis_sample은 07-11 배포본 기준이라 08-24 마스터에 없는 종목이 있다(채권 만기 도래분 등).
+    if len(mg) != len(s):
+        print(f"[{domain}] axis 샘플 {len(s)}행 중 {len(mg)}행만 08-24 마스터에 존재 → 그 {len(mg)}행 기준 재현율")
     out = []
     for axis, (fn, need) in rules.items():
         if fn is None:
@@ -391,11 +417,12 @@ def recall_table(sample, master, left, right, rules, domain):
 
 
 # --- bond ---
+# axis_sample은 08-24 배포본에 없다. 07-11 파일을 그대로 쓴다.
 b_s = R("PRBD01N001_bond_kr_axis_sample_20260711.csv")
 
 
 def b_maturity(r):
-    d = (pd.to_datetime(r.MAT_DT, errors="coerce") - pd.to_datetime(r.ISU_DT, errors="coerce"))
+    d = (pd.to_datetime(r.mat_dt, errors="coerce") - pd.to_datetime(r.isu_dt, errors="coerce"))
     y = d.days / 365.25 if pd.notna(d) else None
     if y is None:
         return ""
@@ -403,7 +430,7 @@ def b_maturity(r):
 
 
 def b_rating(r):
-    g = r.CRD_GRD
+    g = r.crd_grd
     if g == "":
         return "NotRated"
     return {"AAA": "AAAGrade"}.get(g, ("AAGrade" if g.startswith("AA") else
@@ -411,20 +438,23 @@ def b_rating(r):
 
 
 b_rules = {
-    "axis_currency": (lambda r: r.CURR_CD, "-"),
-    "axis_issuanceMarket": (lambda r: "DomesticMarket" if r.PD_CTRY_CD == "KR" else "ForeignMarket", "-"),
+    "axis_currency": (lambda r: r.curr_cd, "-"),
+    "axis_issuanceMarket": (lambda r: "DomesticMarket" if r.pd_ctry_cd == "KR" else "ForeignMarket", "-"),
     "axis_creditRating": (b_rating, "-"),
     "axis_issuerType": (lambda r: {"회사채": "CorporateBond", "특수채": "SpecialBond",
-                                   "국공채": "GovernmentBond"}.get(r.STD_PD_MCLS_NM, "CorporateBond"), "지방채/특수채 세분 기준"),
+                                   "국공채": "GovernmentBond"}.get(r.std_pd_mcls_nm, "CorporateBond"), "지방채/특수채 세분 기준"),
     "axis_maturityClass": (b_maturity, "-"),
-    "axis_collateralType": (lambda r: ("Subordinated" if "후순위" in r.PD_NM else
-                                       ("Secured" if r.BD_KND == "유동화회사채" else
-                                        ("Guaranteed" if "보증" in r.PD_NM else "Unsecured"))), "담보/보증 구조 플래그"),
-    "axis_couponType": (lambda r: "ZeroCoupon" if r.SRFC_IRT in ("0", "") else "FixedCoupon",
-                        "변동금리·전환사채 플래그 (SRFC_IRT만으로 구분 불가)"),
+    "axis_collateralType": (lambda r: ("Subordinated" if "후순위" in r.pd_nm else
+                                       ("Secured" if r.bd_knd == "유동화회사채" else
+                                        ("Guaranteed" if "보증" in r.pd_nm else "Unsecured"))), "담보/보증 구조 플래그"),
+    # ★ 08-24 신설 bd_inrt_tcd(고정/변동) + bd_intp_tcd(이표/복리/할인)로 직접 판정
+    "axis_couponType": (lambda r: ("FloatingCoupon" if r.bd_inrt_tcd == "변동금리" else
+                                   ("ZeroCoupon" if r.bd_intp_tcd in ("할인채", "복리채") or r.srfc_irt == "0"
+                                    else "FixedCoupon")),
+                        "-"),
     "axis_issuerCategory": (None, "발행사 업종/섹터 분류 (금융 vs 비금융, 정부기관 여부)"),
 }
-bond_rec = recall_table(b_s, bond, "pd_no", "PD_NO", b_rules, "bond_kr")
+bond_rec = recall_table(b_s, bond, "pd_no", "pd_no", b_rules, "bond_kr")
 
 # --- etf_kr ---
 e_s = R("PREF01N001_etf_kr_axis_sample_20260711.csv")
@@ -441,13 +471,15 @@ e_rules = {
     "axis_leverageType": (lambda r: LEV.get(r.cu_lev_fector, "Standard"), "-"),
     "axis_strategy": (lambda r: "Active" if r.cu_strtegy == "액티브" else "Passive", "-"),
     "axis_replicationMethod": (lambda r: "Synthetic" if r.cu_strtegy == "합성복제" else "Physical", "-"),
-    "axis_region": (lambda r: {"국내": "Domestic", "해외": "Overseas"}.get(r.base_market, "Domestic"),
-                    "LSEG 미매칭 ETF(8.6%)는 판정 불가"),
+    # ★ LSEG 대신 마스터 자체 컬럼(wu_inv_rgn / wu_inv_ast_type)으로 판정 — 결측 0%
+    "axis_region": (lambda r: "Domestic" if r.wu_inv_rgn == "국내" else "Overseas", "-"),
     "axis_assetType": (lambda r: {"주식": "Equity", "채권": "Bond", "원자재": "Commodity",
-                                  "통화": "Currency", "혼합": "MixedAsset"}.get(r.base_asset, "Equity"),
-                       "MMF/부동산 등 세분 자산군"),
+                                  "통화": "Currency", "혼합자산": "MixedAsset", "단기자금": "MoneyMarket",
+                                  "부동산": "RealEstate", "대체투자": "Alternative"}.get(r.wu_inv_ast_type, "Equity"),
+                       "대체투자/기타의 주최측 대응값 불명"),
     "axis_distributionType": (lambda r: "TotalReturn" if re.search(r"\bTR\b|Total ?Return", r.pd_nm, re.I) else "Distributing", "-"),
-    "axis_underlyingScope": (None, "기초지수 구성/구성종목 수 (대표지수 vs 섹터 vs 단일종목)"),
+    # ★ 08-24 ref_base_index 신설 — 지수명으로 구성 범위를 근사
+    "axis_underlyingScope": (None, "기초지수 구성종목 수 (ref_base_index로 지수명은 확보, 구성 범위는 여전히 없음)"),
 }
 etf_rec = recall_table(e_s, etf_lseg, "pd_itm_no", "pd_itm_no", e_rules, "etf_kr")
 
@@ -459,11 +491,18 @@ FT = {"주식형": "SecuritiesFund", "채권형": "SecuritiesFund", "주식혼�
 f_rules = {
     "axis_investorEligibility": (lambda r: "PublicOffering" if r.prvo_pbff_desc == "공모" else "PrivateOffering", "-"),
     "axis_listingType": (lambda r: "Listed" if str(r.ksd_itm_no).startswith("KR7") else "Unlisted", "-"),
-    "axis_fundType": (lambda r: FT.get(r.or_attr_desc, "SecuritiesFund"), "or_attr_desc 코드값('06') 미해석"),
-    "axis_classDifferentiation": (lambda r: "MultiClass" if re.search(r"종류형|클래스|종류[A-Za-z]", str(r.itm_nm)) else "SingleClass",
-                                  "클래스 여부 플래그 (명칭 휴리스틱 의존)"),
-    "axis_redemptionType": (None, "개방형/폐쇄형(환매 가능 여부) 플래그"),
-    "axis_issuanceType": (None, "추가형/단위형 플래그"),
+    "axis_fundType": (lambda r: FT.get(r.or_attr_desc, "SecuritiesFund"), "-"),
+    # ⚠️ 08-24 han_clas_nm·prfd_attr_cds(M111) 어느 쪽도 주최측 라벨을 못 맞힌다(둘 다 47%).
+    # 항상 SingleClass로 찍는 다수결 베이스라인(64%)보다도 낮아, 신설 컬럼은 이 축의 신호가 아니다.
+    # 07-11과 동일한 명칭 정규식(55%)을 유지하고 재현 불가로 표시한다.
+    "axis_classDifferentiation": (lambda r: "MultiClass" if re.search(r"종류형|클래스|종류\s*[A-Za-z]", str(r.itm_nm))
+                                  else "SingleClass",
+                                  "★ han_clas_nm(47%)·M111(47%) 모두 다수결 베이스라인 64% 미달 — 신호 없음"),
+    # ★ 08-24 prfd_attr_cds 라벨(C103=개방 / C102=단위 / C101=추가)로 판정
+    "axis_redemptionType": (lambda r: "ClosedEnded" if "C104" in str(r.prfd_attr_cds) else "OpenEnded",
+                            "속성코드 0개 펀드(52.4%)는 판정 불가 → 기본값 OpenEnded"),
+    "axis_issuanceType": (lambda r: "UnitType" if "C102" in str(r.prfd_attr_cds) else "AdditionalType",
+                          "속성코드 0개 펀드(52.4%)는 판정 불가 → 기본값 AdditionalType"),
 }
 fund_rec = recall_table(f_s, fund, "itm_no", "itm_no", f_rules, "fund_pub")
 
@@ -471,7 +510,11 @@ axis_all = pd.concat([bond_rec, etf_rec, fund_rec], ignore_index=True)
 axis_all
 
 # %% [markdown]
-# > **시사점:** 마스터 컬럼과 1:1 대응하는 축(레버리지·전략·복제·담보·신용등급·상장여부·공모여부)은 95~100% 재현된다. 반면 **`axis_issuerCategory`(발행사 업종), `axis_underlyingScope`(지수 구성 범위), `axis_redemptionType`·`axis_issuanceType`(환매/발행 유형) 4개 축은 원천에 컬럼 자체가 없어 재현 불가**다 — 온톨로지에서 외부 소스 보강 또는 LLM 텍스트 추출로 채워야 하는 **파생 속성**으로 분리해 표시해야 한다. 두 가지 함정도 확인했다: (1) `axis_maturityClass`는 잔존만기가 아니라 **발행 시 만기(MAT_DT−ISU_DT)** 기준이고, (2) `axis_assetType`은 LSEG `base_asset`만으로 70%에 그쳐 MMF·부동산 등 세분 자산군 규칙이 따로 필요하다. 또한 **etf_kr axis 샘플 100행 중 9행이 ETN**이라, ETF 전용 소스(LSEG)에 의존하는 축은 ETN에서 구조적으로 결측된다.
+# > **시사점(08-24):** 재현 불가 축이 **4개 → 2개**로 줄었다. `axis_redemptionType`(80%)·`axis_issuanceType`(93%)은 신설 `prfd_attr_cds`의 코드 라벨(`C103 개방`·`C101 추가`·`C102 단위`)로 재현되고, `axis_couponType`은 채권 `bd_inrt_tcd`·`bd_intp_tcd`로 97.1%가 된다. 남은 재현 불가는 **`axis_issuerCategory`(발행사 업종)와 `axis_underlyingScope`(지수 구성 범위)** 둘뿐이다.
+# >
+# > ⚠️ 반대로 **`axis_classDifferentiation`은 신설 컬럼으로도 풀리지 않았다.** `han_clas_nm` 존재 여부(47%)와 `prfd_attr_cds`의 `M111`(종류형 클래스펀드, 47%) 모두 **"항상 SingleClass"로 찍는 다수결 베이스라인 64%보다 낮다** — 즉 주최측 라벨이 뜻하는 '클래스 구분'은 이 컬럼들이 가리키는 개념과 다르다. 이 축은 **컬럼이 없어서가 아니라 정의가 달라서 재현 불가**이며, 근거 없이 답하면 오답이 된다.
+# >
+# > 07-11 판정: 마스터 컬럼과 1:1 대응하는 축(레버리지·전략·복제·담보·신용등급·상장여부·공모여부)은 95~100% 재현된다. 반면 4개 축은 원천에 컬럼 자체가 없어 재현 불가다 — 온톨로지에서 외부 소스 보강 또는 LLM 텍스트 추출로 채워야 하는 **파생 속성**으로 분리해 표시해야 한다. 두 가지 함정도 확인했다: (1) `axis_maturityClass`는 잔존만기가 아니라 **발행 시 만기(mat_dt−isu_dt)** 기준이고, (2) `axis_assetType`은 LSEG `base_asset`만으로 70%에 그쳐 MMF·부동산 등 세분 자산군 규칙이 따로 필요하다. 또한 **etf_kr axis 샘플 100행 중 9행이 ETN**이라, ETF 전용 소스(LSEG)에 의존하는 축은 ETN에서 구조적으로 결측된다.
 
 # %% [markdown]
 # ---
@@ -481,15 +524,24 @@ axis_all
 
 # %% [markdown]
 # ### 7-1. (하) "현재 판매 가능한 원화채권 중 AA- 이상"
+#
+# ⚠️ **주최측 안내에 따라 정의가 바뀌었다.** `BUYABLE_QUANTITY`는 무효이며
+# 상장폐지·리스팅 종료 제외 종목은 모두 구매 가능으로 본다(채권에서는 = 만기 미도래).
 
 # %%
 ORDER = ["AAA", "AA+", "AA0", "AA", "AA-"]
-sellable = bond[(pd.to_numeric(bond.BUYABLE_QUANTITY, errors="coerce").fillna(0) > 0)
-                & (bond.CURR_CD == "KRW")]
-q1 = sellable[sellable.CRD_GRD.isin(ORDER)]
-print(f"판매가능(BUYABLE_QUANTITY>0) 원화채권: {len(sellable)}건 / AA- 이상: {len(q1)}건")
-display(q1.CRD_GRD.value_counts().reindex(ORDER).fillna(0).astype(int).to_frame("건수"))
-display(q1[["PD_NO", "PD_NM", "CRD_GRD", "MAT_DT", "BUY_YIELD"]].head(5))
+_mat = pd.to_datetime(bond.mat_dt.where(bond.mat_dt.str.fullmatch(r"\d{8}")), format="%Y%m%d", errors="coerce")
+ASOF = pd.Timestamp("2026-08-21")
+
+old_def = bond[(pd.to_numeric(bond.buyable_quantity, errors="coerce").fillna(0) > 0) & (bond.curr_cd == "KRW")]
+new_def = bond[((_mat - ASOF).dt.days > 0) & (bond.curr_cd == "KRW")]
+print(f"[폐기] buyable_quantity>0 정의 : {len(old_def)}행 / AA-이상 {int(old_def.crd_grd.isin(ORDER).sum())}행")
+print(f"[현행] 만기 미도래 정의        : {len(new_def)}행 / 고유 {new_def.pd_no.nunique()}종목")
+
+q1 = new_def[new_def.crd_grd.isin(ORDER)]
+print(f"→ 구매가능 원화채권 중 AA- 이상 : {len(q1)}행 / 고유 {q1.pd_no.nunique()}종목")
+display(q1.crd_grd.value_counts().reindex(ORDER).fillna(0).astype(int).to_frame("건수"))
+display(q1[["pd_no", "pd_nm", "crd_grd", "mat_dt", "applied_yield", "pd_exg_mkt"]].head(5))
 
 # %% [markdown]
 # ### 7-2. (중) "국민성장펀드의 구조와 투자전략 동향"
@@ -508,13 +560,62 @@ def search_all(kw):
         "etf_kr.pd_nm": int(etf_kr.pd_nm.str.contains(kw, case=False, regex=False).sum()),
         "etf_gl.pd_nm": int(etf_gl.pd_nm.str.contains(kw, case=False, regex=False).sum()),
         "fund.itm_nm": int(fund.itm_nm.str.contains(kw, case=False, regex=False).sum()),
-        "bond.PD_NM": int(bond.PD_NM.str.contains(kw, case=False, regex=False).sum()),
+        "bond.pd_nm": int(bond.pd_nm.str.contains(kw, case=False, regex=False).sum()),
         "theme_list": int(sum(kw.lower() in t.lower() for t in theme_list)),
     }
 
 
 kws = ["캠브리콘", "Cambricon", "에코프로", "우주항공", "반도체", "중국", "Kimi", "AI로봇", "KODEX"]
 display(pd.DataFrame({k: search_all(k) for k in kws}).T)
+
+# %% [markdown]
+# ### 7-3b. (교차질의) "삼성전자를 보유한 국내/해외ETF와 공모펀드를 1년 수익률 기준 TOP10"
+#
+# 주최측이 예시로 든 교차질의 유형. **두 가지 서로 다른 능력**을 동시에 요구한다.
+# (a) 구성종목(holdings)으로 상품을 걸러내기 → 원천에 없음
+# (b) ETF와 펀드의 1년 수익률을 **하나의 랭킹으로 합치기** → (b)만 따로 실현 가능한지 실측한다.
+
+# %%
+# (a) 구성종목 보유 여부로 필터링할 수 있는가
+print("보유종목(holdings) 컬럼 탐색:")
+for name, dfx in [("etf_kr", etf_kr), ("etf_gl", etf_gl), ("fund", fund)]:
+    hits = [c for c in dfx.columns if re.search(r"hold|stk_nm|const|comp|pdf", c, re.I)]
+    print(f"  {name:8s} → {hits or '없음'}")
+print("\n'삼성전자' 문자열 전 도메인 검색:", search_all("삼성전자") if "search_all" in dir() else "(아래 셀 참조)")
+
+# %%
+# (b) 수익률 랭킹 통합 가능성 — 컬럼·단위·기준일이 상품군마다 다른지 확인
+ret = pd.DataFrame(
+    [
+        {"상품군": "국내ETF", "1년수익률 컬럼": "du_er_1y",
+         "결측률": round((etf_kr.du_er_1y == "").mean(), 4),
+         "기준일 컬럼": "du_upt_dt", "기준일 최빈": etf_kr.du_upt_dt.mode()[0]},
+        {"상품군": "해외ETF", "1년수익률 컬럼": "(없음 — du_er_1d만 존재)",
+         "결측률": 1.0, "기준일 컬럼": "du_upt_dt", "기준일 최빈": etf_gl.du_upt_dt.mode()[0]},
+        {"상품군": "공모펀드", "1년수익률 컬럼": "fd_yr1_ern_r",
+         "결측률": round((fund.fd_yr1_ern_r == "").mean(), 4),
+         "기준일 컬럼": "fd_price_bas_dt", "기준일 최빈": fund.fd_price_bas_dt.mode()[0]},
+    ]
+)
+display(ret)
+print("해외ETF의 수익률 계열 컬럼:", [c for c in etf_gl.columns if "er_" in c])
+
+# %%
+# 실제로 합쳐본다: 국내ETF + 공모펀드 1년 수익률 통합 TOP10
+_etf_r = etf_kr.loc[etf_kr.du_er_1y != "", ["pd_itm_no", "pd_abrv_nm", "du_er_1y"]].copy()
+_etf_r.columns = ["id", "name", "ret1y"]; _etf_r["상품군"] = "국내ETF"
+_fnd_r = fund.loc[(fund.fd_yr1_ern_r != "") & (fund.prvo_pbff_desc == "공모")
+                  & (fund.sale_yn == "판매중"), ["itm_no", "itm_nm", "fd_yr1_ern_r"]].copy()
+_fnd_r.columns = ["id", "name", "ret1y"]; _fnd_r["상품군"] = "공모펀드"
+uni = pd.concat([_etf_r, _fnd_r], ignore_index=True)
+uni["ret1y"] = pd.to_numeric(uni.ret1y, errors="coerce")
+print("통합 모집단:", len(uni), "(국내ETF %d + 공모펀드 %d)" % (len(_etf_r), len(_fnd_r)))
+display(uni.nlargest(10, "ret1y"))
+
+# %% [markdown]
+# > **시사점(교차질의):** 예시 질의를 두 층으로 쪼개면 **(b) 상품군 통합 랭킹은 지금 데이터로 된다.** 국내ETF `du_er_1y`와 공모펀드 `fd_yr1_ern_r`은 둘 다 % 단위 1년 수익률이고 기준일도 2026-08 로 근접해 하나의 랭킹으로 합칠 수 있다. **단 해외ETF에는 1년 수익률 컬럼이 아예 없다**(`du_er_1d` 일간뿐) — "국내/해외ETF와 펀드"를 한 랭킹에 올리려면 **해외ETF 1년 수익률을 외부에서 보강하거나, 답변에서 해외ETF 제외 사실을 명시**해야 한다.
+# >
+# > **(a) 구성종목 필터는 여전히 불가**다. 세 도메인 어디에도 보유종목 컬럼이 없다. 즉 교차질의의 병목은 "합치기"가 아니라 **holdings**이며, 이는 07-11 배포본의 결론과 동일하다.
 
 # %% [markdown]
 # ### 7-4. (상) "최근 6개월 우주항공 테마 연결 이력 ETF" — 테마 이력 존재 여부
@@ -530,10 +631,10 @@ print("ETF 마스터 날짜 컬럼:", [c for c in etf_kr.columns if "dt" in c.lo
 # ### 7-5. [답변불가] "신용등급 AAAA인 채권" — 존재하지 않는 등급 판정
 
 # %%
-grades = sorted(set(bond.CRD_GRD) - {""})
+grades = sorted(set(bond.crd_grd) - {""})
 print("데이터상 실재 신용등급 사전 (%d종):" % len(grades))
 print(grades)
-print("\n'AAAA' 포함 여부:", "AAAA" in grades, "| 매칭 건수:", int((bond.CRD_GRD == "AAAA").sum()))
+print("\n'AAAA' 포함 여부:", "AAAA" in grades, "| 매칭 건수:", int((bond.crd_grd == "AAAA").sum()))
 
 # %% [markdown]
 # ### 7-6. [답변불가] "KODEX AI로봇 ETF" — 브랜드는 존재하나 상품명 없음
@@ -552,14 +653,17 @@ display(kodex[kodex.pd_abrv_nm.str.contains("로봇|AI", regex=True)][["pd_itm_n
 matrix = pd.DataFrame(
     [
         ("(하) 판매가능 원화채권 AA- 이상",
-         "bond: BUYABLE_QUANTITY, CURR_CD, CRD_GRD", "가능",
-         "-"),
+         "bond: mat_dt(만기미도래), curr_cd, crd_grd", "가능",
+         "- (주최측 지침으로 buyable_quantity 대신 만기 기준. 모집단 296 → 15,992행)"),
         ("(중) 국민성장펀드 구조·투자전략 동향",
          "fund: itm_nm, or_attr_desc, bmrk_nm, fd_*_ern_r", "부분",
          "투자전략 서술 텍스트(운용보고서) 없음. 구조·수익률만 가능"),
         ("(중) 캠브리콘 편입 중국 반도체 ETF",
          "ETF 구성종목(holdings) + 종목-국가/섹터 매핑", "불가",
          "구성종목 데이터 전무. 명칭·테마 검색 0건"),
+        ("(교차) 삼성전자 보유 국내/해외ETF+펀드 1년수익률 TOP10",
+         "holdings + du_er_1y + fd_yr1_ern_r 통합 랭킹", "불가",
+         "수익률 통합 랭킹은 가능하나 ① holdings 부재 ② 해외ETF에 1년수익률 컬럼 자체가 없음"),
         ("(상) 최근 6개월 우주항공 테마 연결 이력 ETF",
          "lseg.themes + 테마 부여 시점(스냅샷 이력)", "부분",
          "테마 부여는 가능하나 LSEG는 단일 시점 정적 스냅샷 — '연결 이력' 시계열 없음"),
@@ -567,7 +671,7 @@ matrix = pd.DataFrame(
          "구성종목 + 기업 지배구조(모-자회사) + 위험요인 텍스트", "불가",
          "구성종목·지배구조·위험서술 3종 모두 없음. pd_risk_cd는 등급 숫자뿐"),
         ("[불가] 신용등급 AAAA 채권",
-         "bond: CRD_GRD 고유값 사전", "가능",
+         "bond: crd_grd 고유값 사전", "가능",
          "- (실재 등급 사전으로 '존재하지 않는 등급' 판정 가능)"),
         ("[불가] Kimi 관련 투자 상품",
          "전 도메인 pd_nm/itm_nm + theme_list 전수 검색", "가능",
@@ -584,7 +688,9 @@ matrix
 matrix["현재 가능 여부"].value_counts().to_frame("질의 수")
 
 # %% [markdown]
-# > **시사점:** 8개 질의 중 **가능 4 / 부분 2 / 불가 2**. 불가 2건은 모두 **ETF·펀드 구성종목(holdings)** 부재가 원인이고, 부분 2건은 **시계열 이력**과 **서술형 텍스트(투자전략·위험요인)** 부재가 원인이다. 즉 온톨로지 확장 우선순위는 ① `:holds` 관계(상품→기업) ② 시점 축(스냅샷/유효기간) ③ 텍스트 문서 노드 순이다. 반대로 [답변불가] 3개 질의는 현재 데이터만으로 **근거 있는 부재 증명**이 가능해, 등급 사전·전수 명칭 검색·브랜드 계층을 온톨로지에 명시적으로 넣으면 환각 없이 처리된다.
+# > **시사점:** 9개 질의 중 **가능 4 / 부분 2 / 불가 3**. 08-24 배포본이 컬럼을 대폭 보강했는데도 **커버리지 매트릭스의 판정은 하나도 바뀌지 않았다** — 불가 판정의 원인이 전부 **구성종목(holdings)** 이고, 이번 배포본은 holdings를 주지 않았기 때문이다. 주최측이 예시로 든 교차질의도 같은 이유로 불가다.
+# >
+# > 즉 **P0 외부 데이터는 여전히 holdings 단 하나**이며, 35문항 중 상(上) 난도 10문항 상당수가 여기에 걸릴 가능성이 높다. 온톨로지 확장 우선순위도 그대로다: ① `:holds` 관계(상품→기업) ② 시점 축 ③ 텍스트 문서 노드. 반대로 [답변불가] 5문항 대응은 오히려 쉬워졌다 — 등급 사전(15종)·전수 명칭 검색·브랜드 계층으로 **근거 있는 부재 증명**이 가능하다.
 
 # %% [markdown]
 # ---
@@ -599,11 +705,12 @@ pd.DataFrame(
          f"중복 상품 {len(dup)}종, 순자산 {int((fa == ea).sum())}/{len(dup)} 완전 일치"),
         ("지수 통합", "대소문자·공백 정규화", f"노드 후보 {len(a | b | c)}종, 3자 교집합 {len(a & b & c)}종 (별칭 매핑 필요)"),
         ("운용사 통합", "법인 접미사 제거 + 코드 매핑",
-         f"etf_kr {etf_kr_all.cu_fund_mgmt_co.nunique()}→{etf_kr_all.cu_fund_mgmt_co[etf_kr_all.cu_fund_mgmt_co!=''].map(norm_co).nunique()}종 (상품명 오염 {int(DIRTY.sum())}건)"),
-        ("기업 접점", "PD_PBCM ↔ 상품명 문자열", f"발행사 {len(iss_uniq)}종 중 상품명 등장 {len(hits_df)}종 → 실현 불가"),
+         f"etf_kr {etf_kr_all.cu_fund_mgmt_co.nunique()}→{etf_kr_all.cu_fund_mgmt_co[etf_kr_all.cu_fund_mgmt_co!=''].map(norm_co).nunique()}종 (상품명 오염 {int(dirty.sum())}건)"),
+        ("기업 접점", "pd_pbcm ↔ 상품명 문자열", f"발행사 {len(iss_uniq)}종 중 상품명 등장 {len(hits_df)}종 → 실현 불가"),
         ("axis 재현", "마스터 컬럼 규칙",
          f"재현 시도 {int(axis_all['재현율(%)'].notna().sum())}축 평균 {axis_all['재현율(%)'].mean():.1f}%, 재현 불가 {int(axis_all['재현율(%)'].isna().sum())}축"),
-        ("질의 커버리지", "8개 평가 질의", "가능 4 / 부분 2 / 불가 2"),
+        ("질의 커버리지", f"{len(matrix)}개 평가 질의(주최측 예시 + 교차질의)",
+         " / ".join(f"{k} {v}" for k, v in matrix["현재 가능 여부"].value_counts().items())),
     ],
     columns=["항목", "확정 규칙", "결과"],
 )

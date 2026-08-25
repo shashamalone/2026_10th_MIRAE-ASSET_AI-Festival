@@ -1,11 +1,13 @@
 # %% [markdown]
-# # 03. 해외ETF(PREF02N001) EDA
+# # 03. 해외ETF(PREF02N001) EDA — 2026-08-24 배포본
 #
-# 스냅샷 파일 기준일: **2026-07-11** / 원본 5,646행 × 49컬럼
+# 스냅샷 파일 기준일: **2026-08-24** / 원본 6,037행 × 49컬럼
 #
-# 이 테이블은 **스키마에 한글 컬럼명(name_ko)이 전혀 없다.** 따라서 첫 작업은
-# 국내ETF 스키마와의 동명 컬럼 매칭 + 해외 전용 컬럼 직접 해석으로 **한글 컬럼 사전을 만드는 것**이며,
-# 결과를 `EDA/etf_gl_column_names.csv`로 저장해 COLUMN_GUIDE 입력으로 쓴다.
+# 2026-07-11 배포본(5,646행 × 49컬럼) 대비 변경:
+# - **컬럼 구성은 4개 도메인 중 유일하게 그대로다**(추가·삭제 0). 순수 데이터 갱신 + 종목 391건 증가.
+# - 07-11 배포본은 스키마에 한글명이 0/49였다. **08-24 배포본 schema.xlsx는 `컬럼코멘트`를 채워서 준다** —
+#   §1은 이제 "사전을 만드는 작업"이 아니라 "직접 해석했던 13종이 주최측 코멘트와 일치하는지 검증"하는 작업이다.
+# - `cu_lev_fector`(레버리지 배수)가 **전량 결측 → 14.9% 유효**로 바뀌었다(§7).
 
 # %%
 import re
@@ -25,13 +27,16 @@ ROOT = Path.cwd()
 while not (ROOT / "data" / "csv").exists():
     ROOT = ROOT.parent
 CSV = ROOT / "data" / "csv"
-OUT = ROOT / "EDA"
+OUT = ROOT / "docs"        # 산출물은 docs/ 로 통일(구 EDA/·script/ 사본은 07-11판)
 
-df = pd.read_csv(CSV / "PREF02N001_etf_gl_master_20260711.csv", dtype=str, keep_default_na=False)
-schema = pd.read_csv(CSV / "PREF02N001_etf_gl_schema_20260711.csv", dtype=str, keep_default_na=False)
-kr_schema = pd.read_csv(CSV / "PREF01N001_etf_kr_schema_20260711.csv", dtype=str, keep_default_na=False)
+df = pd.read_csv(CSV / "PREF02N001_etf_gl_master_20260824.csv", dtype=str, keep_default_na=False)
+schema = pd.read_csv(CSV / "PREF02N001_etf_gl_schema_20260824.csv", dtype=str, keep_default_na=False)
+kr_schema = pd.read_csv(CSV / "PREF01N001_etf_kr_schema_20260824.csv", dtype=str, keep_default_na=False)
+schema["name_ko"] = schema.comment_ko          # 08-24 배포본은 컬럼코멘트를 채워서 준다
+kr_schema["name_ko"] = kr_schema.comment_ko
 print(df.shape, schema.shape)
-print("name_ko 채워진 컬럼 수:", int((schema.name_ko != "").sum()), "/", len(schema))
+print("한글 코멘트 채워진 컬럼 수:", int((schema.name_ko != "").sum()), "/", len(schema),
+      "  ← 07-11 배포본에서는 0/49였다")
 
 
 # %%
@@ -76,12 +81,23 @@ guide["고유값수"] = [int(df[c][df[c] != ""].nunique()) for c in guide.column
 guide
 
 # %%
+# ★ 08-24 배포본이 주는 공식 코멘트와 07-11에서 직접 해석한 이름을 대조한다.
+official = dict(zip(schema.column, schema.comment_ko))
+cmp = pd.DataFrame(
+    [{"column": c, "직접해석(07-11)": GL_ONLY_KO[c][0], "주최측 코멘트(08-24)": official.get(c, "")}
+     for c in GL_ONLY_KO]
+)
+cmp
+
+# %%
+# 공식 코멘트를 정본으로 채택하고, 비어 있는 것만 직접 해석으로 메운다.
+guide["name_ko"] = [official.get(c, "") or guide.name_ko.iloc[i] for i, c in enumerate(guide.column)]
 assert (guide.name_ko == "").sum() == 0, "한글명 미부여 컬럼 존재"
 guide.to_csv(OUT / "etf_gl_column_names.csv", index=False, encoding="utf-8-sig")
 print("저장:", OUT / "etf_gl_column_names.csv", "|", len(guide), "행")
 
 # %% [markdown]
-# > **시사점:** 49개 컬럼 중 36개는 국내ETF 스키마에서 한글명을 그대로 상속할 수 있어 **두 테이블은 같은 스키마 계보**임이 확인된다. 나머지 13개가 해외 전용이며 그 성격이 곧 해외ETF의 강점이다 — **ISIN·Lipper ID·SEC CIK 같은 외부 조인키와 지수복제방식이 국내ETF에는 아예 없다.** 생성한 `etf_gl_column_names.csv`는 COLUMN_GUIDE(자연어→컬럼 매핑)의 입력이 된다.
+# > **시사점:** 08-24 배포본은 **해외ETF 스키마에도 한글 코멘트를 채워서 준다**(07-11: 0/49). 즉 07-11 EDA에서 값 실측으로 직접 해석해 만든 13종 사전은 이제 **검증용**이며, 주최측 코멘트를 정본으로 채택한다. 해외ETF의 강점은 그대로다 — **ISIN·Lipper ID·SEC CIK 같은 외부 조인키가 국내ETF에는 없었다**(단 08-24에서 국내ETF에도 `pd_isin_cd`·`pd_ric`이 신설되어 이 격차는 좁혀졌다).
 
 # %% [markdown]
 # ## 2. ETF / ETN 분리
@@ -94,7 +110,7 @@ etf = df[df.pd_grp_no == "ETF"].copy()
 print("\nETF:", len(etf), "/ ETN:", int((df.pd_grp_no == "ETN").sum()))
 
 # %% [markdown]
-# > **시사점:** 해외분은 ETN이 59건(1.0%)뿐이라 국내(30.7%)와 오염 정도가 전혀 다르다. `cu_etn_yn`과 `pd_grp_no`가 완전 일치하므로 둘 중 하나만 온톨로지에 싣는다.
+# > **시사점:** 해외분은 ETN이 65건(1.1%)뿐이라 국내(30.6%)와 오염 정도가 전혀 다르다. `cu_etn_yn`과 `pd_grp_no`가 완전 일치하므로 둘 중 하나만 온톨로지에 싣는다.
 
 # %% [markdown]
 # ## 3. 거래소 · 시장
@@ -168,7 +184,7 @@ pd.cut(ch, [-0.001, 0, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0, 3.0],
        labels=["0", "0-0.1", "0.1-0.2", "0.2-0.35", "0.35-0.5", "0.5-0.75", "0.75-1.0", "1.0+"]).value_counts().sort_index().to_frame("건수")
 
 # %%
-kr = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260711.csv", dtype=str, keep_default_na=False)
+kr = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False)
 kr_etf = kr[kr.pd_grp_no == "ETF"]
 pd.DataFrame(
     [
@@ -210,15 +226,25 @@ print("\n복제방식 결측 & 기초지수 sentinel:", int((df.cu_index_repl_mt
 print("복제방식 유효 & 기초지수 sentinel:", int(((df.cu_index_repl_mthd != "") & is_sent).sum()))
 
 # %%
-# 레버리지 배수는 전량 결측 → 상품명에서만 복원 가능
-print("cu_lev_fector 전량 결측:", (df.cu_lev_fector == "").all())
+# ★ 07-11 배포본에서 전량 결측이던 cu_lev_fector에 값이 들어왔다.
+print("cu_lev_fector 전량 결측:", (df.cu_lev_fector == "").all(),
+      "| 결측률:", round((df.cu_lev_fector == "").mean(), 4))
+print(df.cu_lev_fector.replace("", "(결측)").value_counts().to_string())
+print()
 for pat, lab in [(r"\b2X\b|\bUltra\b", "2X"), (r"\b3X\b", "3X"), (r"Inverse|\bBear\b|\bShort\b", "인버스")]:
     print(f"  상품명 '{lab}' 패턴: {int(df.pd_nm.str.contains(pat, case=False, regex=True).sum())}건")
+
+# %%
+# 컬럼값과 상품명 정규식이 서로 일치하는지 — 컬럼을 믿어도 되는지 검증
+lev2 = df.cu_lev_fector.isin(["2", "-2"])
+nm2 = df.pd_nm.str.contains(r"\b2X\b|\bUltra\b", case=False, regex=True)
+print("cu_lev_fector ±2 이면서 상품명에도 2X/Ultra:", int((lev2 & nm2).sum()), "/", int(lev2.sum()))
+print("상품명에 2X/Ultra이나 cu_lev_fector 결측     :", int((nm2 & (df.cu_lev_fector == "")).sum()))
 print("\ncu_inverse_short_yn='Y' 이면서 상품명에 Inverse/Bear/Short 없는 건:",
       int(((df.cu_inverse_short_yn == "Y") & ~df.pd_nm.str.contains("Inverse|Bear|Short", case=False)).sum()))
 
 # %% [markdown]
-# > **시사점:** `cu_index_repl_mthd`(Optimized 1,802 / Swap 289 / Full 263)와 `cu_index_tracking_yn`은 **결측 패턴이 완전히 동일**해, 결측 3,286건 = "지수를 추종하지 않는 액티브형"으로 읽는 것이 타당하다. 즉 결측 자체가 정보다. 반면 **`cu_lev_fector`(배수)는 전량 결측**이라 국내ETF와 달리 레버리지 축을 컬럼으로 만들 수 없고 **상품명 정규식(2X/3X/Ultra/Bear)** 이 유일한 경로다.
+# > **시사점:** `cu_index_repl_mthd`와 `cu_index_tracking_yn`은 **결측 패턴이 완전히 동일**해, 결측분 = "지수를 추종하지 않는 액티브형"으로 읽는 것이 타당하다. 즉 결측 자체가 정보다. **`cu_lev_fector`(배수)는 07-11 배포본에서 전량 결측이었으나 08-24에서 14.9%가 채워졌다** — 레버리지·인버스 상품은 사실상 전부 값이 있으므로 "레버리지 2배 ETF" 질의가 **컬럼 기반으로 답변 가능**해졌다(1배 상품은 여전히 결측이라 "결측=1배"로 읽어야 한다). 상품명 정규식은 이제 교차 검증용이다.
 
 # %% [markdown]
 # ## 7. 자산군 · 투자지역 — 국내와의 체계 불일치
@@ -357,7 +383,7 @@ print((num(df.loc[v == 0, "du_last_aum"]) / 1e6).describe().round(2).to_string()
 #
 # | 항목 | 실측 | 온톨로지/RAG 영향 |
 # |---|---|---|
-# | 한글 컬럼명 | 49개 전부 부여 (상속 36 + 직접해석 13) | `EDA/etf_gl_column_names.csv` 산출 |
+# | 한글 컬럼명 | 49개 전부 부여 (상속 36 + 직접해석 13) | `docs/etf_gl_column_names.csv` 산출 |
 # | 기초지수 실질 결측 | 문장형 sentinel 포함 시 ~48% | ETL에서 sentinel → NULL |
 # | 총보수 결측 | **0%** (국내는 81.9%) | 보수 질의는 해외만 가능 |
 # | 거래소코드 오염 | 숫자코드 31건('102' 22 / '101' 9) | 3자 코드만 허용, 나머지 격리 |

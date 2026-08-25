@@ -1,16 +1,29 @@
 # %% [markdown]
-# # 04. 공모펀드(PRFD01N001) EDA
+# # 04. 공모펀드(PRFD01N001) EDA — 2026-08-24 배포본
 #
-# 스냅샷 파일 기준일: **2026-07-11** / 원본 95,619행 × 45컬럼
+# 스냅샷 파일 기준일: **2026-08-24** / 원본 23,676행 × 75컬럼
 #
 # ---
-# ## ⚠️ 최우선 경고 — 이 테이블의 1행은 1펀드가 아니다
+# ## ★ 07-11 배포본 최대 함정이 원천에서 해소되었다
 #
-# **행수 95,619 vs 실제 펀드 수(itm_no) 11,139.** 한 펀드가 평균 8.6행, 최대 16행 반복된다.
-# 반복의 원인은 `prfd_attr_cd`(펀드별속성코드) 하나뿐이고 **나머지 43개 컬럼은 전부 동일**하다.
+# 07-11 배포본은 **95,619행 = 11,139펀드**로, `prfd_attr_cd` 때문에 한 펀드가 평균 8.6행 반복됐다.
+# dedup 없이 합계를 내면 순자산이 8.53배 과대 계상되는 것이 이 데이터셋 최대의 함정이었다.
 #
-# → **dedup 없이 `SUM(펀드 순자산)`을 계산하면 실제의 약 8.5배가 나온다.**
-# 아래 §1에서 이를 실측으로 증명한다. 모든 집계는 `drop_duplicates('itm_no')` 이후에 수행할 것.
+# **08-24 배포본은 `prfd_attr_cd`를 삭제하고 `prfd_attr_cds`(콤마 결합) + `prfd_attr_cnt`(개수) +
+# `prfd_attr_search_text`(검색용 문장)로 바꿨다. 결과적으로 `itm_no`가 단독 유일키가 되어 1행 = 1펀드다.**
+#
+# 대신 **새 함정이 생겼다**:
+# - 펀드 모집단이 11,139 → 23,676으로 늘었고 그중 **사모가 8,960건(37.8%)** 이다(07-11: 15펀드).
+#   `prvo_pbff_desc == '공모'` 필터가 이제 **선택이 아니라 필수**다.
+# - `fd_nast_suma`·`bmrk_nm`·위험등급 등 주요 컬럼의 전체 결측률이 크게 올랐다(§7에서 원인 규명).
+#
+# 그 밖의 주요 변경(31컬럼 추가 / 1컬럼 삭제):
+# - **보수 컬럼 신설**: `trusc_rwrd_r`·`sale_co_rwrd_r`·`or_co_rwrd_r`·`ofwk_trus_rwrd_r`·`fd_prsv_r`
+#   → 07-11 배포본에서 "컬럼 부재로 답변 불가"였던 **펀드 수수료 질의가 답변 가능**해졌다(§11).
+# - **클래스 컬럼 신설**: `han_clas_nm`·`han_clas_fee_type`·`han_clas_sales_channel`·`han_clas_policies`
+#   → 종목명 정규식으로 근사하던 클래스 축이 직접 값으로 제공된다(§4).
+# - **자산구성비 신설**: `zrin_*_cmst_rt` 8종, **제로인 유형 신설**: `zrin_btyp_nm`·`zrin_ptn_nm`
+# - `or_attr_desc`가 코드(`06`)가 아니라 **한글명**(`파생상품` 등)으로 바뀌었다.
 #
 # ---
 
@@ -33,10 +46,11 @@ while not (ROOT / "data" / "csv").exists():
     ROOT = ROOT.parent
 CSV = ROOT / "data" / "csv"
 
-df = pd.read_csv(CSV / "PRFD01N001_fund_pub_master_20260711.csv", dtype=str, keep_default_na=False)
-schema = pd.read_csv(CSV / "PRFD01N001_fund_pub_schema_20260711.csv", dtype=str, keep_default_na=False)
+df = pd.read_csv(CSV / "PRFD01N001_fund_pub_master_20260824.csv", dtype=str, keep_default_na=False)
+schema = pd.read_csv(CSV / "PRFD01N001_fund_pub_schema_20260824.csv", dtype=str, keep_default_na=False)
+# axis_sample은 08-24 배포본 schema.xlsx에서 삭제되었다(Sheet2_Sample 폐지). 07-11 파일을 그대로 참조한다.
 axis = pd.read_csv(CSV / "PRFD01N001_fund_pub_axis_sample_20260711.csv", dtype=str, keep_default_na=False)
-ko = dict(zip(schema.column, schema.name_ko))
+ko = dict(zip(schema.column, schema.comment_ko))
 print(df.shape, schema.shape, axis.shape)
 
 
@@ -46,38 +60,27 @@ def num(s):
 
 
 # %% [markdown]
-# ## 1. ★ 그레인 규명 — (itm_no, prfd_attr_cd) 유일키 증명
+# ## 1. ★ 그레인 재검증 — itm_no 단독 유일키 성립
 
 # %%
 print("행수            :", len(df))
 print("itm_no 고유     :", df.itm_no.nunique())
 print("행/펀드 평균    : %.2f" % (len(df) / df.itm_no.nunique()))
 print()
-print("itm_no 단독 유일키?          :", df.itm_no.is_unique)
-print("(itm_no, prfd_attr_cd) 중복  :", int(df.duplicated(["itm_no", "prfd_attr_cd"]).sum()), "→ 유일키 성립")
+print("itm_no 단독 유일키?  :", df.itm_no.is_unique, "  ← 07-11 배포본에서는 False였다")
+print("prfd_attr_cd 컬럼 존재:", "prfd_attr_cd" in df.columns)
+uniq = df.drop_duplicates("itm_no")   # 무해한 no-op. 하위 셀 호환 + 방어적 유지
 
 # %%
-# itm_no로 묶었을 때 값이 2개 이상 되는 컬럼 = 진짜 반복 축
+# 반복 축이 정말 사라졌는지 — 어떤 컬럼도 itm_no 내부에서 갈라지지 않아야 한다
 g = df.groupby("itm_no").nunique()
 varying = (g > 1).sum()
-print("펀드 내부에서 값이 달라지는 컬럼:")
-print(varying[varying > 0].to_string())
-print("\n→ 그 외", int((varying == 0).sum()), "개 컬럼은 펀드당 완전히 동일(중복 적재)")
+print("펀드 내부에서 값이 달라지는 컬럼:", int((varying > 0).sum()), "개")
+print(varying[varying > 0].to_string() or "  (없음)")
 
 # %%
-print("펀드당 행수 분포:")
-print(df.itm_no.value_counts().value_counts().sort_index().to_string())
-
-# %%
-# 16행짜리 펀드 실물 확인
-ex = df.itm_no.value_counts().index[0]
-print("예시 펀드:", ex, "|", (df.itm_no == ex).sum(), "행")
-df[df.itm_no == ex][["itm_no", "itm_nm", "prfd_attr_cd", "fd_nast_suma", "or_attr_desc", "sale_yn"]].reset_index(drop=True)
-
-# %%
-# ★ dedup 없이 집계하면 얼마나 틀리는가
+# ★ 07-11의 8.53배 왜곡이 지금은 얼마인가
 n = num(df.fd_nast_suma)
-uniq = df.drop_duplicates("itm_no")
 n_u = num(uniq.fd_nast_suma)
 res = pd.DataFrame(
     [
@@ -89,53 +92,74 @@ res["왜곡 배율"] = (res["펀드 순자산 합계(조원)"] / res["펀드 순
 res
 
 # %%
-print("★ 왜곡 배율: %.2f배" % (n.sum() / n_u.sum()))
-print("  (실제 %.0f조원 → 잘못 집계 시 %.0f조원)" % (n_u.sum() / 1e12, n.sum() / 1e12))
+# ★ 대신 새 함정: 공모 테이블에 사모가 대량 혼재한다
+print("prvo_pbff_desc:", df.prvo_pbff_desc.value_counts().to_dict())
 print()
-print("펀드 수 질의도 동일:", len(df), "이라고 답하면 오답,", len(uniq), "가 정답")
+pub = df[df.prvo_pbff_desc == "공모"]
+pri = df[df.prvo_pbff_desc == "사모"]
+print("공모 한정 펀드 수     :", len(pub))
+print("공모 순자산 합계(조원):", round(num(pub.fd_nast_suma).sum() / 1e12, 1))
+print("사모 포함 시(조원)    :", round(n.sum() / 1e12, 1),
+      "→ 순자산 왜곡 배율 %.3f배" % (n.sum() / num(pub.fd_nast_suma).sum()))
+print()
+print("사모 fd_nast_suma 결측률:", round((pri.fd_nast_suma == "").mean(), 4),
+      "→ 사모는 순자산이 거의 비어 있어 '합계'는 거의 왜곡되지 않는다")
+print("사모 판매중            :", int((pri.sale_yn == "판매중").sum()), "건")
+print()
+print("왜곡되는 것은 '개수'다:")
+print("  전체 레코드로 답하면 :", len(df))
+print("  공모만 세면          :", len(pub), "  ← 정답")
+print("  개수 왜곡 배율       : %.2f배" % (len(df) / len(pub)))
+print()
+print("07-11 배포본: 사모 15펀드(102행)로 각주 수준 → 08-24: 8,960펀드(37.8%)로 필수 필터")
 
 # %% [markdown]
-# > **시사점:** `(itm_no, prfd_attr_cd)`가 유일키이며 **`prfd_attr_cd`만이 유일하게 변하는 축**이다(43개 컬럼은 펀드당 완전 동일 = 순수 중복 적재). dedup 없이 순자산을 합하면 **8.53배 과대**, "공모펀드가 몇 개냐"에 95,619라 답하면 8.6배 과대 계상이다. 온톨로지에서는 **`Fund` 인스턴스를 `itm_no` 기준으로 만들고 `prfd_attr_cd`는 다대일 부속 속성**으로 붙여야 하며, RAG의 모든 집계 쿼리는 dedup을 강제해야 한다. 이것이 이 데이터셋 최대의 함정이다.
+# > **시사점:** **07-11 배포본 최대 함정(펀드 그레인 8.53배 왜곡)이 원천에서 해소되었다.** `prfd_attr_cd`가 사라지고 `itm_no`가 단독 유일키가 되어 dedup 없이 집계해도 안전하다. 온톨로지의 `Fund` 인스턴스는 그대로 `itm_no` 기준이며, 펀드별속성코드는 `prfd_attr_cds`(다중값 문자열)로 붙는다.
+# >
+# > **그러나 함정이 사라진 게 아니라 자리를 옮겼다.** 모집단이 11,139 → 23,676으로 늘면서 **사모가 8,960건(37.8%)** 섞여 들어왔다. 07-11 배포본에서는 사모가 15펀드뿐이라 각주였지만 이제는 1순위 필터다. 다만 **왜곡되는 것은 순자산 합계가 아니라 '개수'다** — 사모 레코드는 `fd_nast_suma`가 99.9% 비어 있어 SUM에는 거의 영향이 없다(왜곡 1.00배). 반면 "공모펀드가 몇 개냐"에 23,676이라 답하면 **1.61배 과대**이며 정답은 **14,716**이다. 즉 07-11의 함정이 "합계 왜곡"이었다면 08-24의 함정은 "개수 왜곡"이다.
 
 # %% [markdown]
-# ## 2. prfd_attr_cd 228종 — 접두 패턴 사전화
+# ## 2. prfd_attr_cds / prfd_attr_cnt / prfd_attr_search_text — 롱포맷이 결합 문자열로
 
 # %%
-print("prfd_attr_cd 고유:", df.prfd_attr_cd.nunique())
+print("prfd_attr_cnt(속성 개수) 분포:")
+print(df.prfd_attr_cnt.replace("", "(결측)").value_counts().sort_index().head(20).to_string())
 print()
-print(df.prfd_attr_cd.value_counts().head(20).to_string())
+print("속성 0개 펀드:", int((df.prfd_attr_cnt == "0").sum()), "(%.1f%%)" % ((df.prfd_attr_cnt == "0").mean() * 100))
 
 # %%
-# 형태 분류: 문자1+숫자3 / ISO3 국가코드 / 그 외(오염)
-form = np.where(
-    df.prfd_attr_cd.str.fullmatch(r"[A-Z]\d{3}"), "문자1+숫자3",
-    np.where(df.prfd_attr_cd.str.fullmatch(r"[A-Z]{3}"), "ISO3 국가코드형", "기타(오염)"),
-)
+print("prfd_attr_cds 예시:")
+print(df.loc[df.prfd_attr_cds != "", "prfd_attr_cds"].head(5).to_string())
+print()
+print("prfd_attr_search_text 예시 (코드+한글 라벨이 함께 들어온다):")
+print(df.loc[df.prfd_attr_search_text != "", "prfd_attr_search_text"].head(3).to_string())
+
+# %%
+# 결합 문자열을 분해해 07-11의 prfd_attr_cd 코드 사전과 대조한다
+codes = df.prfd_attr_cds.str.split(",").explode().str.strip()
+codes = codes[codes != ""]
+print("분해 후 코드 고유:", codes.nunique(), "종 / 총", len(codes), "개 (07-11: 228종)")
+print()
+print(codes.value_counts().head(20).to_string())
+
+# %%
+form = np.where(codes.str.fullmatch(r"[A-Z]\d{3}"), "문자1+숫자3",
+                np.where(codes.str.fullmatch(r"[A-Z]{3}"), "ISO3 국가코드형", "기타(오염)"))
 print(pd.Series(form).value_counts().to_string())
-print("\n비표준 값:")
-print(sorted(set(df.prfd_attr_cd[pd.Series(form).values == "기타(오염)"])))
+print("\n비표준 값:", sorted(set(codes[pd.Series(form).values == "기타(오염)"]))[:10])
 
 # %%
-# 접두 문자별 사전
-pref = df.prfd_attr_cd.str[0]
-dic = (
-    df.assign(접두=pref)
-    .groupby("접두")
-    .agg(행수=("itm_no", "size"), 코드종류=("prfd_attr_cd", "nunique"),
-         코드예시=("prfd_attr_cd", lambda s: sorted(set(s))[:6]))
-    .sort_values("행수", ascending=False)
-)
-dic
-
-# %%
-# ISO3형 코드는 '투자국가'로 보이는지 교차 검증
-iso = df[df.prfd_attr_cd.str.fullmatch(r"[A-Z]{3}") & ~df.prfd_attr_cd.isin([])]
-print("ISO3형 코드 종류:", sorted(set(iso.prfd_attr_cd)))
-print()
-print(pd.crosstab(iso.prfd_attr_cd, iso.fd_ivst_rgn_desc).to_string())
+# search_text에서 코드→한글 라벨 사전을 그대로 뽑을 수 있다 (07-11에는 없던 정보)
+lab = df.prfd_attr_search_text.str.findall(r"([A-Z]\d{3}|[A-Z]{3})\s+([^A-Z]+?)(?=\s+[A-Z]\d{3}|\s+[A-Z]{3}|$)")
+pairs = lab.explode().dropna()
+dic = pd.DataFrame(pairs.tolist(), columns=["코드", "한글라벨"])
+dic["한글라벨"] = dic.한글라벨.str.strip()
+dic = dic.value_counts().reset_index(name="건수").sort_values("건수", ascending=False)
+print("코드→라벨 사전 추출:", dic.코드.nunique(), "종")
+dic.head(25)
 
 # %% [markdown]
-# > **시사점:** `prfd_attr_cd`는 **한 컬럼에 최소 세 가지 이질적 코드 체계가 섞여 있다** — ① `C103`류 문자1+숫자3 코드(판매채널/클래스 속성으로 추정), ② `CHN`·`USA` 같은 ISO3 국가코드(투자국가와 실제로 교차 일치), ③ `해외` 한글 1건(오염). 즉 "펀드별속성코드"라는 이름과 달리 **속성의 종류 자체가 값에 따라 달라지는 다형 컬럼**이라, 온톨로지에서 단일 속성으로 매핑하면 안 되고 **접두 규칙으로 분해해 서로 다른 관계로 승격**해야 한다.
+# > **시사점:** 07-11 배포본에서 롱포맷 반복의 원인이던 `prfd_attr_cd`가 **결합 문자열 3형제로 대체**되었다. 코드 체계 자체(`C103`류 문자1+숫자3, `CHN`류 ISO3 국가코드)는 그대로지만 **`prfd_attr_search_text`가 코드와 한글 라벨을 함께 실어 주므로, 07-11에서 "접두 규칙으로 추정"해야 했던 코드 의미를 이제 원천에서 직접 읽을 수 있다**(`C101 추가`, `C103 개방`, `V101 국내`, `D102 국내위탁판매`). 특히 `C103 개방`은 07-11 배포본에서 **"컬럼 부재로 재현 불가"로 판정했던 `axis_redemptionType`(개방형/폐쇄형)의 직접 근거**다(§5). 온톨로지에는 `prfd_attr_cds`를 다중값 속성으로 싣고, 라벨 사전은 `search_text`에서 생성한다. 단 속성이 0개인 펀드가 12,396건(52.4%)이라 이 축은 커버리지가 절반이다.
 
 # %% [markdown]
 # ## 3. kofia_fd_ccd 20자리 코드 — 자리 의미 역추정 (⚠️ 전부 '가설')
@@ -208,7 +232,23 @@ print("→ 어떤 자리도 기존 분류 컬럼을 완전히 결정하지 못�
 # > **시사점(⚠️ 전부 가설):** `kofia_fd_ccd`는 20자리 위치기반 코드로, **`'0'×20`인 무효값이 22,131행(23.1%)**이다. 자리별 순도 분석 결과 **2·3번째 자리는 운용속성(주식형/채권형/재간접…)과, 4번째 자리는 국내외구분·환헤지와 강하게 연동**되는 것으로 보인다. 그러나 **순도 1.0에 도달하는 자리는 하나도 없어 어떤 자리도 분류값을 완전히 결정하지 못하며**, 뒷자리(16~20)는 `Z` 패딩이 지배적이라 정보량이 거의 없다. **금융투자협회 공식 코드북 없이 자리 의미를 확정하는 것은 불가능**하므로, 온톨로지에는 이 컬럼을 **원본 리터럴로만 보존**하고 파생 분류에 사용하지 않는다. 위 해석을 사실처럼 답변하면 곧바로 환각이 된다.
 
 # %% [markdown]
-# ## 4. 클래스 계층 — 모펀드 ↔ 클래스 복원 가능성
+# ## 4. 클래스 계층 — ★ han_clas_* 신설로 정규식 추정이 불필요해졌다
+
+# %%
+# 08-24 신설: 클래스 정보를 원천이 직접 준다
+for c in ["han_clas_nm", "han_clas_fee_type", "han_clas_sales_channel", "han_clas_policies"]:
+    v = df[c]
+    print(f"=== {c} ({ko.get(c,'')}) 결측 {(v=='').mean():.1%}")
+    print(v.replace("", "(결측)").value_counts().head(8).to_string(), "\n")
+
+# %%
+# 공모·판매중 구간에서는 커버리지가 어떤지 — 결측은 사모/판매완료에 몰려 있다
+pub_live = df[(df.prvo_pbff_desc == "공모") & (df.sale_yn == "판매중")]
+pd.DataFrame(
+    [{"컬럼": c, "전체 결측률": round((df[c] == "").mean(), 4),
+      "공모·판매중 결측률": round((pub_live[c] == "").mean(), 4)}
+     for c in ["han_clas_nm", "han_clas_fee_type", "han_clas_sales_channel", "han_clas_policies"]]
+)
 
 # %%
 # 클래스 표기는 두 가지다: 구분자가 있는 형태('…종류A', '… Class C', '…_Ce')와
@@ -275,7 +315,9 @@ badg = chk[~chk].index[0]
 print(valid[valid.rptt_ksd_itm_no == badg].itm_nm.head(5).to_string())
 
 # %% [markdown]
-# > **시사점:** 종목명 말미에서 클래스 토큰을 뽑을 수 있으나 **구분자('종류'/'Class'/'_')가 있는 형태는 35.3%뿐이고, 나머지는 `…자주식Cw`처럼 이름에 바로 붙어 있어** 느슨한 정규식으로 72.0%까지 커버된다 — 정규식 하나로는 완결되지 않는다. 모펀드 복원 키인 `rptt_ksd_itm_no`에는 **`KR0000000000`(284건)·`000000000000`(192건)이라는 무효 sentinel이 섞여 있어**, 이를 거르지 않으면 서로 무관한 펀드 284개가 한 모펀드로 묶이는 심각한 오조인이 발생한다. sentinel 제거 후에는 집약도 약 4.2:1로 `Fund`(모펀드) ↔ `FundClass`(판매 클래스) **2계층 복원이 가능**하다. 다만 그룹 내 이름 완전 일치율은 절반 수준이라(표기 흔들림: `(주식_재간접)` vs `(주식-재간접형)`) **이름이 아니라 대표종목번호를 조인키로 삼아야 한다.** `mtco_itm_no`(운용사종목번호)는 자리수가 5~7자로 들쭉날쭉해 조인키로 부적합하다.
+# > **시사점(08-24):** `han_clas_nm`(195종)·`han_clas_fee_type`(수수료선취/후취/미징구)·`han_clas_sales_channel`(온라인/오프라인/직판)이 신설되어 **클래스 축을 정규식 추정 없이 직접 읽을 수 있다.** 전체 결측률 59%는 대부분 사모·판매완료 구간이고 **공모·판매중 구간에서는 결측이 2% 미만**이다. 즉 `axis_classDifferentiation`(07-11 재현율 52%)은 이제 사실상 완전 재현된다. 아래 정규식 기반 분석은 **`han_clas_nm`이 결측인 구간의 보완 수단 겸 교차 검증**으로만 유지한다.
+# >
+# > 07-11 판정(정규식 경로): 종목명 말미에서 클래스 토큰을 뽑을 수 있으나 **구분자('종류'/'Class'/'_')가 있는 형태는 35.3%뿐이고, 나머지는 `…자주식Cw`처럼 이름에 바로 붙어 있어** 느슨한 정규식으로 72.0%까지 커버된다 — 정규식 하나로는 완결되지 않는다. 모펀드 복원 키인 `rptt_ksd_itm_no`에는 **`KR0000000000`(284건)·`000000000000`(192건)이라는 무효 sentinel이 섞여 있어**, 이를 거르지 않으면 서로 무관한 펀드 284개가 한 모펀드로 묶이는 심각한 오조인이 발생한다. sentinel 제거 후에는 집약도 약 4.2:1로 `Fund`(모펀드) ↔ `FundClass`(판매 클래스) **2계층 복원이 가능**하다. 다만 그룹 내 이름 완전 일치율은 절반 수준이라(표기 흔들림: `(주식_재간접)` vs `(주식-재간접형)`) **이름이 아니라 대표종목번호를 조인키로 삼아야 한다.** `mtco_itm_no`(운용사종목번호)는 자리수가 5~7자로 들쭉날쭉해 조인키로 부적합하다.
 
 # %% [markdown]
 # ## 5. 분류 축 실측 · 주최측 6축 대조
@@ -292,30 +334,34 @@ pd.DataFrame([{"축": c, "값 분포": dict(axis[c].value_counts())} for c in ax
 # %%
 pd.DataFrame(
     [
-        ("axis_fundType", "or_attr_desc", "부분", "주식형/채권형/혼합/MMF/재간접 대응, 미매핑 코드 '06' 686건 별도 처리 필요"),
-        ("axis_redemptionType", "(없음)", "불가", "개방형/폐쇄형(환매가능여부) 컬럼 자체가 없음"),
-        ("axis_issuanceType", "fd_set_pcd", "부분", "10/20/00 코드값의 의미가 스키마에 없음 — 추가/단위형 추정"),
-        ("axis_listingType", "(없음)", "불가", "상장/비상장 구분 컬럼 없음"),
-        ("axis_classDifferentiation", "itm_nm 파싱 + rptt_ksd_itm_no", "부분", "§4의 클래스 토큰 추출로 근사"),
+        ("axis_fundType", "or_attr_desc", "가능(개선)", "★ 08-24에서 한글명으로 제공. 미매핑 코드 '06' 소멸, 파생상품 2,302 명시"),
+        ("axis_redemptionType", "prfd_attr_cds(C103=개방)", "부분(신규)", "★ 속성코드 라벨로 개방/폐쇄 판정. 단 속성 0개 펀드 52.4%"),
+        ("axis_issuanceType", "prfd_attr_cds(C101=추가) + fd_set_pcd", "부분(신규)", "★ 추가형 라벨 확보. 단위형은 여전히 근거 약함"),
+        ("axis_listingType", "exchdg_yn", "불가", "상장/비상장 구분 컬럼 없음(exchdg_yn은 환헤지)"),
+        ("axis_classDifferentiation", "han_clas_nm", "가능(신규)", "★ 08-24 신설. 공모·판매중 결측 <2%"),
         ("axis_investorEligibility", "prvo_pbff_desc + pers_corp_desc", "가능", "공모/사모 × 개인/법인/해당없음"),
     ],
     columns=["주최측 축", "대응 후보 컬럼", "재현가능성", "비고"],
 )
 
 # %%
-# or_attr_desc의 '06' 실체 규명 — 단순 오염인가, 미매핑 코드인가?
-bad06 = uniq[uniq.or_attr_desc == "06"]
-print("or_attr_desc == '06' :", len(bad06), "펀드")
-print("  그 중 종목명에 '파생' 포함: %.1f%%" % (bad06.itm_nm.str.contains("파생").mean() * 100))
-print("  전체 펀드 기준 '파생' 포함: %.1f%%  ← 기저율" % (uniq.itm_nm.str.contains("파생").mean() * 100))
+# ★ 07-11의 미매핑 코드 '06' 이 사라지고 한글명 '파생상품'으로 들어왔는지 확인
+print("or_attr_desc == '06' :", int((uniq.or_attr_desc == "06").sum()), "펀드  ← 07-11에서는 686펀드")
 print()
-print(pd.crosstab(uniq.itm_nm.str.contains("파생").rename("종목명에 '파생' 포함"), uniq.or_attr_desc).to_string())
+print(uniq.or_attr_desc.replace("", "(결측)").value_counts().to_string())
 
 # %%
-bad06[["itm_no", "itm_nm", "or_attr_desc", "fd_ivst_rgn_desc", "zrin_fd_ivst_risk_grd_nm"]].head(8)
+# 07-11에서 '06'=파생형이라고 추정한 근거(종목명 '파생' 포함률)를 새 라벨로 재확인
+deriv = uniq[uniq.or_attr_desc == "파생상품"]
+print("or_attr_desc == '파생상품' :", len(deriv), "펀드")
+print("  그 중 종목명에 '파생' 포함: %.1f%%" % (deriv.itm_nm.str.contains("파생").mean() * 100))
+print("  전체 펀드 기준 '파생' 포함: %.1f%%  ← 기저율" % (uniq.itm_nm.str.contains("파생").mean() * 100))
+deriv[["itm_no", "itm_nm", "or_attr_desc", "fd_ivst_rgn_desc", "zrin_fd_ivst_risk_grd_nm"]].head(8)
 
 # %% [markdown]
-# > **시사점:** 6축 중 컬럼으로 온전히 재현되는 것은 `investorEligibility` 하나뿐이다. `redemptionType`(개방형/폐쇄형)과 `listingType`(상장/비상장)은 **대응 컬럼이 아예 없어 이 RDB만으로는 축을 만들 수 없다** — 종목명 파싱이나 외부 데이터가 필요하다. 한편 `or_attr_desc`의 `06`은 **단순 오염이 아니라 한글명이 매핑되지 않은 코드값**이다: 해당 686개 펀드 중 **98.8%가 종목명에 '파생'을 포함**(전체 기저율 6.5%)하므로 **`06` = 파생형**으로 읽는 것이 타당하다. 즉 `06`을 버리면 파생형 펀드 전체가 분류에서 사라지므로, 코드→한글 매핑을 보강해 살려야 한다.
+# > **시사점(08-24):** 재현 가능 축이 1축 → **3축 완전 + 2축 부분**으로 늘었다. `or_attr_desc`가 코드에서 한글명으로 바뀌어 07-11의 `'06'` 미매핑 문제가 **원천에서 해소**되었고(파생상품 2,302펀드로 명시), `han_clas_nm` 신설로 클래스 축이, `prfd_attr_search_text`의 `C103 개방`·`C101 추가` 라벨로 redemptionType·issuanceType이 부분 재현된다. **`listingType`(상장/비상장)만 여전히 대응 컬럼이 없다.**
+# >
+# > 07-11 판정: 6축 중 컬럼으로 온전히 재현되는 것은 `investorEligibility` 하나뿐이다. `redemptionType`(개방형/폐쇄형)과 `listingType`(상장/비상장)은 **대응 컬럼이 아예 없어 이 RDB만으로는 축을 만들 수 없다** — 종목명 파싱이나 외부 데이터가 필요하다. 한편 `or_attr_desc`의 `06`은 **단순 오염이 아니라 한글명이 매핑되지 않은 코드값**이다: 해당 686개 펀드 중 **98.8%가 종목명에 '파생'을 포함**(전체 기저율 6.5%)하므로 **`06` = 파생형**으로 읽는 것이 타당하다. 즉 `06`을 버리면 파생형 펀드 전체가 분류에서 사라지므로, 코드→한글 매핑을 보강해 살려야 한다.
 
 # %% [markdown]
 # ## 6. 위험등급 — ETF와 다른 체계
@@ -328,7 +374,7 @@ print(pd.crosstab(uniq.zrin_fd_ivst_risk_gcd.replace("", "(결측)"),
                   uniq.zrin_fd_ivst_risk_grd_nm.replace("", "(결측)")).to_string())
 
 # %%
-kr = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260711.csv", dtype=str, keep_default_na=False)
+kr = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False)
 pd.DataFrame(
     [
         {"체계": "공모펀드(제로인)", "등급 종류": uniq.zrin_fd_ivst_risk_grd_nm.replace("", np.nan).nunique(),
@@ -367,13 +413,32 @@ print("thco_sale_yn 비정상값:", len(bad), "행 →", bad.thco_sale_yn.unique
 bad[["itm_no", "itm_nm", "ksd_itm_no", "thco_sale_yn", "sale_yn"]]
 
 # %%
-sellable = (uniq.sale_yn == "판매중") & (uniq.thco_sale_yn == "Y")
-print("『당사에서 현재 판매중인 공모펀드』 =", int(sellable.sum()), "/ 전체 펀드", len(uniq))
-print("  판매중이나 당사 미취급:", int(((uniq.sale_yn == "판매중") & (uniq.thco_sale_yn != "Y")).sum()))
+sellable = (uniq.prvo_pbff_desc == "공모") & (uniq.sale_yn == "판매중") & (uniq.thco_sale_yn == "Y")
+print("『당사에서 현재 판매중인 공모펀드』 =", int(sellable.sum()), "/ 전체 레코드", len(uniq))
+print("  공모                   :", int((uniq.prvo_pbff_desc == "공모").sum()))
+print("  공모 & 판매중          :", int(((uniq.prvo_pbff_desc == "공모") & (uniq.sale_yn == "판매중")).sum()))
+print("  판매중이나 당사 미취급 :", int(((uniq.sale_yn == "판매중") & (uniq.thco_sale_yn != "Y")).sum()))
 print("  판매완료               :", int((uniq.sale_yn == "판매완료").sum()))
 
+# %%
+# ★ 전체 결측률이 07-11보다 크게 올랐다. 원인은 품질 저하가 아니라 모집단 확대다.
+seg = {
+    "전체(23,676)": uniq,
+    "공모": uniq[uniq.prvo_pbff_desc == "공모"],
+    "공모·판매중": uniq[(uniq.prvo_pbff_desc == "공모") & (uniq.sale_yn == "판매중")],
+    "공모·판매중·당사": uniq[sellable],
+}
+pd.DataFrame(
+    {k: {ko.get(c, c) or c: round((v[c] == "").mean(), 4)
+         for c in ["fd_nast_suma", "bmrk_nm", "zrin_fd_ivst_risk_gcd", "fd_yr1_ern_r",
+                   "han_clas_nm", "zrin_dmst_stk_cmst_rt", "trusc_rwrd_r"]}
+     for k, v in seg.items()}
+)
+
 # %% [markdown]
-# > **시사점:** `sale_yn`(시장 전체 판매 여부)과 `thco_sale_yn`(당사 판매 여부)은 **다른 질문에 답하는 두 컬럼**이다. "지금 살 수 있는 펀드"는 반드시 `sale_yn=='판매중' AND thco_sale_yn=='Y'`여야 한다. `thco_sale_yn`에 예탁원 종목번호(`KRZ50226929C`)가 들어간 행이 존재해, **Y/N 화이트리스트 검증 없이 불린 캐스팅하면 조용히 오분류**된다.
+# > **시사점:** `sale_yn`(시장 전체 판매 여부)과 `thco_sale_yn`(당사 판매 여부)은 **다른 질문에 답하는 두 컬럼**이다. "지금 살 수 있는 펀드"는 `prvo_pbff_desc=='공모' AND sale_yn=='판매중' AND thco_sale_yn=='Y'` 3조건이며 **8,550건**이다(07-11: 8,434건 — 모집단이 2배로 늘었는데 실판매 규모는 거의 같다).
+# >
+# > **결측률 급등의 정체가 여기서 드러난다.** `fd_nast_suma` 전체 결측 60.2%는 데이터 품질 저하가 아니라 **판매완료·사모 레코드가 대량 유입된 결과**이며, 공모·판매중 구간으로 좁히면 2.5%로 떨어진다. `bmrk_nm`은 0.0%, 위험등급은 0.2%다. 즉 **답변 모집단을 먼저 좁히면 07-11 배포본보다 오히려 커버리지가 좋다.** RAG는 결측률을 전체 기준으로 인용하면 안 되고 **질의 모집단 기준으로 인용**해야 한다.
 
 # %% [markdown]
 # ## 8. 오염 종합 — ETL 검증 규칙 목록
@@ -403,22 +468,25 @@ print(pd.crosstab(df.prvo_pbff_desc, df.prvo_fd_desc).to_string())
 # 오염 규칙 표
 rules = pd.DataFrame(
     [
-        ("prfd_attr_cd", "'해외' 한글값", int((df.prfd_attr_cd == "해외").sum()), "코드 형식 정규식 검증"),
-        ("or_attr_desc", "미매핑 코드 '06'(=파생형)", int((df.or_attr_desc == "06").sum()), "코드→한글 매핑 보강(삭제 금지)"),
+        ('itm_no = \'"\' 깨진 행', "07-11의 CSV 파싱 붕괴 행", int((df.itm_no == '"').sum()), "★ 해소됨 — 08-24에 없음"),
+        ("or_attr_desc", "미매핑 코드 '06'(=파생형)", int((df.or_attr_desc == "06").sum()), "★ 해소됨 — 한글명 '파생상품'으로 제공"),
         ("exchdg_yn", "'00080008'", int((df.exchdg_yn == "00080008").sum()), "Y/N 화이트리스트"),
-        ("exchdg_yn", "빈 문자열(결측)", int((df.exchdg_yn == "").sum()), "결측 31% → unknown 명시"),
+        ("exchdg_yn", "빈 문자열(결측)", int((df.exchdg_yn == "").sum()), "결측 → unknown 명시"),
         ("thco_sale_yn", "'KRZ50226929C' 종목번호", int((df.thco_sale_yn == "KRZ50226929C").sum()), "Y/N 화이트리스트"),
-        ("zrin_fd_ivst_risk_grd_nm", "'06' 및 공백표기 불일치", int((df.zrin_fd_ivst_risk_grd_nm == "06").sum()) + int(df.zrin_fd_ivst_risk_grd_nm.isin(["높은위험", "보통위험"]).sum()), "공백 제거 후 정규화"),
-        ("prvo_pbff_desc", "'사모' 혼재", int((df.prvo_pbff_desc == "사모").sum()), "공모 한정 필터 필요"),
+        ("zrin_fd_ivst_risk_grd_nm", "공백표기 불일치", int(df.zrin_fd_ivst_risk_grd_nm.isin(["높은위험", "보통위험", "낮은위험"]).sum()), "공백 제거 후 정규화"),
+        ("prvo_pbff_desc", "'사모' 혼재", int((df.prvo_pbff_desc == "사모").sum()), "★ 102행 → 8,960행. 공모 필터 필수"),
         ("kofia_fd_ccd", "'0'*20 무효값", int((df.kofia_fd_ccd == "0" * 20).sum()), "NULL 처리"),
-        ("ofsfd_yn / hdge_fd_yn", "전 행 상수 '0'", int((df.ofsfd_yn == "0").sum()), "정보량 0 → 미탑재"),
+        ("ofsfd_yn / hdge_fd_yn", "07-11 전 행 상수 '0'", int((df.ofsfd_yn == "1").sum()) + int((df.hdge_fd_yn == "1").sum()), "★ 해소됨 — 1 값 등장(역외/헤지 식별 가능)"),
+        ("rptt_ksd_itm_no", "무효 sentinel KR0000000000 / 0*12", int(df.rptt_ksd_itm_no.isin(["KR0000000000", "000000000000"]).sum()), "제외 후 조인"),
     ],
-    columns=["컬럼", "오염 유형", "건수(행)", "권장 검증 규칙"],
+    columns=["컬럼", "오염 유형", "건수(행)", "권장 검증 규칙 / 08-24 상태"],
 )
 rules
 
 # %% [markdown]
-# > **시사점:** 오염은 산발적이지만 **유형이 일정하다 — 코드값이 설명 컬럼에 새어 들어오거나(`06`), 다른 컬럼의 값이 잘못 적재되거나(`KRZ50226929C`, `00080008`), 무효 sentinel(`'0'×20`)이 값처럼 들어 있다.** 건수는 적어도 전부 **자연어 질의에서 그대로 노출될 수 있는 값**이므로 위 9개 규칙을 ETL 검증으로 고정한다. 또 `ofsfd_yn`·`hdge_fd_yn`은 전 행 상수 `0`이라 정보량이 0 — 온톨로지에 싣지 않는다. **테이블 이름이 '공모펀드'인데 사모 102행이 섞여 있는 것**도 반드시 필터해야 한다.
+# > **시사점(08-24):** 07-11의 오염 9종 중 **4종이 원천에서 해소**되었다 — 깨진 행(`itm_no='"'`) 소멸, `or_attr_desc '06'` 한글명화, `ofsfd_yn`·`hdge_fd_yn` 상수 해제. 반대로 **사모 혼재는 102행 → 8,960행으로 규모가 88배 커져 이 테이블 1순위 필터가 되었다.** 나머지(환헤지 코드 오염, `thco_sale_yn` 종목번호 혼입, 위험등급 공백 표기)는 그대로 남아 있다.
+# >
+# > 07-11 판정: 오염은 산발적이지만 **유형이 일정하다 — 코드값이 설명 컬럼에 새어 들어오거나(`06`), 다른 컬럼의 값이 잘못 적재되거나(`KRZ50226929C`, `00080008`), 무효 sentinel(`'0'×20`)이 값처럼 들어 있다.** 건수는 적어도 전부 **자연어 질의에서 그대로 노출될 수 있는 값**이므로 위 9개 규칙을 ETL 검증으로 고정한다. 또 `ofsfd_yn`·`hdge_fd_yn`은 전 행 상수 `0`이라 정보량이 0 — 온톨로지에 싣지 않는다. **테이블 이름이 '공모펀드'인데 사모 102행이 섞여 있는 것**도 반드시 필터해야 한다.
 
 # %% [markdown]
 # ## 9. 수익률 결측 계단 → 신규 펀드 판별
@@ -491,16 +559,80 @@ parts.value_counts().head(20).to_frame("등장 횟수")
 # > **시사점:** `bmrk_nm` 391종 중 **47.7%(5,309펀드)가 `MSCI ACWI CR 50% + 종합채권01Y 50%` 같은 가중 합성 문자열**이라, 문자열 그대로 두면 지수 엔티티가 조합 수만큼 폭발한다. `+`와 `%`로 분해하면 391종 → 고유 지수 330종이 되고 `KOSPI200`이 2,817회로 최다 등장 지수임이 드러난다. 다만 분해 결과에도 `CALL`/`Call`, `종합채권01Y`/`종합채권 01Y`/`KIS채권종합01Y` 같은 **동일 지수의 표기 흔들림**이 남아 있어 지수 노드 생성 전 정규화 사전이 필요하다. 온톨로지에서는 **`BenchmarkIndex` 노드와 `BenchmarkComposition`(지수+비중) 중간 노드로 분리**해야 "KOSPI200을 추종하는 펀드"류 질의가 합성 벤치마크 펀드까지 포괄한다. ETF의 `cu_base_index`(국내 95% 결측)와 달리 펀드 벤치마크는 결측이 없어, **지수 엔티티의 주요 공급원은 ETF가 아니라 공모펀드 쪽**이다.
 
 # %% [markdown]
+# ## 11. ★ 보수·수수료 — 07-11에서 "컬럼 부재로 답변 불가"였던 축
+
+# %%
+fee_cols = ["trusc_rwrd_r", "sale_co_rwrd_r", "or_co_rwrd_r", "ofwk_trus_rwrd_r", "fd_prsv_r"]
+pd.DataFrame(
+    {
+        "한글명": [ko.get(c, "") for c in fee_cols],
+        "결측률": [round((uniq[c] == "").mean(), 4) for c in fee_cols],
+        "고유값수": [int(uniq[c][uniq[c] != ""].nunique()) for c in fee_cols],
+        "min": [num(uniq[c]).min() for c in fee_cols],
+        "중앙값": [round(num(uniq[c]).median(), 4) for c in fee_cols],
+        "max": [num(uniq[c]).max() for c in fee_cols],
+    },
+    index=fee_cols,
+)
+
+# %%
+# ⚠️ 단위 검증. 값을 그대로 %로 읽으면 판매보수 중앙값이 4.7%가 되어 현실과 맞지 않는다.
+live = uniq[(uniq.prvo_pbff_desc == "공모") & (uniq.sale_yn == "판매중") & (uniq.thco_sale_yn == "Y")].copy()
+live["보수합"] = sum(num(live[c]).fillna(0) for c in ["trusc_rwrd_r", "or_co_rwrd_r", "sale_co_rwrd_r", "ofwk_trus_rwrd_r"])
+print("보수 4종 단순 합(원본 단위) — 공모·판매중", len(live), "펀드")
+print(live.보수합.describe().round(3).to_string())
+print("\n→ 이대로 '%'라 읽으면 평균 총보수 10%대. 국내 공모펀드 현실과 맞지 않는다.")
+
+# %%
+# ★ 내부 교차검증: 펀드↔ETF 중복 상품(ksd_itm_no 조인)의 LSEG ter(실제 총보수율 %)와 대조한다.
+import json
+lseg = json.loads((ROOT / "data" / "lseg_static_metadata.json").read_text(encoding="utf-8"))
+etf = pd.read_csv(CSV / "PREF01N001_etf_kr_master_20260824.csv", dtype=str, keep_default_na=False)
+etf["ter"] = pd.to_numeric(etf.pd_itm_no_ma.str[1:].map(lambda k: (lseg.get(k) or {}).get("ter")), errors="coerce")
+mm = uniq.merge(etf[["pd_itm_no", "ter", "pd_abrv_nm"]], left_on="ksd_itm_no", right_on="pd_itm_no")
+mm["보수합"] = sum(num(mm[c]).fillna(0) for c in ["trusc_rwrd_r", "or_co_rwrd_r", "sale_co_rwrd_r", "ofwk_trus_rwrd_r"])
+z = mm[(mm.보수합 > 0) & mm.ter.notna()].copy()
+z["보수합÷10"] = z.보수합 / 10
+z["오차"] = (z["보수합÷10"] - z.ter).abs()
+print("ETF와 중복되며 보수값이 채워진 펀드:", len(z))
+print("보수합을 그대로 퍼센트로 볼 때 ter 대비 배율 중앙값: %.1f배" % (z.보수합 / z.ter).median())
+print("보수합÷10 vs ter 절대오차 중앙값: %.4f %%p" % z.오차.median())
+z[["pd_abrv_nm", "보수합", "보수합÷10", "ter", "오차"]].head(12)
+
+# %% [markdown]
+# > **단위 확정:** `보수합 ÷ 10`이 LSEG `ter`(실제 총보수율 %)와 같은 자릿수로 맞아떨어진다
+# > (예: `KODEX 차이나심천ChiNext(합성)` 4.9 → 0.49% vs ter 0.47%, `TIGER 인도니프티50레버리지(합성)` 5.9 → 0.59% vs ter 0.58%).
+# > 즉 **이 보수 컬럼들의 단위는 %가 아니라 천분율(‰)이며, 10으로 나눠야 연 보수율(%)이 된다.**
+# > 잔차(중앙 0.07%p)는 LSEG `ter`가 실제 부담 총비용인 반면 이 컬럼은 약관상 보수라 생기는 정상 차이로 본다.
+
+# %%
+live["연보수율_pct"] = live.보수합 / 10
+print("연 보수율(%) — 공모·판매중", len(live), "펀드")
+print(live.연보수율_pct.describe().round(4).to_string())
+print("\n채널별 중앙 연보수율(%):")
+print(live.groupby(live.han_clas_sales_channel.replace("", "(결측)")).연보수율_pct.median().round(3).to_string())
+print("\n가장 싼 펀드 10:")
+print(live.nsmallest(10, "연보수율_pct")[["itm_nm", "han_clas_nm", "연보수율_pct"]].to_string())
+
+# %% [markdown]
+# > **시사점:** 07-11 배포본에서 **"펀드 수수료(선취/후취/총보수) — 해당 컬럼 없음 → 답변 불가"** 로 못박았던 항목이 08-24 배포본에서 **결측 0%로 제공된다.** `trusc_rwrd_r`(신탁업자)·`or_co_rwrd_r`(집합투자업자)·`sale_co_rwrd_r`(판매회사)·`ofwk_trus_rwrd_r`(일반사무관리) 4종을 합산하면 연 보수율이 되고, `han_clas_fee_type`이 선취/후취/미징구를 구분한다. **"보수가 가장 싼 펀드" 류 질의가 답변 가능으로 전환**된다.
+# >
+# > ⚠️ **단 단위가 천분율(‰)이다. 10으로 나누지 않고 답하면 "총보수 10%짜리 펀드"라는 자릿수 오답이 나간다.** 스키마 코멘트에는 단위 표기가 없으므로 이 변환 규칙을 `metadata/business_rules.json`에 못박아야 한다. 온라인 클래스가 오프라인보다 판매보수가 낮다는 상식적 서열도 성립해(온라인 < 오프라인) 값 자체는 신뢰 가능하다.
+# > 또 `fd_prsv_r`(보전율)은 전 행에서 `sale_co_rwrd_r`과 값이 동일해 **독립 정보가 아니다** — 보수 합산에 넣으면 판매보수가 이중 계상된다.
+
+# %% [markdown]
 # ## 종합
 #
 # | 항목 | 실측 | 온톨로지/RAG 영향 |
 # |---|---|---|
-# | **그레인** | 95,619행 = 11,139펀드 × prfd_attr_cd | **dedup 없으면 순자산 8.53배 과대** |
-# | prfd_attr_cd | 228종, 3개 코드체계 혼재 | 접두 규칙으로 분해 후 승격 |
-# | kofia_fd_ccd | 20자리, 23.1% 무효 | 코드북 부재 → 원본 보존만, 파싱 금지 |
-# | 클래스 계층 | 유효 대표종목번호 2,626개 ↔ 10,654 클래스 (집약도 4.06:1) | sentinel 485건 제외 후 2계층 복원 가능 |
-# | 축 재현 | 6축 중 완전 재현 1축 | redemptionType·listingType은 불가 |
-# | or_attr_desc '06' | 686펀드, 98.8%가 파생형 | 오염 아닌 미매핑 코드 — 살려야 함 |
-# | 위험등급 | 제로인 1~6, 결측 23.1%(펀드기준) | **코드 기준 서열이 ETF와 동일** → 코드로 통합 매핑 |
-# | 사모 혼재 | 102행 | 공모 한정 필터 필수 |
-# | 벤치마크 | 391종(47.7% 합성), 분해 시 330종, 결측 0 | 지수 엔티티의 주 공급원 |
+# | **그레인** | 23,676행 = 23,676펀드 (itm_no 단독 유일키) | ★ 8.53배 왜곡 함정 **해소** |
+# | **사모 혼재** | 8,960펀드(37.8%) | ★ 102행 → 88배. **1순위 필수 필터** |
+# | 공모 펀드 수 | 14,716 / 당사 판매중 8,550 | "공모펀드 몇 개" 정답 = 14,716 |
+# | prfd_attr_cds | 결합 문자열 + search_text에 한글 라벨 | ★ 코드 의미를 원천에서 직접 읽음 |
+# | 보수·수수료 | 신탁/운용/판매 보수 결측 0% | ★ 답변 불가 → **가능**. 단 값 범위 검증 필수 |
+# | 클래스 계층 | `han_clas_nm` 195종, 공모·판매중 결측 <2% | ★ 정규식 추정 → **직접 값** |
+# | 축 재현 | 6축 중 완전 3축 + 부분 2축 | listingType만 여전히 불가 |
+# | or_attr_desc | 한글명 14종, 파생상품 2,302 | ★ 미매핑 코드 '06' **소멸** |
+# | 위험등급 | 제로인 1~6, 공모·판매중 결측 0.2% | 코드 기준 서열이 ETF와 동일 → 코드로 통합 |
+# | 벤치마크 | 389종, 전체 결측 52.4% / 공모·판매중 0.0% | 모집단 기준으로 결측률 인용할 것 |
+# | 자산구성비 | `zrin_*_cmst_rt` 8종 신설 | 국내주식/해외주식/채권 비중 질의 가능 |
