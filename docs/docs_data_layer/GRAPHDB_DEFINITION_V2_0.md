@@ -1,11 +1,19 @@
 # GRAPHDB DEFINITION V2.0
 
-자동 생성 파일입니다. 직접 편집하지 말고 `python src/kb/build_catalog_v2.py`를 실행합니다.
+이 문서는 팀원과 Agent/LLM이 별도 구두 설명 없이 물리 구조와 의미 계약을 재구성할 수 있도록 만든 자급형 정의서입니다.
+자동 생성 파일이므로 직접 편집하지 말고 `python src/kb/build_catalog_v2.py`를 실행합니다.
 의미 정의의 정본은 [TBox TTL 5개](../../ontology/)이며 ABox 생성 규칙은 [Graph 빌더](../../src/kb/build_graph_v2.py)가 소유합니다.
 
-- 데이터 버전: `financial-products-2026-07-11`
-- 배포일: `2026-07-11`
-- 외부 근거 cutoff: `2026-07-11`
+- 데이터 버전: `financial-products-2026-08-24`
+- 배포일: `2026-08-24`
+- 외부 근거 cutoff: `2026-08-24`
+
+## 이 문서를 읽는 순서
+
+1. `named graph` 범위와 URI 규칙을 먼저 확인합니다.
+2. `클래스/속성 정의`의 domain·range와 `통제어휘`로 질의 자체가 유효한지 판정합니다.
+3. `관계와 분류 매핑`에서 n-ary 경로와 provenance를 따라 후보 `product_id`를 얻습니다.
+4. 숫자 비교가 필요하면 URI의 상품 ID를 RDB로 넘기고, 설명 근거가 필요하면 VectorDB로 넘깁니다.
 
 ## 범위와 엔진
 
@@ -14,6 +22,23 @@
 - instance namespace: `fpi: <http://mafest.ai/instance/>`
 - TBox와 ABox는 별도 named graph로 벌크 로드하며 런타임에 TTL을 파싱하지 않습니다.
 - ABox 트리플 수는 입력 관계 데이터에 따라 달라지므로 정의서에 고정하지 않고 `graph_manifest.json`과 `/health`로 확인합니다.
+- 담당 연산: 상품 분류, 편입·자회사·문서 연결, TBox 허용값과 domain/range 검증
+- 비담당 연산: AUM·수익률·보수의 정렬/집계는 RDB, 서술 문서의 의미 검색은 VectorDB가 담당
+
+## 읽기 인터페이스
+
+Agent는 `POST /db/sparql`로 SPARQL 1.1 `SELECT`/`ASK`/`CONSTRUCT`/`DESCRIBE`만 실행합니다. `INSERT`, `DELETE`, `LOAD` 등 update는 차단되며 Oxigraph 쓰기와 TTL reload는 서버 운영자만 수행합니다.
+
+## namespace와 named graph 질의 계약
+
+| prefix | URI | 용도 |
+|---|---|---|
+| `fp:` | `http://mafest.ai/product#` | TBox 클래스·속성·통제어휘 |
+| `fpi:` | `http://mafest.ai/instance/` | ABox 상품·증권·관계·문서 인스턴스 |
+| `rdf:` | `http://www.w3.org/1999/02/22-rdf-syntax-ns#` | 타입 |
+| `rdfs:` | `http://www.w3.org/2000/01/rdf-schema#` | 라벨·설명·domain·range |
+
+TBox 검증은 `GRAPH <http://mafest.ai/graph/tbox/{domain}>`, 상품 조회는 `GRAPH <http://mafest.ai/graph/abox/{domain}>`을 명시합니다. 편입·자회사·문서 관계는 `abox/company`에 있으므로 상품 graph와 company graph를 같은 SPARQL에서 조인할 수 있습니다.
 
 ## TBox 요약
 
@@ -76,6 +101,7 @@
 - 편입관계: `fpi:holding:{holding_id}`
 - 자회사관계: `fpi:subsidiary:{relation_id}`
 - URI 구성요소는 UTF-8 percent encoding하며 입력 정렬과 triple 정렬로 같은 입력에서 byte-for-byte 같은 TTL을 생성합니다.
+- `fpi:` 뒤 상품 URI 값은 RDB `enriched.product_master.product_id`와 동일하므로 prefix를 제거해 교차 DB 조인합니다.
 
 ## 클래스 정의
 
@@ -96,8 +122,8 @@
 | `fp:Custodian` | 수탁회사 | fp:Organization | - | 펀드 재산을 보관·관리하는 신탁업자(trusc_xtn_itt_cd 18종, 시중은행 중심). 코드↔사명 매핑표 미확보 상태다. | common.ttl |
 | `fp:DistributionType` | 분배 유형 | - | - | 주최측 axis_distributionType(분배형/TR형). **배당 관련 3컬럼이 전량 무효**라 원본에서 재현 불가하며, 상품명의 'TR' 토큰 파싱으로만 부분 추정된다. 추정값은 근거가 약하므로 답변 시 추정임을 명시한다. | etf_kr.ttl |
 | `fp:Document` | 근거문서 | - | - | 공시·투자설명서·운용보고서·정책자료 등 관계와 주장을 지지하는 문서. fp:supportedBy의 range다. 문서명·발행기관·발행일·근거 문장이 답변 근거 계약의 필수 항목이다. | common.ttl |
-| `fp:ETF` | 상장지수펀드 | fp:Product, fp:Security | fp:Bond | 거래소 상장 지수연동 펀드. 2026-07-11 정본의 국내 1,202종·해외 5,587종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다. | common.ttl |
-| `fp:ETN` | 상장지수증권 | fp:Product, fp:Security | fp:Bond, fp:ETF | 발행 증권사의 채무증권. 2026-07-11 정본의 국내 532종·해외 59종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다. | common.ttl |
+| `fp:ETF` | 상장지수펀드 | fp:Product, fp:Security | fp:Bond | 거래소 상장 지수연동 펀드. 2026-08-24 정본의 국내 1,235종·해외 5,972종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다. | common.ttl |
+| `fp:ETN` | 상장지수증권 | fp:Product, fp:Security | fp:Bond, fp:ETF | 발행 증권사의 채무증권. 2026-08-24 정본의 국내 545종·해외 65종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다. | common.ttl |
 | `fp:FundType` | 펀드 유형 | - | - | 주최측 axis_fundType(증권·MMF·혼합자산·부동산·특별자산). 공식 or_attr_desc 이름을 사용하며 이름 없이 남은 내부 코드는 의미를 추정하거나 필터에 사용하지 않는다. | fund_pub.ttl |
 | `fp:GlobalETF` | 해외 ETF | fp:ETF | - |  | common.ttl |
 | `fp:GlobalETN` | 해외 ETN | fp:ETN | - |  | common.ttl |
@@ -121,7 +147,7 @@
 | `fp:MunicipalBond` | 지방채 | fp:GovernmentBond | - | 지방자치단체 발행 채권(공모지방채·지역개발 계열). 국공채의 하위이므로 등급 미평가가 정상인 범위에 포함된다. axis 개체 fp:IssuerType_Municipal에 대응한다. | bond_kr.ttl |
 | `fp:Organization` | 기관 | - | - | 법인·기관의 상위 클래스. 발행사·운용사·수탁사·일반 기업이 하위다. 원본은 기관명 문자열이라 법인격 표기 흔들림(한국투자/한국투자증권(주), BlackRock Fund Advisors/LP)이 있어 skos:altLabel로 별칭을 흡수한다. | common.ttl |
 | `fp:Product` | 금융상품 | - | - | 판매·거래 가능한 금융상품의 최상위 클래스. 채권·ETF·ETN·공모펀드가 모두 이 클래스의 하위다. 상품번호(fp:productCode)로 식별한다. | common.ttl |
-| `fp:PublicFund` | 공모펀드 | fp:Product | fp:Bond, fp:ETF, fp:ETN | 국내 공모펀드 종목(PRFD01N001 itm_no 단위 11,115종). **공모 한정 클래스다** — 95,619개 클래스 속성 행을 (itm_no, prfd_attr_cd) 그레인으로 보존하고 사모 15종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다. | common.ttl |
+| `fp:PublicFund` | 공모펀드 | fp:Product | fp:Bond, fp:ETF, fp:ETN | 국내 공모펀드 종목(PRFD01N001 itm_no 단위 14,716종). **공모 한정 클래스다** — 최신 원본은 itm_no가 유일한 23,676행이며 사모 8,960종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다. | common.ttl |
 | `fp:RatingBand` | 신용등급 대역 | - | - | 주최측 axis_creditRating(AAAGrade·AAGrade·AGrade·NotRated). fp:CreditRating 19단계를 묶은 **거친 대역**이다. 'AA- 이상' 질의는 이 대역만으로 처리하면 안 되고 반드시 fp:ratingRank 서열로 판정해야 한다(AAGrade에는 AA+·AA·AA-가 섞여 있다). | bond_kr.ttl |
 | `fp:RatingStatus` | 신용등급 상태 | - | - | 신용등급이 **없는 이유**를 구분하는 상태 개체. 등급 개체(fp:CreditRating)가 아니므로 fp:ratingRank를 부여하지 않으며 서열 비교에 끼어들지 않는다. 공식 상품분류로 평가 대상 아님이 명시된 경우와 단순 결측을 구분한다. | common.ttl |
 | `fp:RedemptionType` | 환매 유형 | - | - | 주최측 axis_redemptionType(개방형/폐쇄형). **현재 데이터로 값을 채울 수 없다** — 환매 가능 여부를 나타내는 컬럼이 없다. fd_set_pcd(3값)는 코드 의미가 미확정이라 대용할 수 없다. 클래스·속성은 선언하되 값을 부여하지 않는다. | fund_pub.ttl |
@@ -180,7 +206,7 @@
 | `fp:issuedByCompany` | 증권 발행기업 | fp:Security | fp:Company | 편입증권 → 발행 기업. ETF→편입증권→기업→자회사→산업/테마 경로의 두 번째 간선이며, 검증된 증권 식별자와 기업 식별자 대응이 있을 때만 생성한다. | common.ttl |
 | `fp:managedBy` | 운용사 | (fp:ETF ∪ fp:ETN ∪ fp:PublicFund) | fp:AssetManager | ETF·ETN·펀드 → 운용사(ETN은 발행 증권사). 채권은 운용사 개념이 없으므로 domain에서 제외한다. | common.ttl |
 | `fp:ratingStatus` | 신용등급 상태 | (fp:Bond ∪ fp:Issuer) | fp:RatingStatus | 등급이 없을 때 그 이유를 구분한다. 공식 STD_PD_MCLS_NM이 국공채 또는 개인투자용국채이고 CRD_GRD가 결측이면 fp:UnratedByDesign, 그 밖의 결측은 fp:RatingUnknown, 등급이 있으면 fp:Rated다. 등급 조건 질의에서 미평가 종목은 서열 필터에서 제외하되 결과에 '미평가'로 표시하며, 존재하지 않는 등급 문자열에 대한 ABSTAIN_INVALID_TAXONOMY와 혼동하지 않는다. | common.ttl |
-| `fp:relatedToTheme` | 테마 연관 | (fp:Product ∪ fp:Company) | fp:Theme | 상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-07-11 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다. | common.ttl |
+| `fp:relatedToTheme` | 테마 연관 | (fp:Product ∪ fp:Company) | fp:Theme | 상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-08-24 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다. | common.ttl |
 | `fp:sameVehicleAs` | 동일 상품 | fp:Product | fp:Product | 표기·데이터셋이 달라도 공식 식별자로 동일 운용 실체가 검증된 상품을 잇는 대칭 관계. fp:ETF와 fp:PublicFund는 owl:disjointWith이므로 owl:sameAs로 병합하지 않고 별개 노드를 유지한다. | common.ttl |
 | `fp:subsidiaryCompany` | 피출자 기업 | fp:SubsidiaryRelation | fp:Company | 출자관계 노드 → 피출자(자회사) 기업. fp:hasSubsidiary·fp:ownershipPct·fp:asOf와 함께 하나의 출자 사실을 구성한다. | common.ttl |
 | `fp:subsidiaryOf` | 자회사 관계 | fp:Company | fp:Company | 자회사 → 모회사 단순 관계. v2 ABox는 지분율·기준일·출처를 보존하기 위해 fp:SubsidiaryRelation n-ary 구조를 사용하며 이 속성으로 직접 인스턴스를 만들지 않는다. | common.ttl |
@@ -211,7 +237,7 @@
 | `fp:creditRatingLabel` | 신용등급 표기 | fp:Bond | xsd:string | PRBD01N001, derived:bond_kr_enriched.CRD_GRD, derived:bond_kr_enriched.crd_grd_norm | 정규화된 대표 신용등급 문자열(AA0→AA, C0→C). 결측은 fp:ratingStatus로 미평가 대상과 데이터 결손을 구분해 답하며 서열 비교는 이 문자열이 아니라 fp:hasCreditRating 개체의 fp:ratingRank로 한다. | bond_kr.ttl |
 | `fp:currencyHedged` | 환헤지 여부 | fp:PublicFund | xsd:boolean | PRFD01N001.exchdg_yn | 환헤지 적용 여부. 공식 Y/N 값만 조건축으로 사용하고 결측을 국내투자나 미적용으로 추정하지 않으며 그 밖의 값은 원문 보존 후 필터에서 제외한다. | fund_pub.ttl |
 | `fp:delistingDate` | 거래종료일 | (fp:ETF ∪ fp:ETN) | xsd:date | PREF01N001.pd_lste_dt | 상장폐지·만기일. 유효한 날짜만 파싱하고 sentinel은 원문 보존 후 날짜 비교에서 제외한다. ETN의 명시적 종료 판정에 사용한다. | etf_kr.ttl |
-| `fp:documentPublishedDate` | 문서 발행일 | fp:Document | xsd:date | derived:document.derived:document.published_date | 근거 문서의 발행일. 2026-07-11 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다. | common.ttl |
+| `fp:documentPublishedDate` | 문서 발행일 | fp:Document | xsd:date | derived:document.derived:document.published_date | 근거 문서의 발행일. 2026-08-24 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다. | common.ttl |
 | `fp:documentPublisher` | 발행기관 | fp:Document | xsd:string | derived:document.derived:document.publisher | 근거 문서의 발행기관. | common.ttl |
 | `fp:documentQuote` | 근거 문장 | fp:Document | xsd:string | derived:document.derived:document.quote | 관계·주장을 직접 지지하는 인용 문장. | common.ttl |
 | `fp:documentTitle` | 문서명 | fp:Document | xsd:string | derived:document.derived:document.title | 근거 문서의 제목. 답변 근거 계약의 필수 항목. | common.ttl |
@@ -259,7 +285,7 @@
 | `fp:ratingAgencyCount` | 평가사 등급 개수 | fp:Bond | xsd:integer | derived:bond_kr_enriched.derived:bond_kr_enriched.evco_grd_count | PD_EVCO_CRD_GRD에 담긴 등급 개수(파생). 1개 이하면 일치 판정이 불가능하다. | bond_kr.ttl |
 | `fp:ratingAgreement` | 평가사 등급 일치 여부 | fp:Bond | xsd:string | derived:bond_kr_enriched.derived:bond_kr_enriched.evco_grd_agree | 복수 평가사 등급이 모두 같으면 Y, 다르면 N, 판정 불가면 공란(파생). 등급 불일치 286건은 답변 시 함께 표기해야 한다. | bond_kr.ttl |
 | `fp:ratingRank` | 신용등급 서열 | fp:CreditRating | xsd:integer | derived:bond_kr_enriched.derived:bond_kr_enriched.crd_grd_rank | 1=AAA(최상) … 19=C(최하). 'AA- 이상'은 fp:ratingRank <= 4로 판정한다. data/enriched/bond_kr_enriched.csv의 crd_grd_rank와 동일 체계이므로 RDB 선필터와 온톨로지 판정 결과가 일치한다. | common.ttl |
-| `fp:remainingDays` | 잔존일수 | fp:Bond | xsd:integer | derived:bond_kr_enriched.REMAINING_DAYS, derived:bond_kr_enriched.remaining_days | 기준일 대비 만기까지 일수. '잔존 3년 이내' 질의축이며 3년 = 1,095일로 환산한다. 음수는 만기 경과이므로 구매가능 가정에서 제외하며 평가 cutoff는 2026-07-11이다. | bond_kr.ttl |
+| `fp:remainingDays` | 잔존일수 | fp:Bond | xsd:integer | derived:bond_kr_enriched.REMAINING_DAYS, derived:bond_kr_enriched.remaining_days | 기준일 대비 만기까지 일수. '잔존 3년 이내' 질의축이며 3년 = 1,095일로 환산한다. 음수는 만기 경과이므로 구매가능 가정에서 제외하며 평가 cutoff는 2026-08-24다. | bond_kr.ttl |
 | `fp:representativeKsdCode` | 대표 예탁원 종목번호 | fp:PublicFund | xsd:string | PRFD01N001.rptt_ksd_itm_no | 대표(모)펀드 예탁원 코드. 공식 sentinel은 유효 식별자에서 제외하며 그룹핑은 유효한 fp:managerItemCode가 있을 때만 수행한다. | fund_pub.ttl |
 | `fp:return18M` | 18개월 수익률 | fp:PublicFund | xsd:decimal | PRFD01N001.fd_mm18_ern_r | 최근 18개월 수익률(%). ETF에는 없는 구간이라 domain을 펀드로 한정한다. | common.ttl |
 | `fp:return1M` | 1개월 수익률 | fp:Product | xsd:decimal | PREF01N001, PRFD01N001.du_er_1m, fd_mm1_ern_r | 최근 1개월 수익률(%). 원문 값을 보존하며 0/NULL은 product_metric.is_available=false로 비교·랭킹에서 제외한다. | common.ttl |
@@ -590,6 +616,14 @@
 | fp:UnderlyingScope | `fp:Scope_SectorTheme` | 섹터·테마 | - | etf_kr.ttl |
 | fp:UnderlyingScope | `fp:Scope_SingleStock` | 개별종목 | - | etf_kr.ttl |
 
+## 관계 부재와 ABSTAIN 계약
+
+- 허용 신용등급 개체가 없으면 `ABSTAIN_INVALID_TAXONOMY`입니다. 예: `AAAA`를 `AAA`로 교정하지 않습니다.
+- 질의 주체의 RDF 타입이 속성 domain과 맞지 않으면 `ABSTAIN_DOMAIN_MISMATCH`입니다. 예: ETF가 회사채를 직접 발행했다는 경로를 만들지 않습니다.
+- 상품 URI와 공식 식별자가 없으면 `ABSTAIN_ENTITY_NOT_FOUND`이며 이름 유사 매칭으로 새 URI를 만들지 않습니다.
+- ABox 관계가 0건이어도 coverage가 미확보면 관계 부재가 아니라 `unknown`입니다. RDB `meta.product_coverage`를 함께 확인합니다.
+- Graph는 문서에 뒷받침된 관계만 저장합니다. `fp:supportedBy`가 필요한 관계의 provenance가 없으면 답변 근거로 승격하지 않습니다.
+
 ## 검증과 대표 SPARQL
 
 - TBox/ABox 10개 TTL 파싱, 클래스·속성 존재, domain/range, n-ary 필수 predicate를 검사합니다.
@@ -608,3 +642,28 @@ SELECT ?product ?name ?classification WHERE {
 }
 LIMIT 100
 ```
+
+편입 관계는 n-ary 노드를 경유하고 근거 문서와 기준일을 함께 반환합니다.
+
+```sparql
+PREFIX fp: <http://mafest.ai/product#>
+SELECT ?product ?security ?weight ?asOf ?document WHERE {
+  GRAPH <http://mafest.ai/graph/abox/company> {
+    ?product fp:hasHolding ?holding .
+    ?holding fp:holdingSecurity ?security ; fp:asOf ?asOf ; fp:supportedBy ?document .
+    OPTIONAL { ?holding fp:weight ?weight }
+  }
+}
+```
+
+TBox domain 검증은 ABox 결과를 찾기 전에 수행합니다.
+
+```sparql
+PREFIX fp: <http://mafest.ai/product#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+ASK { GRAPH <http://mafest.ai/graph/tbox/common> { fp:issuedBy rdfs:domain ?domain } }
+```
+
+## LLM/Agent 반환 계약
+
+관계 답변은 시작 엔티티 URI, 사용한 predicate 경로, 도착 엔티티 URI, 관계 기준일, `fp:supportedBy` 문서 URI를 보존합니다. 분류 답변은 분류 개체 URI와 라벨을 둘 다 반환합니다. URI local part를 사람이 읽는 의미로 임의 해석하지 않습니다.

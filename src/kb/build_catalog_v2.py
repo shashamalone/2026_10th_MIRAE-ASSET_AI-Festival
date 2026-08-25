@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""승인 CSV·단일 카탈로그·TBox에서 v2 문서/카탈로그를 결정적으로 생성한다."""
+"""공식 XLSX·단일 카탈로그·TBox에서 v2 문서/카탈로그를 결정적으로 생성한다."""
 from __future__ import annotations
 
 import argparse
@@ -65,7 +65,8 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 - 버전: `{DATASET_VERSION}`
 - 배포일/외부 근거 상한: `{RELEASE_DATE.isoformat()}`
 - 전체 manifest SHA-256: `{snapshot_hash(inspections)}`
-- 원천: `_conversion_manifest.json`이 승인한 2026-07-11 데이터 CSV 4개와 스키마 CSV 4개만 사용합니다.
+- 원천: 주최측이 제공한 2026-08-24 데이터 XLSX 4개와 스키마 XLSX 4개만 사용합니다.
+- 제외: `__MACOSX/._*`와 `../data/data`의 legacy 20260711 자료는 운영 정본이 아닙니다.
 - 런타임: PostgreSQL 17 + pgvector + Oxigraph + 읽기전용 FastAPI
 - 제출 경로에서 제외: DuckDB, FAISS, pyoxigraph, Gemini
 
@@ -77,7 +78,7 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 
 ## 빌드 순서
 
-1. 승인 manifest·SHA-256·행/열·공식 헤더·PK 유일성·cutoff 검사
+1. 정상 XLSX 8개 집합·SHA-256·행/열·공식 헤더·PK 유일성·cutoff 검사
 2. `raw_next`에 공식 타입·컬럼 그대로 적재(공백만 NULL, 0 보존)
 3. `enriched_next`·`relations_next`·`meta_next` 생성
 4. 결정적 ABox TTL 5개 생성 및 TBox/ABox RDF 검증
@@ -112,7 +113,7 @@ Git에 넣지 않고 이 카탈로그, 코드, SQL, 문서와 체크섬만 공�
 - 동일 지표는 주최측 값이 우선이고 주최측에 축이 없을 때만 cutoff 검증 외부값을 씁니다.
 - 미확보 관계는 `meta.product_coverage`에 이유를 저장하며 비보유로 해석하지 않습니다.
 - 공식 `Nullable=NO`와 정본 공백이 충돌하면 해당 컬럼만 NULL을 허용하고 충돌 건수를
-  manifest·카탈로그에 기록합니다. PK는 예외 없이 NOT NULL입니다.
+  snapshot·카탈로그에 기록합니다. PK는 예외 없이 NOT NULL입니다.
 """
 
 
@@ -120,7 +121,7 @@ def definition_markdown(catalog: tuple[TableDef, ...]) -> str:
     sections = [
         "# TABLE DEFINITION V2.0",
         "",
-        "자동 생성 파일입니다. 모든 물리 컬럼은 승인 CSV 스키마 또는 `src/kb/catalog_v2.py`의 단일 카탈로그에서 생성됩니다.",
+        "자동 생성 파일입니다. 모든 물리 컬럼은 공식 XLSX 스키마 또는 `src/kb/catalog_v2.py`의 단일 카탈로그에서 생성됩니다.",
         "",
     ]
     for table in catalog:
@@ -295,7 +296,7 @@ def write_or_check(outputs: dict[Path, str], check: bool) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="v2 데이터 카탈로그와 DB 정의서 생성")
-    parser.add_argument("--data-dir", help="2026-07-11 승인 CSV와 _conversion_manifest.json 디렉터리")
+    parser.add_argument("--data-dir", help="2026-08-24 주최측 정본 XLSX 8개 디렉터리")
     parser.add_argument(
         "--check", action="store_true", help="어떤 파일도 쓰지 않고 재생성 결과만 비교"
     )

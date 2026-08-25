@@ -55,6 +55,7 @@ services:
       PYTHONPATH: /app/src
       DATABASE_URL: ${ADMIN_DATABASE_URL:?ADMIN_DATABASE_URL must be set for builder}
       DATASET_DIR: /data/source
+      LEGACY_DATA_DIR: /data/legacy
       CLOVA_API_KEY: ${CLOVA_API_KEY:-}
       CLOVA_HOST: ${CLOVA_HOST:-https://clovastudio.stream.ntruss.com}
       DART_API_KEY: ${DART_API_KEY:-}
@@ -62,7 +63,8 @@ services:
       LSEG_CLIENT_ID: ${LSEG_CLIENT_ID:-}
       LSEG_CLIENT_SECRET: ${LSEG_CLIENT_SECRET:-}
     volumes:
-      - "${DATASET_DIR:?DATASET_DIR must point to the approved 2026-07-11 CSV bundle}:/data/source:ro"
+      - "${DATASET_DIR:?DATASET_DIR must point to the canonical 2026-08-24 XLSX directory}:/data/source:ro"
+      - "${LEGACY_DATA_DIR:-../data/data}:/data/legacy:ro"
       - ./artifacts:/app/artifacts
     depends_on:
       db:

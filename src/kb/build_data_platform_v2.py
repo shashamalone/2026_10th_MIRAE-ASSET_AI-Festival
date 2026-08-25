@@ -259,8 +259,11 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
         f"""
         SELECT count(*) FROM (
           SELECT published_at d FROM {SCHEMAS['RELATIONS']}.source_document
+          UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.source_document
           UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.product_holding
+          UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.product_classification
           UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.company_subsidiary
+          UNION ALL SELECT as_of FROM {SCHEMAS['ENRICHED']}.product_metric
           UNION ALL SELECT published_at FROM {SCHEMAS['VEC']}.document_chunk
         ) dates WHERE d > %s
         """
@@ -276,10 +279,52 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
     ).fetchone()[0]
     metric_axis_bad = conn.execute(
         f"""
-        SELECT count(*) FROM {SCHEMAS['ENRICHED']}.product_metric
-        WHERE source='PREF01N001'
-          AND ((metric_code IN ('AUM','RETURN_1Y') AND source_column NOT IN ('du_last_aum','du_er_1y'))
-            OR (metric_code='EXPENSE_RATIO' AND source_column <> 'cu_charge_rt'))
+        SELECT count(*) FROM (
+          SELECT m.metric_id
+          FROM {SCHEMAS['ENRICHED']}.product_metric m
+          JOIN {SCHEMAS['RAW']}.etf_kr_master r
+            ON m.product_id = 'etf_kr:' || btrim(r.pd_itm_no)
+          WHERE m.source='PREF01N001' AND (
+            (m.metric_code='AUM' AND
+              (m.source_column <> 'du_last_aum' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.du_upt_dt)))
+            OR (m.metric_code='RETURN_1Y' AND
+              (m.source_column <> 'du_er_1y' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.du_upt_dt)))
+            OR (m.metric_code='EXPENSE_RATIO' AND
+              (m.source_column <> 'cu_charge_rt' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.cu_upt_dt)))
+          )
+          UNION ALL
+          SELECT m.metric_id
+          FROM {SCHEMAS['ENRICHED']}.product_metric m
+          JOIN {SCHEMAS['RAW']}.etf_gl_master r
+            ON m.product_id = 'etf_gl:' || btrim(r.pd_itm_no)
+          WHERE m.source='PREF02N001' AND (
+            (m.metric_code='AUM' AND
+              (m.source_column <> 'du_last_aum' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.du_upt_dt)))
+            OR (m.metric_code='EXPENSE_RATIO' AND
+              (m.source_column <> 'cu_charge_rt' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.cu_upt_dt)))
+          )
+          UNION ALL
+          SELECT m.metric_id
+          FROM {SCHEMAS['ENRICHED']}.product_metric m
+          JOIN {SCHEMAS['RAW']}.fund_pub_master r
+            ON m.product_id = 'fund:' || btrim(r.itm_no)
+          WHERE m.source='PRFD01N001' AND (
+            (m.metric_code='AUM' AND
+              (m.source_column <> 'fd_nast_suma' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.fd_daily_bas_dt)))
+            OR (m.metric_code='RETURN_1Y' AND
+              (m.source_column <> 'fd_yr1_ern_r' OR
+               m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.fd_price_bas_dt)))
+            OR (m.metric_code='EXPENSE_RATIO' AND
+              (m.source_column <> 'ofwk_trus_rwrd_r+or_co_rwrd_r+sale_co_rwrd_r+trusc_rwrd_r'
+               OR m.as_of IS DISTINCT FROM {SCHEMAS['META']}.yyyymmdd(r.fd_price_bas_dt)))
+          )
+        ) invalid_metric_axis
         """
     ).fetchone()[0]
     if metric_date_bad or metric_axis_bad:
@@ -401,7 +446,7 @@ def read_only_check(data_dir: str | Path | None = None) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="금융상품 데이터 플랫폼 v2 stage 빌더")
-    parser.add_argument("--data-dir", help="2026-07-11 승인 CSV와 _conversion_manifest.json 디렉터리")
+    parser.add_argument("--data-dir", help="2026-08-24 주최측 정본 XLSX 8개 디렉터리")
     parser.add_argument(
         "--check", action="store_true", help="파일·DB를 변경하지 않고 원천/카탈로그만 검증"
     )

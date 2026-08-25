@@ -1,5 +1,7 @@
 # WBS — 공모펀드
 
+> **LEGACY 2026-07-11 분석:** 과거 95,619행 롱포맷 규칙을 현재 정본에 적용하지 않습니다. 2026-08-24 정본은 `itm_no`가 유일한 23,676행이며 공모·사모 계약은 [RDB 정의서](../docs_data_layer/RDB_DEFINITION_V2_0.md)를 따릅니다.
+
 > 실측 기준 2026-08-21 · 제출 마감 2026-09-06 23:59(`docs/spec_0818.md:508`) · 잔여 16일
 > 모든 수치는 `data/csv/PRFD01N001_fund_pub_master_20260711.csv`(95,619행)와 `data/enriched/fund_pub_dedup.csv`(11,138행)를 pandas(`dtype=str, keep_default_na=False`)로 직접 세었다.
 

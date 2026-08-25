@@ -10,7 +10,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from rdflib import RDFS, Graph, Namespace, URIRef
+from rdflib import RDF, RDFS, Graph, Namespace, URIRef
+from rdflib.namespace import OWL
 
 try:
     import psycopg
@@ -50,8 +51,14 @@ def pick(graph: Graph, subject, prop, language: str = "ko") -> str:
 
 def collect_terms(file_names: tuple[str, ...]) -> list[dict[str, object]]:
     graph = Graph()
+    origins: dict[URIRef, set[str]] = {}
     for name in file_names:
-        graph.parse(ROOT / "ontology" / name, format="turtle")
+        one = Graph()
+        one.parse(ROOT / "ontology" / name, format="turtle")
+        graph += one
+        for subject in one.subjects(RDFS.comment, None):
+            if isinstance(subject, URIRef) and str(subject).startswith(str(FP)):
+                origins.setdefault(subject, set()).add(name)
     subjects = {
         subject
         for subject in graph.subjects(RDFS.comment, None)
@@ -63,6 +70,16 @@ def collect_terms(file_names: tuple[str, ...]) -> list[dict[str, object]]:
         label = pick(graph, subject, RDFS.label)
         comment = pick(graph, subject, RDFS.comment)
         alt_labels = sorted(str(value) for value in graph.objects(subject, SKOS.altLabel))
+        if (subject, RDF.type, OWL.Class) in graph:
+            property_type = "class"
+        elif (subject, RDF.type, OWL.ObjectProperty) in graph:
+            property_type = "object_property"
+        elif (subject, RDF.type, OWL.DatatypeProperty) in graph:
+            property_type = "datatype_property"
+        elif any(graph.objects(subject, RDF.type)):
+            property_type = "individual"
+        else:
+            property_type = "other"
         content = " | ".join(
             value for value in (term_uri, label, " / ".join(alt_labels), comment) if value
         )
@@ -72,6 +89,8 @@ def collect_terms(file_names: tuple[str, ...]) -> list[dict[str, object]]:
                 "label": label,
                 "comment": comment,
                 "alt_labels": alt_labels,
+                "domain_file": ",".join(sorted(origins[subject])),
+                "property_type": property_type,
                 "content": content,
                 "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
             }
@@ -172,10 +191,12 @@ def insert_terms(
         conn,
         f"""
         INSERT INTO {SCHEMAS['VEC']}.{table_name}
-          (term_uri,label,comment,alt_labels,content,content_hash,embedding_model,embedding_dim,embedding)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)
+          (term_uri,label,comment,alt_labels,domain_file,property_type,content,content_hash,
+           embedding_model,embedding_dim,embedding)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::vector)
         ON CONFLICT (term_uri) DO UPDATE SET
           label=EXCLUDED.label, comment=EXCLUDED.comment, alt_labels=EXCLUDED.alt_labels,
+          domain_file=EXCLUDED.domain_file, property_type=EXCLUDED.property_type,
           content=EXCLUDED.content, content_hash=EXCLUDED.content_hash,
           embedding_model=EXCLUDED.embedding_model, embedding_dim=EXCLUDED.embedding_dim,
           embedding=EXCLUDED.embedding
@@ -186,6 +207,8 @@ def insert_terms(
                 term["label"],
                 term["comment"],
                 term["alt_labels"],
+                term["domain_file"],
+                term["property_type"],
                 term["content"],
                 term["content_hash"],
                 MODEL,

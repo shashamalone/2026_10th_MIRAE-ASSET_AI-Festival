@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""2026-07-11 주최측 CSV 정본의 선언과 읽기 전용 검증.
+"""2026-08-24 주최측 XLSX 정본 선언과 읽기 전용 검증.
 
-원본은 수정하지 않는다. ``--check`` 빌더와 실제 적재기가 이 모듈을 함께 사용해
-행 수, 헤더, 타입, PK 규칙이 서로 달라지는 것을 막는다.
+원본은 수정하지 않는다. ``--check`` 빌더와 실제 적재기가 이 모듈을 함께
+사용해 파일 집합, 행 수, 헤더, 공식 타입, PK와 관측 기준일 계약이 서로
+달라지는 것을 막는다.
 """
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import os
@@ -16,22 +16,25 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable, Iterator
 
-ROOT = Path(__file__).resolve().parents[2]
-DATASET_VERSION = "financial-products-2026-07-11"
-RELEASE_DATE = date(2026, 7, 11)
-EXTERNAL_CUTOFF = RELEASE_DATE
-DEFAULT_DATASET_DIR = ROOT.parent / "data" / "data" / "csv"
-CONVERSION_MANIFEST = "_conversion_manifest.json"
+from openpyxl import load_workbook
 
-SCHEMA_HEADER = ("column", "pk_fk", "dtype", "name_ko", "example")
+ROOT = Path(__file__).resolve().parents[2]
+DATASET_VERSION = "financial-products-2026-08-24"
+RELEASE_DATE = date(2026, 8, 24)
+EXTERNAL_CUTOFF = RELEASE_DATE
+DEFAULT_DATASET_DIR = (
+    ROOT.parent / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
+)
+
+SCHEMA_HEADER = ("순번", "컬럼명", "데이터타입", "Nullable", "컬럼코멘트")
 TYPE_PATTERN = re.compile(
-    r"^(?:text|bigint|double precision|numeric(?:\(\d{1,2},\d{1,2}\))?|timestamp without time zone)$",
+    r"^(?:text|bigint|double precision|numeric\(\d{1,2},\d{1,2}\))$",
     re.IGNORECASE,
 )
 
 
 class LookAheadError(ValueError):
-    """평가 cutoff 뒤의 스냅샷이나 관측값이 정본에 섞였을 때 발생한다."""
+    """허용 cutoff 뒤의 관측값이 정본이나 외부 근거에 섞였을 때 발생한다."""
 
 
 @dataclass(frozen=True)
@@ -51,31 +54,31 @@ SOURCES: tuple[SourceSpec, ...] = (
     SourceSpec(
         "PRBD01N001",
         "bond_kr_master",
-        "PRBD01N001_bond_kr_master_20260711.csv",
-        "PRBD01N001_bond_kr_schema_20260711.csv",
-        42_394,
-        40,
-        ("pd_no",),
-        ("pd_std_info_update",),
-        "국내 채권 상품",
+        "prbd01n001_data.xlsx",
+        "prbd01n001_schema.xlsx",
+        21_882,
+        58,
+        ("pd_no", "pd_exg_mkt", "info_base_dt", "info_seq"),
+        ("info_base_dt", "pd_std_info_update", "sale_yield_base_dt"),
+        "채권×시장×정보기준일×판매 LOT",
     ),
     SourceSpec(
         "PREF01N001",
         "etf_kr_master",
-        "PREF01N001_etf_kr_master_20260711.csv",
-        "PREF01N001_etf_kr_schema_20260711.csv",
-        1_734,
-        73,
+        "pref01n001_data.xlsx",
+        "pref01n001_schema.xlsx",
+        1_780,
+        98,
         ("pd_itm_no",),
-        ("cu_upt_dt", "du_upt_dt", "wu_upt_dt"),
+        ("cu_upt_dt", "du_upt_dt", "wu_upt_dt", "fn_base_dt", "ref_base_dt"),
         "국내 ETF/ETN 상품",
     ),
     SourceSpec(
         "PREF02N001",
         "etf_gl_master",
-        "PREF02N001_etf_gl_master_20260711.csv",
-        "PREF02N001_etf_gl_schema_20260711.csv",
-        5_646,
+        "pref02n001_data.xlsx",
+        "pref02n001_schema.xlsx",
+        6_037,
         49,
         ("pd_itm_no",),
         ("cu_upt_dt", "du_upt_dt", "wu_upt_dt", "du_clpr_base_dt", "du_nav_base_dt"),
@@ -84,13 +87,13 @@ SOURCES: tuple[SourceSpec, ...] = (
     SourceSpec(
         "PRFD01N001",
         "fund_pub_master",
-        "PRFD01N001_fund_pub_master_20260711.csv",
-        "PRFD01N001_fund_pub_schema_20260711.csv",
-        95_619,
-        45,
-        ("itm_no", "prfd_attr_cd"),
-        (),
-        "공모펀드 클래스 속성",
+        "prfd01n001_data.xlsx",
+        "prfd01n001_schema.xlsx",
+        23_676,
+        75,
+        ("itm_no",),
+        ("fd_daily_bas_dt", "fd_price_bas_dt"),
+        "펀드 상품(공모·사모)",
     ),
 )
 
@@ -112,10 +115,10 @@ class SourceInspection:
     columns: tuple[OfficialColumn, ...]
     null_counts: tuple[int, ...]
     row_count: int
-    excluded_rows: int
     effective_as_of: date | None
     data_sha256: str
     schema_sha256: str
+    excluded_rows: int = 0
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -124,8 +127,8 @@ class SourceInspection:
             "data_file": self.data_path.name,
             "schema_file": self.schema_path.name,
             "rows": self.row_count,
-            "loaded_rows": self.row_count - self.excluded_rows,
-            "excluded_rows": self.excluded_rows,
+            "loaded_rows": self.row_count,
+            "excluded_rows": 0,
             "columns": len(self.columns),
             "primary_key": list(self.spec.primary_key),
             "official_nullable_conflicts": {
@@ -167,7 +170,7 @@ def normalized_key_value(value: object) -> str | None:
 
 
 def normalize_raw_value(value: object, data_type: str) -> object | None:
-    """빈 값만 NULL로 바꾸고 0과 코드 원문은 보존한다."""
+    """빈 값만 NULL로 바꾸고 숫자·코드의 0은 원본 그대로 보존한다."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -176,62 +179,82 @@ def normalize_raw_value(value: object, data_type: str) -> object | None:
             return None
     if isinstance(value, (date, datetime)):
         return value
-    # PostgreSQL COPY가 공식 타입에 맞춰 변환하므로 임의 반올림이나
-    # 0→NULL 처리를 하지 않는다.
     return value
 
 
-def read_official_schema(path: Path, primary_key: tuple[str, ...] = ()) -> tuple[OfficialColumn, ...]:
-    with path.open(encoding="utf-8-sig", newline="") as handle:
-        rows = csv.reader(handle)
+def read_official_schema(
+    path: Path, primary_key: tuple[str, ...] = ()
+) -> tuple[OfficialColumn, ...]:
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if workbook.sheetnames != ["schema"]:
+            raise ValueError(f"{path.name}: schema 시트가 정확히 1개여야 합니다")
+        rows = workbook["schema"].iter_rows(values_only=True)
         header = tuple(normalized_key_value(value) for value in next(rows))
         if header != SCHEMA_HEADER:
             raise ValueError(f"{path.name}: 공식 스키마 헤더 불일치 {header!r}")
         columns: list[OfficialColumn] = []
-        for csv_row, row in enumerate(rows, start=2):
+        for excel_row, row in enumerate(rows, start=2):
             if not any(normalized_key_value(value) for value in row):
                 continue
             if len(row) != len(SCHEMA_HEADER):
-                raise ValueError(f"{path.name}:{csv_row}: 스키마 행 폭 불일치")
-            name = normalized_key_value(row[0])
+                raise ValueError(f"{path.name}:{excel_row}: 스키마 행 폭 불일치")
+            ordinal_text = normalized_key_value(row[0])
+            name = normalized_key_value(row[1])
             data_type = normalized_key_value(row[2])
-            description = normalized_key_value(row[3]) or ""
-            if not name or not data_type:
-                raise ValueError(f"{path.name}:{csv_row}: 불완전한 스키마 행")
+            nullable = normalized_key_value(row[3])
+            description = normalized_key_value(row[4]) or ""
+            if not ordinal_text or not name or not data_type or not nullable:
+                raise ValueError(f"{path.name}:{excel_row}: 불완전한 스키마 행")
             if not TYPE_PATTERN.fullmatch(data_type):
-                raise ValueError(f"{path.name}:{csv_row}: 허용하지 않은 타입 {data_type!r}")
-            normalized_name = name.lower()
+                raise ValueError(
+                    f"{path.name}:{excel_row}: 허용하지 않은 타입 {data_type!r}"
+                )
+            ordinal = int(ordinal_text)
+            if ordinal != len(columns) + 1:
+                raise ValueError(f"{path.name}:{excel_row}: 순번 {ordinal} 불연속")
+            if nullable.upper() not in {"YES", "NO"}:
+                raise ValueError(f"{path.name}:{excel_row}: Nullable={nullable!r}")
             columns.append(
                 OfficialColumn(
-                    ordinal=len(columns) + 1,
-                    name=normalized_name,
+                    ordinal=ordinal,
+                    name=name.lower(),
                     data_type=data_type.lower(),
-                    nullable=normalized_name not in primary_key,
+                    nullable=nullable.upper() == "YES",
                     description=description,
                 )
             )
-    names = [column.name for column in columns]
-    if len(names) != len(set(names)):
-        raise ValueError(f"{path.name}: 중복 컬럼명")
-    return tuple(columns)
+        names = [column.name for column in columns]
+        if len(names) != len(set(names)):
+            raise ValueError(f"{path.name}: 중복 컬럼명")
+        return tuple(columns)
+    finally:
+        workbook.close()
 
 
 def iter_data_rows(
     path: Path, columns: tuple[OfficialColumn, ...]
 ) -> Iterator[tuple[object | None, ...]]:
-    with path.open(encoding="utf-8-sig", newline="") as handle:
-        rows = csv.reader(handle)
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if workbook.sheetnames != ["data"]:
+            raise ValueError(f"{path.name}: data 시트가 정확히 1개여야 합니다")
+        rows = workbook["data"].iter_rows(values_only=True)
         header = tuple(normalized_key_value(value) for value in next(rows))
         expected = tuple(column.name for column in columns)
-        if tuple(value.lower() if value else value for value in header) != expected:
+        if header != expected:
             raise ValueError(f"{path.name}: data/schema 컬럼 1:1 불일치")
-        for row in rows:
+        for excel_row, row in enumerate(rows, start=2):
             if len(row) != len(columns):
-                raise ValueError(f"{path.name}: 행 폭 {len(row)} != {len(columns)}")
+                raise ValueError(
+                    f"{path.name}:{excel_row}: 행 폭 {len(row)} != {len(columns)}"
+                )
             yield tuple(
                 normalize_raw_value(value, column.data_type)
                 for value, column in zip(row, columns)
             )
+    finally:
+        workbook.close()
 
 
 def parse_source_date(value: object) -> date | None:
@@ -243,17 +266,18 @@ def parse_source_date(value: object) -> date | None:
     if not text:
         return None
     text = re.sub(r"\.0+$", "", text)
-    for candidate, format_string in ((text[:10], "%Y-%m-%d"), (text, "%Y%m%d")):
-        try:
-            return datetime.strptime(candidate, format_string).date()
-        except ValueError:
-            continue
-    return None
+    if not re.fullmatch(r"\d{8}", text):
+        return None
+    try:
+        return datetime.strptime(text, "%Y%m%d").date()
+    except ValueError:
+        return None
 
 
-def exclusion_reason(spec: SourceSpec, row: tuple[object | None, ...], names: list[str]) -> str | None:
-    if spec.code == "PRFD01N001" and normalized_key_value(row[names.index("itm_no")]) == '"':
-        return "KNOWN_BROKEN_FUND_ROW"
+def exclusion_reason(
+    spec: SourceSpec, row: tuple[object | None, ...], names: list[str]
+) -> str | None:
+    """260824 공식 정본은 행 단위 제외 없이 전량 보존한다."""
     return None
 
 
@@ -275,14 +299,9 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
     seen: set[tuple[str, ...]] = set()
     maximum_as_of: date | None = None
     row_count = 0
-    excluded_rows = 0
     null_counts = [0] * len(columns)
     for excel_row, row in enumerate(iter_data_rows(data_path, columns), start=2):
         row_count += 1
-        reason = exclusion_reason(spec, row, names)
-        if reason:
-            excluded_rows += 1
-            continue
         for index, value in enumerate(row):
             if value is None:
                 null_counts[index] += 1
@@ -297,7 +316,8 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
             candidate = parse_source_date(row[index])
             if candidate and candidate > EXTERNAL_CUTOFF:
                 raise LookAheadError(
-                    f"{spec.code}:{excel_row}: {names[index]}={candidate}가 cutoff {EXTERNAL_CUTOFF} 초과"
+                    f"{spec.code}:{excel_row}: {names[index]}={candidate}가 cutoff "
+                    f"{EXTERNAL_CUTOFF} 초과"
                 )
             if candidate:
                 maximum_as_of = max(maximum_as_of or candidate, candidate)
@@ -313,8 +333,7 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
         columns=columns,
         null_counts=tuple(null_counts),
         row_count=row_count,
-        excluded_rows=excluded_rows,
-        effective_as_of=maximum_as_of or RELEASE_DATE,
+        effective_as_of=maximum_as_of,
         data_sha256=sha256_file(data_path),
         schema_sha256=sha256_file(schema_path),
     )
@@ -324,27 +343,21 @@ def validate_source_dir(value: str | Path | None = None) -> tuple[SourceInspecti
     root = dataset_dir(value)
     if not root.is_dir():
         raise FileNotFoundError(f"정본 데이터 디렉터리를 찾을 수 없습니다: {root}")
-    manifest_path = root / CONVERSION_MANIFEST
-    if not manifest_path.is_file():
-        if any(root.rglob("*260824*")) or any(root.rglob("prbd01n001_data.xlsx")):
-            raise LookAheadError("2026-08-24 스냅샷은 평가 cutoff 2026-07-11 이후 정본입니다")
-        raise FileNotFoundError(f"승인 변환 manifest 누락: {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    approved = {
-        str(entry["file"]): entry
-        for entry in manifest
-        if isinstance(entry, dict) and str(entry.get("file", "")).endswith(".csv")
+    expected = {
+        name for spec in SOURCES for name in (spec.data_file, spec.schema_file)
     }
-    expected = {name for spec in SOURCES for name in (spec.data_file, spec.schema_file)}
-    if not expected <= set(approved):
-        raise ValueError(f"변환 manifest 정본 파일 누락: {sorted(expected - set(approved))}")
-    for name in sorted(expected):
-        entry = approved[name]
-        if entry.get("snapshot") != RELEASE_DATE.isoformat():
-            raise LookAheadError(f"{name}: snapshot={entry.get('snapshot')}가 2026-07-11 계약과 불일치")
-        path = root / name
-        if not path.is_file() or sha256_file(path) != entry.get("sha256"):
-            raise ValueError(f"{name}: 승인 SHA-256 불일치")
+    candidates = [
+        path
+        for path in root.rglob("*.xlsx")
+        if "__MACOSX" not in path.parts and not path.name.startswith("._")
+    ]
+    actual = {path.name for path in candidates}
+    if len(candidates) != len(expected) or actual != expected:
+        raise ValueError(
+            "정상 XLSX 8개 집합 불일치: "
+            f"누락={sorted(expected - actual)}, 초과={sorted(actual - expected)}, "
+            f"정상파일수={len(candidates)}"
+        )
     return tuple(inspect_source(root, spec) for spec in SOURCES)
 
 

@@ -2,7 +2,7 @@
 """검증된 외부 JSONL bundle을 ``*_next``에 적재한다.
 
 외부 원문과 산출 JSONL은 artifacts(비커밋)에 두며, 모든 published_at/as_of가
-2026-07-11 이하여야 한 행이라도 적재된다.
+2026-08-24 이하여야 한 행이라도 적재된다.
 """
 from __future__ import annotations
 

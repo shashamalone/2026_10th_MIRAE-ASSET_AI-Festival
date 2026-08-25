@@ -22,7 +22,7 @@ from kb.regression_v2 import (  # noqa: E402
     required_evidence,
     validate_answer,
 )
-from kb.v2_manifest import DATASET_VERSION, EXTERNAL_CUTOFF, LookAheadError, snapshot_hash, validate_source_dir  # noqa: E402
+from kb.v2_manifest import DATASET_VERSION, EXTERNAL_CUTOFF, snapshot_hash, validate_source_dir  # noqa: E402
 from tools.sql_guard import ensure_read_only_sparql, ensure_read_only_sql  # noqa: E402
 
 
@@ -34,12 +34,17 @@ class SourceContractTest(unittest.TestCase):
     def test_exact_source_shapes_and_primary_keys(self):
         self.assertEqual(
             [(item.row_count, len(item.columns)) for item in self.inspections],
-            [(42_394, 40), (1_734, 73), (5_646, 49), (95_619, 45)],
+            [(21_882, 58), (1_780, 98), (6_037, 49), (23_676, 75)],
         )
-        self.assertEqual(self.inspections[0].spec.primary_key, ("pd_no",))
-        self.assertEqual(self.inspections[3].spec.primary_key, ("itm_no", "prfd_attr_cd"))
-        self.assertEqual(self.inspections[3].excluded_rows, 1)
-        self.assertEqual(EXTERNAL_CUTOFF, date(2026, 7, 11))
+        self.assertEqual(
+            self.inspections[0].spec.primary_key,
+            ("pd_no", "pd_exg_mkt", "info_base_dt", "info_seq"),
+        )
+        self.assertEqual(self.inspections[3].spec.primary_key, ("itm_no",))
+        self.assertTrue(all(item.excluded_rows == 0 for item in self.inspections))
+        self.assertEqual(sum(item.row_count for item in self.inspections), 53_375)
+        self.assertEqual(sum(len(item.columns) for item in self.inspections), 280)
+        self.assertEqual(EXTERNAL_CUTOFF, date(2026, 8, 24))
 
     def test_catalog_contains_every_raw_column_once(self):
         catalog = build_catalog(self.inspections)
@@ -74,6 +79,21 @@ class SourceContractTest(unittest.TestCase):
             self.assertIn(f"../../ontology/{name}", graph)
         for required in ("fp:Holding", "fp:SubsidiaryRelation", "fp:hasAssetType", "named graph"):
             self.assertIn(required, graph)
+        for required in (
+            "식별자와 조인 지도",
+            "지표 의미 사전",
+            "안전한 SQL 패턴",
+            "LLM/Agent evidence 계약",
+        ):
+            self.assertIn(required, rdb)
+        for required in ("라우팅 계약", "근거 반환 계약", "Graph → RDB → Vector 결합 예"):
+            self.assertIn(required, vector)
+        for required in (
+            "namespace와 named graph 질의 계약",
+            "관계 부재와 ABSTAIN 계약",
+            "LLM/Agent 반환 계약",
+        ):
+            self.assertIn(required, graph)
 
     def test_generated_database_definition_links_exist(self):
         outputs = build_outputs()
@@ -88,10 +108,10 @@ class SourceContractTest(unittest.TestCase):
                     continue
                 self.assertTrue((path.parent / target).resolve().exists(), f"{path.name}: {target}")
 
-    def test_august_snapshot_is_rejected_before_load(self):
-        august = ROOT.parent / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
-        with self.assertRaises(LookAheadError):
-            validate_source_dir(august)
+    def test_legacy_july_csv_bundle_is_rejected_before_load(self):
+        legacy = ROOT.parent / "data" / "data" / "csv"
+        with self.assertRaises(ValueError):
+            validate_source_dir(legacy)
 
 
 class QueryGuardTest(unittest.TestCase):
@@ -133,23 +153,34 @@ class SqlPolicyTest(unittest.TestCase):
 
     def test_metric_dates_and_fund_expense_semantics(self):
         text = (ROOT / "sql" / "v2" / "010_enrich.sql").read_text(encoding="utf-8").lower()
-        self.assertIn("'aum', du_last_aum::numeric, 'du_last_aum', __meta__.yyyymmdd(du_upt_dt::text)", text)
+        self.assertIn("'aum', du_last_aum::numeric, 'du_last_aum', __meta__.yyyymmdd(du_upt_dt)", text)
         self.assertIn("'expense_ratio', nullif(btrim(cu_charge_rt), '')::numeric, 'cu_charge_rt', __meta__.yyyymmdd(cu_upt_dt)", text)
-        self.assertNotIn("zrin_fd_cmst_rt", text)
-        self.assertIn("official_axis_absent", text)
+        self.assertNotIn("'zrin_fd_cmst_rt'", text)
+        self.assertIn("ofwk_trus_rwrd_r+or_co_rwrd_r+sale_co_rwrd_r+trusc_rwrd_r", text)
+        self.assertIn("incomplete_fee_components", text)
 
     def test_global_inception_and_asset_type_contracts(self):
         ddl = (ROOT / "sql" / "v2" / "001_platform_schema.sql").read_text(encoding="utf-8")
         graph = (ROOT / "src" / "kb" / "build_graph_v2.py").read_text(encoding="utf-8")
+        vectors = (ROOT / "src" / "kb" / "build_vectors_v2.py").read_text(encoding="utf-8")
         self.assertIn("inception_date date", ddl)
         self.assertIn('"asset_type": ("hasAssetType", "AssetType")', graph)
+        self.assertIn("domain_file text NOT NULL", ddl)
+        self.assertIn("property_type text NOT NULL", ddl)
+        self.assertIn('"domain_file":', vectors)
+        self.assertIn('"property_type":', vectors)
 
     def test_builder_image_and_cutover_grants(self):
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         cutover = (ROOT / "deploy" / "cutover_v2.sh").read_text(encoding="utf-8")
         self.assertIn("COPY docs/docs_data_layer /app/docs/docs_data_layer", dockerfile)
+        self.assertIn("COPY expected_question /app/expected_question", dockerfile)
         self.assertLess(cutover.index("trap rollback_on_error ERR"), cutover.index("090_cutover.sql"))
         self.assertLess(cutover.index("100_readonly_grants.sql"), cutover.index("verify_v2.sh"))
+
+    def test_legacy_holdings_document_uses_ddl_enum(self):
+        audit = (ROOT / "src" / "kb" / "audit_legacy_evidence_v2.py").read_text(encoding="utf-8")
+        self.assertIn('"relation_type": "holdings"', audit)
 
 
 class LsegWindowTest(unittest.TestCase):
@@ -163,7 +194,7 @@ class LsegWindowTest(unittest.TestCase):
     def test_short_history_is_not_return_1y(self):
         frame = pd.DataFrame(
             {"TRDPRC_1": [100.0, 110.0]},
-            index=pd.to_datetime(["2026-01-02", "2026-07-10"]),
+            index=pd.to_datetime(["2026-01-02", "2026-08-21"]),
         )
         result = adjusted_return(self.FakeLseg(frame), "NEW.RIC")
         self.assertFalse(result["is_available"])
@@ -172,11 +203,11 @@ class LsegWindowTest(unittest.TestCase):
     def test_full_window_uses_actual_last_observation(self):
         frame = pd.DataFrame(
             {"TRDPRC_1": [100.0, 110.0]},
-            index=pd.to_datetime(["2025-07-11", "2026-07-10"]),
+            index=pd.to_datetime(["2025-08-24", "2026-08-21"]),
         )
         result = adjusted_return(self.FakeLseg(frame), "FULL.RIC")
         self.assertTrue(result["is_available"])
-        self.assertEqual(result["as_of"], "2026-07-10")
+        self.assertEqual(result["as_of"], "2026-08-21")
 
 
 class RegressionContractTest(unittest.TestCase):

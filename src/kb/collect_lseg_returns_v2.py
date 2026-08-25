@@ -20,9 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from kb.build_data_platform_v2 import SCHEMAS, dsn  # noqa: E402
 from kb.v2_manifest import EXTERNAL_CUTOFF, ROOT  # noqa: E402
 
-START_DATE = date(2025, 7, 11)
+START_DATE = date(2025, 8, 24)
 END_DATE = EXTERNAL_CUTOFF
-OUTPUT = ROOT / "artifacts" / "lseg_return_1y_20260711.jsonl"
+OUTPUT = ROOT / "artifacts" / "lseg_return_1y_20260824.jsonl"
 OBSERVATION_EDGE_TOLERANCE_DAYS = 7
 ADJUSTMENTS = [
     "exchangeCorrection",

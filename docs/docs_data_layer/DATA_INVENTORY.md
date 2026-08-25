@@ -1,5 +1,7 @@
 # 데이터 인벤토리
 
+> **LEGACY 2026-07-11 전용:** 이 인벤토리는 `../data/data`의 과거 CSV 분석 기록입니다. 현재 정본 8개 XLSX의 파일·행·열·PK·해시는 [현재 빌드 구조](CURRENT_DATA_BUILD_STRUCTURE.md)와 [RDB 정의서](RDB_DEFINITION_V2_0.md)를 사용합니다.
+
 이 파일은 `EDA/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**
 데이터 구조 변경 시 재실행 후 커밋하면 `git diff`가 그대로 변경 이력이 된다.
 (생성 시각을 넣지 않는 이유: 매번 바뀌면 diff가 노이즈로 덮여 변경 추적이 불가능해진다.)

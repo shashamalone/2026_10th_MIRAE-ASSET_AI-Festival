@@ -1,5 +1,7 @@
 # 예상 평가 35문항 커버리지 (2026-08-16)
 
+> **LEGACY 분석 문서:** 이 문서의 수치와 판정은 팀원 제공 2026-07-11 데이터 기준이며 현재 DB 계약이 아닙니다. Agent/LLM은 2026-08-24 정본의 [RDB](docs_data_layer/RDB_DEFINITION_V2_0.md), [VectorDB](docs_data_layer/VECTORDB_DEFINITION_V2_0.md), [GraphDB](docs_data_layer/GRAPHDB_DEFINITION_V2_0.md) 정의서를 우선 사용해야 합니다.
+
 `expected_question/2026_expected_queries.csv` 35문항을 **현재 보유 데이터만으로** 어디까지 답할 수 있는지 측정한 결과.
 기존 8문항 매트릭스(`EDA_REPORT.md` 9-4절)를 대체한다.
 

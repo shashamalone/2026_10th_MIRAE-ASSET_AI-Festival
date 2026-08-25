@@ -6,7 +6,7 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
 ################################################################################
-# fp-bond-kr — 국내채권 (PRBD01N001, PD_NO 42,394종)
+# fp-bond-kr — 국내채권 (PRBD01N001, 21,882 offer / PD_NO 20,497종)
 #
 # 이 파일은 fp:Bond에만 붙는 속성과 주최측 분류축 8종을 정의한다.
 # 공통 클래스·관계(fp:Product, fp:issuedBy, fp:CreditRating, fp:RiskGrade 등)는
@@ -33,7 +33,7 @@
 #                 상태값)는 전혀 다른 판정이다.**
 #
 # 데이터 실태 요약
-#   - 실질 기준일은 PD_STD_INFO_UPDATE 2026-02-24이다.
+#   - 실질 기준일은 INFO_BASE_DT 2026-08-21이다.
 #   - raw grain은 (PD_NO, PD_EXG_MKT, INFO_BASE_DT, INFO_SEQ)이며 PD_NO 상품 속성과
 #     시장·판매 LOT별 offer를 분리한다.
 #   - 구매가능 가정은 최신 정본 존재와 명시 만기·리스팅 종료만 사용한다.
@@ -45,7 +45,7 @@
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내채권 온톨로지"@ko, "Korean Domestic Bond Ontology"@en ;
     rdfs:comment "국내채권 마스터(PRBD01N001) 기반 채권 도메인 스키마. fp:Bond의 속성, 신용등급 서열 판정, 잔존만기·판매가능 파생축, 주최측 분류축 8종을 정의한다."@ko ;
-    dcterms:source "PRBD01N001_bond_kr_master_20260711.csv, PRBD01N001_bond_kr_schema_20260711.csv" .
+    dcterms:source "prbd01n001_data.xlsx, prbd01n001_schema.xlsx (2026-08-24 배포)" .
 
 ################################################################################
 # 1. 채권 하위 클래스 — 발행주체별 (신용등급 미평가가 정상인 범위를 가르는 축)
@@ -272,7 +272,7 @@ fp:maturityDate a owl:DatatypeProperty ;
 fp:remainingDays a owl:DatatypeProperty ;
     rdfs:domain fp:Bond ; rdfs:range xsd:integer ;
     rdfs:label "잔존일수"@ko, "remaining days"@en ;
-    rdfs:comment "기준일 대비 만기까지 일수. '잔존 3년 이내' 질의축이며 3년 = 1,095일로 환산한다. 음수는 만기 경과이므로 구매가능 가정에서 제외하며 평가 cutoff는 2026-07-11이다."@ko ;
+    rdfs:comment "기준일 대비 만기까지 일수. '잔존 3년 이내' 질의축이며 3년 = 1,095일로 환산한다. 음수는 만기 경과이므로 구매가능 가정에서 제외하며 평가 cutoff는 2026-08-24다."@ko ;
     fp:sourceTable "derived:bond_kr_enriched" ;
     fp:sourceColumn "derived:bond_kr_enriched.remaining_days", "REMAINING_DAYS" .
 

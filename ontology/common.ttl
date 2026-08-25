@@ -23,8 +23,8 @@
 #  5) 공통 랭킹에 채택하지 않은 시세·보조 컬럼은 온톨로지에 올리지 않는다.
 #     raw에는 0을 그대로 보존하되, 측정값 0/NULL은 비교·랭킹에서 "값 없음"이다.
 #
-# 데이터 cutoff: 2026-07-11. 실질 관측축은 bond 2026-02-24,
-#   etf_kr/etf_gl 행별 갱신일이며 fund는 행별 수치일 없이 2026-07-11 스냅샷만 제공한다.
+# 데이터 release/cutoff: 2026-08-24. 실질 관측축은 bond 2026-08-21,
+#   etf_kr 2026-08-21~24, etf_gl 2026-08-22, fund 수치 2026-08-21이다.
 #   도메인 간 수치 비교 시 fp:asOf를 각각 표기해야 한다.
 ################################################################################
 
@@ -32,7 +32,7 @@
     rdfs:label "금융상품 공통 온톨로지"@ko, "Financial Product Common Ontology"@en ;
     rdfs:comment "국내채권·국내ETF·해외ETF·공모펀드 4개 도메인이 공유하는 상위 클래스, 관계, 코드리스트(신용등급·위험등급·자산군·투자지역·통화·복제방식)를 정의한다. 도메인 4파일은 이 온톨로지를 owl:imports 한다."@ko ;
     dcterms:created "2026-08-13"^^xsd:date ;
-    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-07-11 스냅샷)" .
+    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-08-24 스냅샷)" .
 
 ################################################################################
 # 0. 출처 추적 애노테이션
@@ -67,13 +67,13 @@ fp:ETF a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
     owl:disjointWith fp:Bond ;
     rdfs:label "상장지수펀드"@ko, "Exchange Traded Fund"@en ;
-    rdfs:comment "거래소 상장 지수연동 펀드. 2026-07-11 정본의 국내 1,202종·해외 5,587종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
+    rdfs:comment "거래소 상장 지수연동 펀드. 2026-08-24 정본의 국내 1,235종·해외 5,972종이 이 클래스다. 국내/해외는 fp:KoreanETF·fp:GlobalETF로 분리하며 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
 
 fp:ETN a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
     owl:disjointWith fp:ETF, fp:Bond ;
     rdfs:label "상장지수증권"@ko, "Exchange Traded Note"@en ;
-    rdfs:comment "발행 증권사의 채무증권. 2026-07-11 정본의 국내 532종·해외 59종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다."@ko .
+    rdfs:comment "발행 증권사의 채무증권. 2026-08-24 정본의 국내 545종·해외 65종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다."@ko .
 
 # 국내/해외 ETF·ETN은 원천·통화·가용 축이 달라 ABox에서 별도 클래스로 유지한다.
 # grounding 중복을 피하기 위해 상세 설명은 각 도메인 온톨로지 헤더에 둔다.
@@ -86,7 +86,7 @@ fp:PublicFund a owl:Class ;
     rdfs:subClassOf fp:Product ;
     owl:disjointWith fp:Bond, fp:ETF, fp:ETN ;
     rdfs:label "공모펀드"@ko, "Public Offering Fund"@en ;
-    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위 11,115종). **공모 한정 클래스다** — 95,619개 클래스 속성 행을 (itm_no, prfd_attr_cd) 그레인으로 보존하고 사모 15종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다."@ko .
+    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위 14,716종). **공모 한정 클래스다** — 최신 원본은 itm_no가 유일한 23,676행이며 사모 8,960종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다."@ko .
 
 fp:ShareClass a owl:Class ;
     rdfs:subClassOf fp:PublicFund ;
@@ -354,7 +354,7 @@ fp:relatedToTheme a owl:ObjectProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Product fp:Company ) ] ;
     rdfs:range fp:Theme ;
     rdfs:label "테마 연관"@ko, "related to theme"@en ;
-    rdfs:comment "상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-07-11 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다."@ko ;
+    rdfs:comment "상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-08-24 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다."@ko ;
     fp:sourceTable "derived:etf_theme" ; fp:sourceColumn "theme" .
 
 fp:hasSector a owl:ObjectProperty ;
@@ -651,7 +651,7 @@ fp:documentPublishedDate a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:date ;
     rdfs:label "문서 발행일"@ko, "document published date"@en ;
-    rdfs:comment "근거 문서의 발행일. 2026-07-11 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다."@ko ;
+    rdfs:comment "근거 문서의 발행일. 2026-08-24 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
 
 fp:documentQuote a owl:DatatypeProperty ;

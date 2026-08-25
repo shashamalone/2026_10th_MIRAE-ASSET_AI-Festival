@@ -7,11 +7,15 @@ PostgreSQL과 Oxigraph 쓰기 권한은 서버 운영자만 사용한다. `.env`
 ## 준비
 
 1. `.env.example`을 서버의 secret store 또는 `.env`로 옮기고 실제 값을 주입한다.
-2. `DATASET_DIR`는 정상 XLSX 8개가 바로 들어 있는 디렉터리로 지정한다.
-3. `OXIGRAPH_VOLUME`은 `docker volume ls`로 확인한 정확한 볼륨명으로 지정한다.
-4. API의 `DATABASE_URL`은 `agent_reader`를, 빌더의 `ADMIN_DATABASE_URL`은 운영자
+2. `DATASET_DIR`는 `ai-festival2026_금융상품Agent_DtataSet260824`의 정상 XLSX
+   8개가 바로 들어 있는 디렉터리로 지정한다. `__MACOSX/._*`는 사용하지 않는다.
+3. `LEGACY_DATA_DIR`는 팀원이 제공한 `data/data`를 지정한다. 이 디렉터리는
+   20260711 legacy 참고자료이며, 공식 sidecar·cutoff·새 상품 ID를 통과한 ETF
+   편입과 DART 자회사 관계만 bundle로 재생성된다.
+4. `OXIGRAPH_VOLUME`은 `docker volume ls`로 확인한 정확한 볼륨명으로 지정한다.
+5. API의 `DATABASE_URL`은 `agent_reader`를, 빌더의 `ADMIN_DATABASE_URL`은 운영자
    역할을 사용한다. 비밀번호를 명령행이나 Git 파일에 넣지 않는다.
-5. `AGENT_QUERY_URL`은 JSON `{"question":"..."}`을 받아 답변과 근거 또는
+6. `AGENT_QUERY_URL`은 JSON `{"question":"..."}`을 받아 답변과 근거 또는
    `ABSTAIN_*` 코드를 반환하는 배포 Agent endpoint로 지정한다. 인증이 필요하면
    `AGENT_API_TOKEN`을 secret store로 주입한다.
 
@@ -24,8 +28,9 @@ backup_dir="$(./deploy/backup_v2.sh)"
 ```
 
 `stage_v2.sh`는 `*_next`만 재생성하며 정식·`*_prev`에는 손대지 않는다. 원천 검사,
-RDB, 관계, Graph TTL, CLOVA bge-m3 1024차원 embedding, 종합 검증 순서다. 외부
-bundle이 없으면 coverage는 미확보로 남으며 비보유로 바뀌지 않는다.
+RDB, legacy 근거 감사·관계 bundle, Graph TTL, CLOVA bge-m3 1024차원 embedding,
+종합 검증 순서다. 감사에서 거부되거나 미해결인 관계는 coverage가 미확보로 남으며
+비보유로 바뀌지 않는다.
 
 cutover는 `_prev`가 이미 있으면 중단한다. 팀 검수 전 `_prev`, `_failed`, 백업을
 삭제하지 않는다. Graph 적재나 `expected_question/2026_expected_queries.csv`의

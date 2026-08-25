@@ -1,5 +1,7 @@
 # 데이터 레이어 계획 (원본 / 보강 / 관계)
 
+> **LEGACY 설계 기록:** 아래 경로와 수치는 2026-07-11 팀원 데이터 기준입니다. 현재 구현 계약은 2026-08-24 정본의 [RDB](RDB_DEFINITION_V2_0.md), [VectorDB](VECTORDB_DEFINITION_V2_0.md), [GraphDB](GRAPHDB_DEFINITION_V2_0.md) 정의서와 [구현 문서](DATA_PLATFORM_V2_IMPLEMENTATION.md)가 소유합니다.
+
 새로 만드는 모든 값을 어디에 둘지에 대한 단일 기준. 근거 표시(주최측 데이터 vs 외부 보강 구분)와 15초 응답(RDB 선필터)을 동시에 만족하기 위한 구조다.
 
 ## 판단 기준

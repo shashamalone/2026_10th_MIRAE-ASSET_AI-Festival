@@ -464,6 +464,8 @@ STATIC_TABLES: tuple[TableDef, ...] = (
             c("label", "text", "라벨", nullable=False),
             c("comment", "text", "설명", nullable=False),
             c("alt_labels", "text[]", "대체 표기", nullable=False),
+            c("domain_file", "text", "정의가 위치한 TBox 파일", nullable=False),
+            c("property_type", "text", "class/object/datatype/individual 구분", nullable=False),
             c("content", "text", "임베딩 원문", nullable=False),
             c("content_hash", "text", "원문 SHA-256", nullable=False),
             c("embedding_model", "text", "bge-m3", nullable=False),
@@ -483,6 +485,8 @@ STATIC_TABLES: tuple[TableDef, ...] = (
             c("label", "text", "라벨", nullable=False),
             c("comment", "text", "설명", nullable=False),
             c("alt_labels", "text[]", "대체 표기", nullable=False),
+            c("domain_file", "text", "정의가 위치한 TBox 파일", nullable=False),
+            c("property_type", "text", "class/object/datatype/individual 구분", nullable=False),
             c("content", "text", "임베딩 원문", nullable=False),
             c("content_hash", "text", "원문 SHA-256", nullable=False),
             c("embedding_model", "text", "bge-m3", nullable=False),
@@ -582,7 +586,7 @@ def raw_tables(inspections: Iterable[SourceInspection]) -> tuple[TableDef, ...]:
                 as_of_column=as_of if column.name not in item.spec.effective_as_of_columns else column.name,
                 zero_null_rule=raw_zero_rule(column.name, column.description),
                 source_priority="주최측(1순위)",
-                transform_expression="승인 CSV 값 그대로; 공백만 NULL; PK는 NOT NULL",
+                transform_expression="공식 XLSX 값 그대로; 공백만 NULL; PK는 NOT NULL",
                 pk_ordinal=pk_order.get(column.name),
             )
             for column in item.columns
