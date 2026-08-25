@@ -4,7 +4,7 @@
     python3 EDA/collect_dart.py 20         # 20종만 시범
     python3 EDA/collect_dart.py corpcode   # 마스터만
 
-인증키는 .env의 `dart=`. 로그·사이드카 URL에는 `***`로 마스킹해 기록한다(EDA/validate_external.py가 검사).
+인증키는 `DART_API_KEY` 환경변수로만 받는다. 로그·사이드카 URL에는 `***`로 마스킹한다.
 재실행 시 이미 받은 파일은 건너뛴다. 일 20,000건 한도 안에서 sleep 0.3초(DART_SLEEP)로 정중하게 돈다.
 """
 import io
@@ -22,10 +22,10 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 MASTER_DIR = ROOT / "data/external/company_master"
 GOV_DIR = ROOT / "data/external/company_governance"
-KIND = MASTER_DIR / "kind_listed_corp_20260711.csv"
+KIND = MASTER_DIR / "kind_listed_corp_20260824.csv"
 HOLDING = ROOT / "data/relations/etf_holding.csv"
-CORPCODE = MASTER_DIR / "dart_corpcode_20260711.xml"
-AS_OF = "2026-07-11"  # 스냅샷 기준일. 개별 공시 접수일은 build_company_relations.py가 rcept_no에서 뽑는다
+CORPCODE = MASTER_DIR / "dart_corpcode_20260824.xml"
+AS_OF = "2026-08-24"  # 외부 공시 published_at/as_of의 절대 상한
 YMD = AS_OF.replace("-", "")
 BSNS_YEAR, REPRT_CODE = "2025", "11011"  # FY2025 사업보고서 — 접수일 2026-03 전후라 컷오프보다 안전
 SLEEP = float(os.environ.get("DART_SLEEP", 0.3))
@@ -33,9 +33,9 @@ BACKOFF = float(os.environ.get("DART_BACKOFF", 60))  # 429/403/020(요청제한)
 MAX_RETRY = int(os.environ.get("DART_MAX_RETRY", 5))
 OK_STATUS = {"000", "013"}  # 013 = 조회된 데이터 없음(출자한 타법인이 없는 회사). 실패가 아니다
 
-KEY = next(l.split("=", 1)[1].strip() for l in (ROOT / ".env").read_text().splitlines()
-           if l.startswith("dart="))
-assert len(KEY) == 40, "dart 인증키 형식 이상"
+KEY = os.environ.get("DART_API_KEY", "").strip()
+if len(KEY) != 40:
+    raise RuntimeError("DART_API_KEY 환경변수가 없거나 형식이 올바르지 않습니다")
 
 
 def mask(url):

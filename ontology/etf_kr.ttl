@@ -6,7 +6,7 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
 ################################################################################
-# fp-etf-kr — 국내 ETF·ETN (PREF01N001, 1,734종 = ETF 1,202 / ETN 532)
+# fp-etf-kr — 국내 ETF·ETN (PREF01N001, 1,780종 = ETF 1,235 / ETN 545)
 #
 # ETF와 ETN의 분리
 #   fp-common에서 fp:ETN owl:disjointWith fp:ETF로 선언했다. 한 파일에 혼재하므로
@@ -20,22 +20,21 @@
 #   ETF의 '발행'을 묻는 질의는 fp:managedBy(운용사)로 유도한다.
 #
 # 데이터 실태 (온톨로지에서 뺀 컬럼의 근거)
-#   - 괴리율 du_diff_rt·추적오차율 du_chas_errt: 전 종목 0.00 미계산 → **제외**
-#   - 배당 3컬럼(pd_dvid_cycl 전량 결측, pd_divd_amt_pshr·pd_dvid_yield 전량 0) → **제외**
-#     배당·분배금 질의는 현재 데이터로 답변 불가다.
+#   - 괴리율·추적오차율·배당·시세 컬럼은 raw에 그대로 보존하지만 v2 공통
+#     product_metric과 TBox 랭킹 축에는 채택하지 않는다.
 #   - 실시간·시세성 컬럼(du_clpr·du_bpr·du_lpr·ru_mkt_* 등) → **제외**
 #     du_lpr은 스키마 한글 설명과 통상 의미가 충돌해 시가 질의에 쓰지 않는다.
 #   - 상수 컬럼(거래소·시장·통화·SPAC 등) → **제외**
 #   위 컬럼을 온톨로지에 올리면 "값이 있다"는 잘못된 신호가 된다.
 #
-# 기준일: 시세·주간 모두 2026-06-15(du_upt_dt·wu_upt_dt 상수).
+# 기준일: 구성/상품 2026-08-24, 시세·주간 2026-08-21.
 ################################################################################
 
 <http://mafest.ai/ontology/fp-etf-kr> a owl:Ontology ;
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내 ETF·ETN 온톨로지"@ko, "Korean Domestic ETF/ETN Ontology"@en ;
-    rdfs:comment "국내 ETF·ETN 마스터(PREF01N001)와 LSEG 보강 테이블 기반 스키마. ETF/ETN 분리, 총보수 보완 경로, 레버리지·연금·판매 축, 테마 개체 176종을 정의한다."@ko ;
-    dcterms:source "PREF01N001_etf_kr_master_20260711.csv, data/enriched/etf_kr_enriched.csv, data/relations/etf_theme.csv" .
+    rdfs:comment "국내 ETF·ETN 마스터(PREF01N001) 기반 스키마. fp:KoreanETF/fp:KoreanETN 분리, 레버리지·연금·분류축과 근거 문서가 있는 관계만 정의한다."@ko ;
+    dcterms:source "pref01n001_data.xlsx, pref01n001_schema.xlsx (2026-08-24 배포)" .
 
 ################################################################################
 # 1. 분류축 클래스 — 주최측 axis_* 라벨 7종
@@ -49,7 +48,7 @@ fp:LeverageType a owl:Class ;
 
 fp:UnderlyingScope a owl:Class ;
     rdfs:label "기초자산 범위"@ko, "Underlying Scope"@en ;
-    rdfs:comment "주최측 axis_underlyingScope(시장대표/섹터·테마/개별종목). **현재 데이터로 값을 채울 수 없다** — 기초지수 cu_base_index가 ETF 기준 95.2% 결측이고 pd_sect_nm은 전량 결측이다. LSEG 테마(fp:relatedToTheme)는 섹터·테마 여부의 부분 신호일 뿐 시장대표/개별종목 구분을 대체하지 못한다. 클래스·속성은 선언하되 값을 부여하지 않는다."@ko .
+    rdfs:comment "주최측 axis_underlyingScope(시장대표/섹터·테마/개별종목). 공식 기초지수·섹터 이름 또는 cutoff가 검증된 외부 근거가 없으면 값을 생성하지 않으며 테마 관계만으로 범위를 추정하지 않는다."@ko .
 
 fp:DistributionType a owl:Class ;
     rdfs:label "분배 유형"@ko, "Distribution Type"@en ;
@@ -67,7 +66,7 @@ fp:hasManagementStrategy a owl:ObjectProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
     rdfs:range fp:ManagementStrategy ;
     rdfs:label "운용전략"@ko, "has management strategy"@en ;
-    rdfs:comment "상품 → 패시브/액티브 개체. 국내ETF는 cu_strtegy에서, 해외ETF는 cu_index_repl_mthd 결측 여부(결측 58.2% = 액티브·비추종)에서 추정한다."@ko ;
+    rdfs:comment "상품 → 패시브/액티브 개체. 공식 이름 컬럼이나 검증된 문서가 있을 때만 연결하며 복제방식 결측으로 액티브 여부를 추정하지 않는다."@ko ;
     fp:sourceTable "PREF01N001", "derived:etf_kr_enriched" ;
     fp:sourceColumn "cu_strtegy", "derived:etf_kr_enriched.replication" .
 
@@ -104,7 +103,7 @@ fp:hasUnderlyingScope a owl:ObjectProperty ;
     rdfs:domain fp:ETF ;
     rdfs:range fp:UnderlyingScope ;
     rdfs:label "기초자산 범위"@ko, "has underlying scope"@en ;
-    rdfs:comment "ETF → 기초자산 범위 개체. **현재 데이터로 값을 채울 수 없다**(기초지수 95.2% 결측, 섹터명 전량 결측). 간이투자설명서 수집 이후 부여한다."@ko .
+    rdfs:comment "ETF → 기초자산 범위 개체. 공식 이름 또는 cutoff가 검증된 투자설명서 근거가 있을 때만 부여한다."@ko .
 
 fp:hasDistributionType a owl:ObjectProperty ;
     rdfs:domain fp:ETF ;
@@ -156,7 +155,7 @@ fp:hedgeType a owl:DatatypeProperty ;
 fp:baseMarket a owl:DatatypeProperty ;
     rdfs:domain fp:ETF ; rdfs:range xsd:string ;
     rdfs:label "기초 시장"@ko, "base market"@en ;
-    rdfs:comment "기초자산이 속한 시장(국내·해외 등, LSEG 보강). 국내ETF 기초지수가 95.2% 결측인 상황의 대체 축이다."@ko ;
+    rdfs:comment "기초자산이 속한 시장(국내·해외 등). 주최측 축이 없을 때만 cutoff가 검증된 외부 근거로 보강한다."@ko ;
     fp:sourceTable "derived:etf_kr_enriched" ; fp:sourceColumn "derived:etf_kr_enriched.base_market" .
 
 fp:baseAsset a owl:DatatypeProperty ;
@@ -169,21 +168,21 @@ fp:delistingDate a owl:DatatypeProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
     rdfs:range xsd:date ;
     rdfs:label "거래종료일"@ko, "delisting date"@en ;
-    rdfs:comment "상장폐지·만기일. **sentinel '99991231' 1,521건은 '만기 없음/존속'을 뜻하므로 날짜로 파싱하지 않는다.** ETN 만기 구분에 유효하다."@ko ;
+    rdfs:comment "상장폐지·만기일. 유효한 날짜만 파싱하고 sentinel은 원문 보존 후 날짜 비교에서 제외한다. ETN의 명시적 종료 판정에 사용한다."@ko ;
     fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_lste_dt" .
 
 fp:tradingSuspended a owl:DatatypeProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
     rdfs:range xsd:boolean ;
     rdfs:label "거래정지 여부"@ko, "trading suspended"@en ;
-    rdfs:comment "1=정지(72건). 매수 가능 상품 조건검색에서 제외 필터로 쓴다. 해외ETF는 전량 0이라 이 축이 없다."@ko ;
+    rdfs:comment "거래상태 코드. 공식 이름/설명에 따라 해석하고 내부 코드값 0을 임의로 정상·정지 의미에 매핑하지 않는다."@ko ;
     fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_tr_yn" .
 
 fp:pensionTradable a owl:DatatypeProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN ) ] ;
     rdfs:range xsd:boolean ;
     rdfs:label "연금계좌 거래 가능"@ko, "pension tradable"@en ;
-    rdfs:comment "연금저축·IRP 계좌 매매 가능 여부(Y 1,002 / N 732). '연금저축으로 살 수 있는' 질의의 직접 축이다."@ko ;
+    rdfs:comment "연금저축·IRP 계좌 매매 가능 여부. 공식 Y/N 값만 조건축으로 사용하고 결측은 가능·불가능으로 추정하지 않는다."@ko ;
     fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_pen_tr_yn" .
 
 fp:pensionRiskCategory a owl:DatatypeProperty ;
@@ -208,7 +207,7 @@ fp:brandName a owl:DatatypeProperty ;
 ################################################################################
 # 4. 테마 개체 — 176종
 #
-#   원천: data/relations/etf_theme.csv (LSEG themes, 국내ETF 1,099종 × 176테마)
+#   원천: 주최측 분류 또는 published_at/as_of가 검증된 공식 외부 문서만 허용
 #   fp:relatedToTheme(fp-common)의 range 개체다.
 #
 #   **as_of 공란 주의**: 원천 관계 테이블의 as_of 컬럼이 비어 있다. LSEG 수집 시점이

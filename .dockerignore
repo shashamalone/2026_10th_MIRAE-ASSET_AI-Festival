@@ -1,0 +1,9 @@
+.git
+.env
+artifacts
+data
+__pycache__
+*.pyc
+vectordb_test
+EDA
+image

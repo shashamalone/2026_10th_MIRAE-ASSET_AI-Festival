@@ -9,28 +9,23 @@
      기본 ON 이라 responseFormat 과 충돌한다. "off"는 무효값이고 "none"만 받는다.
 """
 import json
+import os
 import sys
 
 import requests
 
-from config import CLOVA_HOST, EMBEDDING_MODEL, ROOT
+from config import CLOVA_HOST, EMBEDDING_MODEL
 
 REASONING_MODELS = {"HCX-007"}
 
 
 def load_key() -> str:
-    """.env의 clova 키. 값은 절대 로그에 남기지 않는다."""
-    env = ROOT / ".env"
-    if not env.exists():
-        sys.exit(f"FAIL  .env 없음: {env}")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        k, _, v = line.partition("=")
-        if k.strip() == "clova":
-            key = v.strip().strip('"').strip("'")
-            if not key:
-                sys.exit("FAIL  .env의 clova 값이 비어 있음")
-            return key if key.startswith("Bearer ") else f"Bearer {key}"
-    sys.exit("FAIL  .env에 clova 항목 없음")
+    """환경변수의 CLOVA 키. 파일을 읽거나 값을 로그에 남기지 않는다."""
+    value = os.environ.get("CLOVA_API_KEY") or os.environ.get("CLOVA_STUDIO_API_KEY")
+    if not value or not value.strip():
+        sys.exit("FAIL  CLOVA_API_KEY 환경변수가 비어 있음")
+    value = value.strip()
+    return value if value.startswith("Bearer ") else f"Bearer {value}"
 
 
 _KEY = None

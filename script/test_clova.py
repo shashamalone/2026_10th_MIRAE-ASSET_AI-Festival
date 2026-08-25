@@ -11,6 +11,7 @@
 """
 
 import json
+import os
 import pathlib
 import sys
 import time
@@ -27,18 +28,11 @@ MODELS = ["HCX-005", "HCX-DASH-002", "HCX-007"]
 
 
 def load_key() -> str:
-    """.env에서 clova 키를 읽는다. 값은 절대 출력하지 않는다."""
-    env = ROOT / ".env"
-    if not env.exists():
-        sys.exit(f"FAIL  .env 없음: {env}")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        k, _, v = line.partition("=")
-        if k.strip() == "clova":
-            key = v.strip().strip('"').strip("'")
-            if not key:
-                sys.exit("FAIL  .env의 clova 값이 비어 있음")
-            return key if key.startswith("Bearer ") else f"Bearer {key}"
-    sys.exit("FAIL  .env에 clova 항목 없음")
+    """환경변수에서 CLOVA 키를 읽는다. 값은 절대 출력하지 않는다."""
+    key = (os.environ.get("CLOVA_API_KEY") or os.environ.get("CLOVA_STUDIO_API_KEY") or "").strip()
+    if not key:
+        sys.exit("FAIL  CLOVA_API_KEY 또는 CLOVA_STUDIO_API_KEY 환경변수 없음")
+    return key if key.startswith("Bearer ") else f"Bearer {key}"
 
 
 def chat(key, model, system, user, max_tokens=512, response_format=None):

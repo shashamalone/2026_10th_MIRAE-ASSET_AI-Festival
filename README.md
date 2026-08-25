@@ -2,6 +2,25 @@
 
 > 정형 금융상품 데이터를 Agent가 스스로 탐색·연산하고, 근거에 기반해 답변하는 Agent RAG·QA 구현
 
+## 데이터 플랫폼 v2 (2026-08-24)
+
+현재 데이터 정본은 정상 XLSX 8개로 구성된 `financial-products-2026-08-24`이며,
+운영 경로는 PostgreSQL 17 + pgvector + Oxigraph + 읽기전용 FastAPI다. 과거
+`2026-07-11` CSV를 설명하는 문서와 스크립트는 재현용 레거시 자료이며 v2 빌드에
+사용하지 않는다.
+
+```bash
+python script/build_catalog_v2.py --check
+python script/build_data_platform_v2.py --check
+python script/build_vectors_v2.py --check
+python script/validate_data_platform_v2.py
+```
+
+- 데이터 계약·현황: [`docs/docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md`](docs/docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md)
+- 전체 테이블 정의: [`docs/docs_data_layer/TABLE_DEFINITION_V2_0.md`](docs/docs_data_layer/TABLE_DEFINITION_V2_0.md)
+- 구현·운영 규약: [`docs/docs_data_layer/DATA_PLATFORM_V2_IMPLEMENTATION.md`](docs/docs_data_layer/DATA_PLATFORM_V2_IMPLEMENTATION.md)
+- 제자리 배포·롤백: [`deploy/README_V2.md`](deploy/README_V2.md)
+
 </br></br>
 ## 📌 프로젝트 개요
 
@@ -100,7 +119,7 @@ Agent의 4대 필수 구성요소를 기준으로 task를 구성합니다.
 - **감점 요인 원천 차단:**
   - 가장 치명적인 감점 요인은 '데이터로 확인 불가능한 정보에 대해 임의로 대답하는 것'(예: 존재하지 않는 신용등급, 기준일 이후의 상품 등)과 '근거 없는 수익률 전망'임.
 - **기능 구현:**
-  - LLM(하이퍼클로바X)에 질문을 바로 던지기 전에, 입력된 질문이 기준일(2026-07-11) 이전 데이터 범주에 존재하는지, 없는 상품을 묻고 있는지 검증하여 "확인할 수 없음"을 반환하는 밸리데이션 로직을 최초 파이프라인에 이식해야 함.
+  - LLM(하이퍼클로바X)에 질문을 바로 던지기 전에, 입력된 질문이 외부 근거 상한(2026-08-24)과 상품별 실질 기준일 범주에 존재하는지, 없는 상품을 묻고 있는지 검증하여 "확인할 수 없음"을 반환하는 밸리데이션 로직을 최초 파이프라인에 이식해야 함.
 
 ### 4. Answer Generator & API Response 규격화 (`feature/api-response-schema`)
 

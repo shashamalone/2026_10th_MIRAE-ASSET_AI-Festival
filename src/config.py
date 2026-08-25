@@ -23,7 +23,7 @@ BOND_DB = {
     "host": os.environ.get("PGHOST", "127.0.0.1"),
     "port": os.environ.get("PGPORT", "5432"),
     "user": os.environ.get("PGUSER", "postgres"),
-    "password": os.environ.get("PGPASSWORD", "postgres"),
+    "password": os.environ.get("PGPASSWORD", ""),
     "dbname": os.environ.get("PGDATABASE", "mafest"),
 }
 # 유닉스 소켓은 peer 인증에 걸린다. host 를 명시해 TCP 로 붙는다.
@@ -43,4 +43,6 @@ EMBEDDING_MODEL = "bge-m3"        # 1024차원, cosine (CLOVA Studio)
 FRAME_MODEL = "HCX-007"
 ANSWER_MODEL = "HCX-005"          # 답변 생성
 
-CLOVA_HOST = "https://clovastudio.stream.ntruss.com"
+CLOVA_HOST = os.environ.get(
+    "CLOVA_HOST", "https://clovastudio.stream.ntruss.com"
+).rstrip("/")

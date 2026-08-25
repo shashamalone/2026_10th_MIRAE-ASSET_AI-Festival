@@ -7,6 +7,8 @@ numpy
 openpyxl          # 주최측 xlsx 읽기
 lxml              # DART corpCode.xml 파싱
 requests
+httpx
+lseg-data          # 해외ETF adjusted/total-return history (Platform OAuth)
 
 # 온톨로지
 rdflib
