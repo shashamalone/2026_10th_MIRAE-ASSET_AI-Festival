@@ -57,6 +57,7 @@ Query Frame은 의미 후보일 뿐 SQL 권위가 아니다. 운영 시 물리 �
 | Evidence Completeness | 결과 projection 전 컬럼의 source table·column·as_of 완비 문항 수 / 14 | 14/14 | 답변 값 전부가 근거와 연결되는가 |
 | LangGraph Contract | 정상 시 RDB 실행, ABSTAIN 시 미실행, 공개 응답 5필드 assertion | PASS | 제어 흐름이 안전 정책을 실제로 강제하는가 |
 | DB Execution Accuracy | 생성 계획과 Gold SQL 결과의 컬럼 집합 및 행 sequence/multiset exact 일치 | 14/14 | 실제 PostgreSQL 최종 결과가 정답 oracle과 같은가 |
+| Query Frame SLA | HCX Query Frame 1회 wall-clock | `≤5초` | RDB 이전 intent 단계가 운영 시간예산을 만족하는가 |
 | Live E2E Latency | HCX 호출 시작부터 5필드 응답까지 wall-clock | 시도별 15초 미만 | 모델/API 변동을 포함한 실제 응답 시간 |
 
 DB 결과 비교는 `order_sensitive=true`이면 행 순서를 포함하고, 아니면 행의 multiset을
@@ -70,6 +71,7 @@ DB 결과 비교는 `order_sensitive=true`이면 행 순서를 포함하고, 아
 | 역할 | 정본 |
 |---|---|
 | Query Frame 입력 | `vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl` |
+| 일반화 입력 | `vectordb_test/6_rdb_vertical_slice/paraphrases.jsonl` |
 | 질문·Gold SQL | `vectordb_test/5_semantic_schema_nl2sql/gold/` |
 | 논리↔물리 binding | `metadata/schema_bindings.json` |
 | business/safety rule | `metadata/business_rules.json` |
@@ -94,20 +96,66 @@ python3 vectordb_test/6_rdb_vertical_slice/evaluate.py
 # 로컬 PostgreSQL에서 Gold exact 비교 추가
 python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --db
 
-# HyperCLOVA X와 PostgreSQL을 포함한 명시적 live 반복
-python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --live --attempts 3
+# 1차: 14문항 각 1회, 실패 질문 유형 분류
+python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --smoke --write-results
+
+# 2차: 각 3회, 실패·5초 초과 문항만 총 5회
+python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --stability --write-results
+
+# 3차: 의미 보존 paraphrase 14문항 각 1회
+python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --generalization --write-results
 
 # 확인한 결과로 metrics.json을 갱신할 때만 사용
 python3 vectordb_test/6_rdb_vertical_slice/evaluate.py --db --write-results
 ```
 
-`--db`에는 적재된 PostgreSQL이 필요하고 `--live`에는 PostgreSQL과 `.env`의 CLOVA
-key가 모두 필요하다.
+`--db`에는 적재된 PostgreSQL이 필요하고 세 live 단계에는 PostgreSQL과 `.env`의
+CLOVA key가 모두 필요하다. live 각 attempt는 HCX를 한 번만 호출하고 자동 재시도하지 않는다.
 기본 실행은 외부 호출을 하지 않으며, `--write-results`가 없으면 고정 결과 파일을
 덮어쓰지 않는다.
+
+### Live 3단계 판정
+
+1. 스모크는 시간대를 비교하지 않고 `single_product_lookup`,
+   `same_vehicle_comparison`, `filtered_ranking` 중 어떤 유형이 어떤 failure code로
+   실패했는지만 집계한다.
+2. 안정성은 문항별 3회로 시작한다. 한 번이라도 기능 실패, ABSTAIN, Query Frame
+   5초 초과, DB/evidence/응답 계약 실패가 있으면 해당 문항만 총 5회로 확장한다.
+3. 일반화는 원문과 숫자·단위·연산자·정렬·limit·요청 필드가 같은 paraphrase를
+   base Gold 및 핵심 LogicalPlan과 비교한다.
+
+`functional_success`는 non-ABSTAIN·DB Gold exact·evidence complete·응답 5필드가
+모두 참인 경우다. `strict_success`는 여기에 Query Frame `≤5초`까지 만족해야 한다.
+성공률이 낮으면 이 실험에서는 `redesign_recommended`만 기록하고, prompt·timeout·
+모델·재시도 정책 변경은 별도 후속 실험으로 분리한다.
 
 ## 7. 파일
 
 - `evaluate.py`: 기존 회귀 테스트를 호출하는 얇은 실행기
+- `paraphrases.jsonl`: Gold를 복사하지 않은 의미 보존 일반화 입력 14개
 - `results/metrics.json`: 기계 판독 가능한 확정 결과와 입력 해시
-- `6_result_rdb_vertical_slice.md`: 측정 결과, 실패 관찰, 해석과 다음 단계
+- `6_1_result_rdb_vertical_slice.md`: 측정 결과, 실패 관찰, 해석과 다음 단계
+
+## 8. Query Frame HCX latency 단일변수 후속 실험
+
+기존 live 실패의 주원인인 HCX timeout/5초 초과를 `prompt → token → schema →
+connection → queue → timeout` 순서로 한 변수씩 비교한 뒤, 선택 구성을 RDB 14문항으로
+qualification한다. 운영 `src/**`는 이 실험에서 변경하지 않는다.
+
+```bash
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --dry-run
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage prompt --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage token --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage schema --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage connection --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage queue --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage timeout --write-results
+python3 vectordb_test/6_rdb_vertical_slice/evaluate_query_frame_latency.py --stage qualification --write-results
+```
+
+각 stage는 중복 실행을 거부하며 자동 재시도하지 않는다. 초기 arm당 3회에서 판정이
+불충분하면 arm당 5회로 확장한다. queue 단계는 동일 endpoint의 순차/동시 요청 진단일
+뿐 운영 설정으로 선택하지 않는다. 상세 명세와 누적 결과는
+[`6_2_result_query_frame_latency.md`](6_2_result_query_frame_latency.md), 호출 단위 원자료와
+집계는 `results/query_frame_latency_raw.jsonl`,
+`results/query_frame_latency_metrics.json`에 기록한다.

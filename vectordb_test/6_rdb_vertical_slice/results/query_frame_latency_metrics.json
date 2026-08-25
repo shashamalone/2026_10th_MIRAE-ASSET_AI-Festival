@@ -1,0 +1,613 @@
+{
+  "experiment": "query_frame_latency_single_variable_v1",
+  "created_at": "2026-08-25T13:30:13+09:00",
+  "model": "HCX-007",
+  "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+  "target_seconds": 5.0,
+  "stage_order": [
+    "prompt",
+    "token",
+    "schema",
+    "connection",
+    "queue",
+    "timeout",
+    "qualification"
+  ],
+  "stages": {
+    "prompt": {
+      "status": "completed",
+      "changed_variable": "prompt_length",
+      "control_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "candidate_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "compact",
+        "prompt_chars": 4994,
+        "prompt_utf8_bytes": 8734,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "e4a9c5efb19e573f3786d002f42f4187bf11d79e6818aa82e395b054f4f1cc31"
+      },
+      "control": {
+        "attempts": 3,
+        "responses": 3,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 2,
+        "valid_json_schema": 3,
+        "functional_success_non_timeout": 3,
+        "functional_success_non_timeout_denominator": 3,
+        "strict_success": 2,
+        "latency_bins": {
+          "le_4": 1,
+          "4_to_5": 1,
+          "gt_5": 1
+        },
+        "completed_latency_seconds": {
+          "min": 3.5302,
+          "median": 4.6071,
+          "max": 7.506
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 3,
+        "responses": 3,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 0,
+        "valid_json_schema": 3,
+        "functional_success_non_timeout": 1,
+        "functional_success_non_timeout_denominator": 3,
+        "strict_success": 0,
+        "latency_bins": {
+          "gt_5": 3
+        },
+        "completed_latency_seconds": {
+          "min": 5.2124,
+          "median": 5.9246,
+          "max": 6.6491
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 1
+      },
+      "decision": {
+        "status": "selected",
+        "selected": "control",
+        "expanded": false,
+        "reason": "candidate threshold/regression gate failed (0 vs 2)"
+      }
+    },
+    "token": {
+      "status": "completed",
+      "changed_variable": "max_completion_tokens",
+      "control_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "candidate_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 1536,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "d48e0ac728eaa40f948e233fade54c8fd6932c6f99f7c4bd5617cb1d9aebc645"
+      },
+      "control": {
+        "attempts": 5,
+        "responses": 5,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 2,
+        "valid_json_schema": 5,
+        "functional_success_non_timeout": 4,
+        "functional_success_non_timeout_denominator": 5,
+        "strict_success": 1,
+        "latency_bins": {
+          "le_4": 2,
+          "gt_5": 3
+        },
+        "completed_latency_seconds": {
+          "min": 3.1201,
+          "median": 5.1121,
+          "max": 9.4974
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 5,
+        "responses": 5,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 1,
+        "valid_json_schema": 5,
+        "functional_success_non_timeout": 5,
+        "functional_success_non_timeout_denominator": 5,
+        "strict_success": 1,
+        "latency_bins": {
+          "le_4": 1,
+          "gt_5": 4
+        },
+        "completed_latency_seconds": {
+          "min": 3.2833,
+          "median": 5.5794,
+          "max": 7.236
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "decision": {
+        "status": "selected",
+        "selected": "control",
+        "expanded": true,
+        "reason": "candidate threshold/regression gate failed (1 vs 1)"
+      }
+    },
+    "schema": {
+      "status": "completed",
+      "changed_variable": "schema_descriptions",
+      "control_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "candidate_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "no_descriptions",
+        "schema_chars": 3210,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "976a8764e1b7f710b177f7ac378d9d9ecc30e4e43bde6fc05eccaa3bc8dc3232"
+      },
+      "control": {
+        "attempts": 5,
+        "responses": 5,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 2,
+        "valid_json_schema": 5,
+        "functional_success_non_timeout": 4,
+        "functional_success_non_timeout_denominator": 5,
+        "strict_success": 2,
+        "latency_bins": {
+          "le_4": 1,
+          "4_to_5": 1,
+          "gt_5": 3
+        },
+        "completed_latency_seconds": {
+          "min": 3.4037,
+          "median": 5.0464,
+          "max": 7.4958
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 5,
+        "responses": 4,
+        "timeouts": 0,
+        "http_429": 1,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 1,
+        "valid_json_schema": 4,
+        "functional_success_non_timeout": 3,
+        "functional_success_non_timeout_denominator": 4,
+        "strict_success": 1,
+        "latency_bins": {
+          "4_to_5": 1,
+          "gt_5": 3,
+          "http_error": 1
+        },
+        "completed_latency_seconds": {
+          "min": 4.4253,
+          "median": 5.4611,
+          "max": 7.6519
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "decision": {
+        "status": "selected",
+        "selected": "control",
+        "expanded": true,
+        "reason": "candidate threshold/regression gate failed (1 vs 2)"
+      }
+    },
+    "connection": {
+      "status": "completed",
+      "changed_variable": "connection_reuse",
+      "control_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "candidate_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "session",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "0911611e5f10d802b13cd208b7a4d91222fda126c0819eff52ed12f031081384"
+      },
+      "control": {
+        "attempts": 5,
+        "responses": 5,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 3,
+        "valid_json_schema": 5,
+        "functional_success_non_timeout": 5,
+        "functional_success_non_timeout_denominator": 5,
+        "strict_success": 3,
+        "latency_bins": {
+          "le_4": 2,
+          "4_to_5": 1,
+          "gt_5": 2
+        },
+        "completed_latency_seconds": {
+          "min": 3.2314,
+          "median": 4.9425,
+          "max": 8.4779
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 5,
+        "responses": 4,
+        "timeouts": 0,
+        "http_429": 1,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 2,
+        "valid_json_schema": 4,
+        "functional_success_non_timeout": 4,
+        "functional_success_non_timeout_denominator": 4,
+        "strict_success": 2,
+        "latency_bins": {
+          "le_4": 2,
+          "gt_5": 2,
+          "http_error": 1
+        },
+        "completed_latency_seconds": {
+          "min": 2.559,
+          "median": 4.3556,
+          "max": 7.3483
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "decision": {
+        "status": "selected",
+        "selected": "control",
+        "expanded": true,
+        "reason": "candidate threshold/regression gate failed (2 vs 3)"
+      },
+      "dns_probe": {
+        "host": "clovastudio.stream.ntruss.com",
+        "latency_seconds": 0.0098,
+        "resolved_address_count": 2,
+        "error": null
+      }
+    },
+    "queue": {
+      "status": "completed",
+      "diagnostic_only": true,
+      "control_label": "sequential_4",
+      "candidate_label": "concurrency_2_two_waves",
+      "wave_wall_seconds": [
+        7.4266,
+        7.0833
+      ],
+      "control": {
+        "attempts": 4,
+        "responses": 4,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 0,
+        "valid_json_schema": 4,
+        "functional_success_non_timeout": 4,
+        "functional_success_non_timeout_denominator": 4,
+        "strict_success": 0,
+        "latency_bins": {
+          "gt_5": 4
+        },
+        "completed_latency_seconds": {
+          "min": 6.7696,
+          "median": 6.8624,
+          "max": 8.0117
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 4,
+        "responses": 4,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 0,
+        "valid_json_schema": 4,
+        "functional_success_non_timeout": 4,
+        "functional_success_non_timeout_denominator": 4,
+        "strict_success": 0,
+        "latency_bins": {
+          "gt_5": 4
+        },
+        "completed_latency_seconds": {
+          "min": 6.8435,
+          "median": 7.2194,
+          "max": 7.4224
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "decision": {
+        "selected": null,
+        "reason": "diagnostic only; never promoted"
+      }
+    },
+    "timeout": {
+      "status": "completed",
+      "changed_variable": "http_timeout_policy",
+      "control_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "candidate_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 5,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "ec7e423a0fb30c22ef602fe598f69daddf16b219fa0df97d84bd50fa8676877f"
+      },
+      "control": {
+        "attempts": 5,
+        "responses": 5,
+        "timeouts": 0,
+        "http_429": 0,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 3,
+        "valid_json_schema": 5,
+        "functional_success_non_timeout": 5,
+        "functional_success_non_timeout_denominator": 5,
+        "strict_success": 3,
+        "latency_bins": {
+          "le_4": 2,
+          "4_to_5": 1,
+          "gt_5": 2
+        },
+        "completed_latency_seconds": {
+          "min": 2.9918,
+          "median": 4.684,
+          "max": 6.917
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "candidate": {
+        "attempts": 5,
+        "responses": 3,
+        "timeouts": 1,
+        "http_429": 1,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 3,
+        "valid_json_schema": 3,
+        "functional_success_non_timeout": 3,
+        "functional_success_non_timeout_denominator": 3,
+        "strict_success": 3,
+        "latency_bins": {
+          "le_4": 2,
+          "4_to_5": 1,
+          "timeout": 1,
+          "http_error": 1
+        },
+        "completed_latency_seconds": {
+          "min": 2.6485,
+          "median": 2.8839,
+          "max": 4.6575
+        },
+        "censored_timeout_seconds": [
+          5.0326
+        ],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "decision": {
+        "status": "selected",
+        "selected": "control",
+        "expanded": true,
+        "reason": "candidate threshold/regression gate failed (3 vs 3)"
+      }
+    },
+    "qualification": {
+      "status": "completed",
+      "selected_config": {
+        "model": "HCX-007",
+        "endpoint": "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        "prompt_variant": "full",
+        "prompt_chars": 6128,
+        "prompt_utf8_bytes": 10090,
+        "schema_variant": "full",
+        "schema_chars": 3437,
+        "max_completion_tokens": 3072,
+        "connection": "fresh",
+        "timeout_seconds": 13,
+        "temperature": 0.0,
+        "top_p": 0.8,
+        "seed": 0,
+        "thinking": "none",
+        "stream": false,
+        "sha256": "93d81e2eb88e5ae4552fd41b712bf9e7c7b8e4addae9ecc99d23aaa1fc18c6a1"
+      },
+      "summary": {
+        "attempts": 14,
+        "responses": 9,
+        "timeouts": 0,
+        "http_429": 5,
+        "http_5xx": 0,
+        "valid_query_frame_le_5s": 9,
+        "valid_json_schema": 9,
+        "functional_success_non_timeout": 8,
+        "functional_success_non_timeout_denominator": 9,
+        "strict_success": 8,
+        "latency_bins": {
+          "4_to_5": 3,
+          "le_4": 6,
+          "http_error": 5
+        },
+        "completed_latency_seconds": {
+          "min": 2.6576,
+          "median": 3.3461,
+          "max": 4.7718
+        },
+        "censored_timeout_seconds": [],
+        "parse_schema_db_evidence_regressions": 0
+      },
+      "gate": {
+        "valid_query_frame_le_5s": false,
+        "functional_db_exact": false,
+        "zero_contract_regressions": true,
+        "zero_timeout_429_5xx": false
+      },
+      "runtime_candidate": false,
+      "redesign_recommended": true
+    }
+  },
+  "selected_config": {
+    "prompt": "full",
+    "max_completion_tokens": 3072,
+    "schema": "full",
+    "connection": "fresh",
+    "timeout_seconds": 13
+  },
+  "runtime_source_modified": false,
+  "updated_at": "2026-08-25T13:50:52+09:00"
+}

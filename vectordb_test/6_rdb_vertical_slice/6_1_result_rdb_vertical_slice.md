@@ -8,12 +8,14 @@
 - Query Frame 모델: HyperCLOVA X `HCX-007`
 - PostgreSQL 제한: read-only, statement timeout `2초`, 최대 `10,000행`
 - 결론: **고정 Query Frame 이후 RDB 정확성·안전 계약은 PASS**
-- 보류: **live HCX 가용성과 p95 15초는 통과로 판정할 수 없음**
+- Live 운영 안정성: **FAIL — 재설계 필요**
 
 주요 결과는 Static Plan 14/14, Required Schema Contract 14/14, Schema
 Hallucination 0건, Evidence Completeness 14/14, LangGraph Contract PASS,
-PostgreSQL Gold Exact 14/14다. 별도 live q018 관찰은 3회 중 1회만 정상
-성공했으며, 두 번은 HCX API가 12초 안에 응답하지 않아 안전 ABSTAIN했다.
+PostgreSQL Gold Exact 14/14다. 반면 새 live 실험은 스모크 strict success 0/14,
+안정성 7/70(10%), paraphrase 일반화 2/14(14.29%)로 Query Frame 5초 목표와
+운영 성공률을 충족하지 못했다. 기능적으로 성공한 시도의 DB exact와 evidence는
+통과했지만 HCX timeout이 전체 실패의 대부분을 차지했다.
 
 ## 1. 실험 질문
 
@@ -158,53 +160,138 @@ Gold의 `NULLS LAST`와 달랐으며, 명시적 정렬에도 verified default NU
 | q017 | 1천억→100,000,000,000·미국 주식형 | PASS | PASS | PASS |
 | q018 | 해외 채권형·보수·AUM NULLS LAST·Top 10 | PASS | PASS | PASS |
 
-## 6. Live HCX E2E 관찰
+## 6. Live 실험 판정 기준
 
-q018 하나를 `agent.agent_core.ask()`로 실행해 HCX Query Frame부터 PostgreSQL,
-evidence renderer까지 wall-clock을 관찰했다.
+각 attempt는 HCX Query Frame을 정확히 한 번 호출한다. 자동 재시도나 audit LLM은
+사용하지 않는다.
 
-| 시도 | HCX timeout 설정 | 결과 | 응답시간 | Evidence |
-|---:|---:|---|---:|---:|
-| 1 | 12초 | 안전 ABSTAIN (`ReadTimeout`) | 12.093초 | 0 |
-| 2 | 12초 | 안전 ABSTAIN (`ReadTimeout`) | 12.232초 | 0 |
-| 3 | 13초 | 정상 성공 | 6.560초 | 10 |
+| 판정 | 조건 |
+|---|---|
+| Functional Success | non-ABSTAIN + DB Gold exact + evidence complete + 공개 응답 5필드 |
+| Query Frame SLA Pass | Query Frame wall-clock `≤5초` |
+| Strict Success | Functional Success와 Query Frame SLA를 모두 만족 |
 
-세 시도 모두 공개 응답 5필드는 유지했다. timeout 시 빈 Frame으로 전체 상품을 조회하지
-않고 `Query Frame 추출 실패`로 ABSTAIN했으므로 실패 안전성은 확인됐다. 다만 정상
-답변 가용성은 이 관찰에서 1/3이며 표본도 하나의 질문 3회뿐이다. 따라서 다음 문장은
-근거가 없다.
+HTTP timeout은 현행 운영 설정인 13초를 유지했다. 5초는 측정 목표이며, 5초를 넘겨
+응답한 호출도 기능 결과를 끝까지 확인한 뒤 `query_frame_over_5s`로 실패 집계했다.
+실험 도중 timeout·prompt·model·retry 정책은 변경하지 않았다.
 
-- `live p95 < 15초를 달성했다`
-- `HCX 응답 지연이 안정화됐다`
-- `14문항 live E2E 정확도가 14/14다`
+## 7. 1차 Smoke — 실패 질문 유형 선별
 
-검증된 사실은 **성공한 1회가 6.56초였고, 두 timeout도 추측 답변 대신 15초 안에
-ABSTAIN했다**는 범위다.
+14문항을 각 1회 실행했다. 시간대 비교는 하지 않았다.
 
-## 7. 해석과 한계
+| 지표 | 결과 |
+|---|---:|
+| 전체 attempt | 14 |
+| Functional Success | 1/14 (7.14%) |
+| Query Frame ≤5초 | 0/14 (0%) |
+| Strict Success | 0/14 (0%) |
+| Query Frame timeout | 13/14 (92.86%) |
+| Query Frame p50 / p95 | 13.0585초 / 13.096초 |
+| E2E p50 / p95 | 13.064초 / 13.100초 |
 
-### 확정할 수 있는 것
+q008만 기능적으로 성공했지만 Query Frame 5.584초로 strict success는 아니었다.
 
-1. 고정된 14개 Query Frame 이후 현행 deterministic RDB 경로는 Gold 결과와 14/14 일치한다.
-2. 허용되지 않은 schema identifier와 JOIN은 compiler 경계에서 실행되지 않는다.
-3. 각 projection 컬럼은 source와 도메인 기준일을 갖는다.
-4. 대표 invalid taxonomy/future value와 Query Frame timeout은 ABSTAIN한다.
+| 실패 질문 유형 | 실패 문항 | 주요 failure code |
+|---|---|---|
+| single_product_lookup | q001, q002, q003, q005, q006, q007, q008, q009 | timeout 7, over-5s 1 |
+| same_vehicle_comparison | q010 | timeout 1 |
+| filtered_ranking | q011, q012, q013, q017, q018 | timeout 5 |
 
-### 아직 확정할 수 없는 것
+모든 유형에서 실패했으므로 특정 의미 유형의 문제라고 결론 내릴 수 없다. 공통 upstream
+HCX timeout이 지배적인 패턴이다. timeout은 모두 빈 Frame으로 전체 조회하지 않고
+`ABSTAIN_UNRESOLVED_QUERY`로 안전 종료됐다.
 
-1. offline 평가는 저장 Frame을 사용하므로 실시간 HCX 추출 안정성을 포함하지 않는다.
-2. 고정 14문항 통과가 paraphrase나 처음 보는 RDB 질문의 일반화 성능을 뜻하지 않는다.
-3. entity 미존재, DB 장애 등 모든 ABSTAIN 유형의 운영 빈도는 아직 측정하지 않았다.
-4. Graph/Vector가 필요한 나머지 질문에는 이 결과를 확장 적용할 수 없다.
+## 8. 2차 Stability — 3회에서 필요 시 5회
 
-## 8. 다음 Promotion Gate
+각 문항을 먼저 3회 실행하고, 실패·ABSTAIN·5초 초과가 한 번이라도 있으면 2회를
+추가했다. 14문항 모두 확장 조건에 해당해 총 70회가 됐다.
 
-다음 단계에서는 코드를 더 늘리기 전에 현재 실행기로 아래만 추가 측정한다.
+| 지표 | 결과 |
+|---|---:|
+| 전체 attempt | 70 |
+| Functional Success | 8/70 (11.43%) |
+| Query Frame ≤5초 | 7/70 (10.00%) |
+| Strict Success | 7/70 (10.00%) |
+| Query Frame timeout | 62/70 (88.57%) |
+| Query Frame p50 / p95 | 13.056초 / 13.110초 |
+| E2E p50 / p95 | 13.059초 / 13.112초 |
 
-1. 14문항 live 반복 최소 3회: 성공률, answer correctness, p50/p95, timeout률
-2. 의미를 유지한 holdout paraphrase: grounding 및 DB exact 일반화
-3. ABSTAIN confusion matrix: 정상 질의 false abstain과 위험 질의 false answer
-4. 위 조건 통과 후에만 Graph/Vector route를 별도 vertical slice로 추가
+| 문항 | Functional | ≤5초 | Strict | Query Frame min / median / max(초) |
+|---|---:|---:|---:|---|
+| q001 | 1/5 | 1/5 | 1/5 | 4.312 / 13.076 / 13.128 |
+| q002 | 2/5 | 2/5 | 2/5 | 3.945 / 13.050 / 13.065 |
+| q003 | 1/5 | 1/5 | 1/5 | 2.687 / 13.065 / 13.307 |
+| q005 | 1/5 | 1/5 | 1/5 | 3.063 / 13.072 / 13.110 |
+| q006 | 0/5 | 0/5 | 0/5 | 13.056 / 13.063 / 13.235 |
+| q007 | 1/5 | 1/5 | 1/5 | 3.054 / 13.046 / 13.056 |
+| q008 | 0/5 | 0/5 | 0/5 | 13.042 / 13.047 / 13.058 |
+| q009 | 0/5 | 0/5 | 0/5 | 13.054 / 13.056 / 13.071 |
+| q010 | 1/5 | 1/5 | 1/5 | 4.742 / 13.047 / 13.068 |
+| q011 | 1/5 | 0/5 | 0/5 | 7.119 / 13.055 / 13.078 |
+| q012 | 0/5 | 0/5 | 0/5 | 13.050 / 13.053 / 13.066 |
+| q013 | 0/5 | 0/5 | 0/5 | 13.046 / 13.069 / 13.072 |
+| q017 | 0/5 | 0/5 | 0/5 | 13.043 / 13.058 / 13.074 |
+| q018 | 0/5 | 0/5 | 0/5 | 13.045 / 13.056 / 13.067 |
 
-현재 판정은 **RDB-only offline accuracy/safety PASS, live stability NOT YET
-PROMOTED**다.
+성공한 8회 중 7회는 5초 이내였고, q011 한 번은 DB exact/evidence가 맞았지만
+7.119초가 걸렸다. 기능 성공 시 DB mismatch와 evidence 실패는 0건이었다.
+`strict_success_rate=10% < 95%`이므로 `redesign_recommended=true`다.
+
+## 9. 3차 Generalization — 의미 보존 Paraphrase
+
+각 원문에서 상품명·티커, 숫자·단위, 연산자, 정렬·limit, 요청 필드를 유지하고 어순과
+조사만 바꾼 paraphrase 14개를 각 1회 실행했다.
+
+| 지표 | 결과 |
+|---|---:|
+| 전체 attempt | 14 |
+| Functional Success | 3/14 (21.43%) |
+| Query Frame ≤5초 | 2/14 (14.29%) |
+| Strict Success | 2/14 (14.29%) |
+| Query Frame timeout | 10/14 (71.43%) |
+| Query Frame p50 / p95 | 13.053초 / 13.079초 |
+| E2E p50 / p95 | 13.056초 / 13.082초 |
+| Base 핵심 plan 동등 | 3/14 (21.43%) |
+
+- q001_p1, q007_p1: strict success, DB exact, evidence 및 plan 동등성 통과
+- q011_p1: 기능·DB·evidence·plan은 통과했으나 Query Frame 6.276초로 SLA 실패
+- q013_p1: 8.320초 후 `ABSTAIN_UNRESOLVED_QUERY`
+- 나머지 10건: Query Frame HTTP timeout 후 안전 ABSTAIN
+
+일반화 성공률이 낮지만 timeout이 다수를 차지하므로 paraphrase 의미 처리 능력만의
+실패율로 해석할 수 없다. 성공한 3건은 모두 base Gold DB 결과와 핵심 plan이 같았다.
+
+## 10. 이전 q018 단건 관찰
+
+새 5초 목표 실험과 섞지 않고 `legacy_q018_observation`으로 보존했다.
+
+| 시도 | HTTP timeout | 결과 | 응답시간 |
+|---:|---:|---|---:|
+| 1 | 12초 | timeout 안전 ABSTAIN | 12.093초 |
+| 2 | 12초 | timeout 안전 ABSTAIN | 12.232초 |
+| 3 | 13초 | 정상 성공 | 6.560초 |
+
+## 11. 최종 판정과 다음 단계
+
+### 통과
+
+1. 저장 Query Frame 이후 deterministic RDB 경로: Gold exact 14/14
+2. Schema hallucination 0건, evidence completeness 100%
+3. HCX timeout 시 DB를 실행하지 않고 안전 ABSTAIN
+4. 이번 live 실험에서 기능 성공한 호출의 DB exact/evidence 계약
+
+### 실패
+
+1. Query Frame 5초 SLA: 안정성 단계 7/70(10%)
+2. Live Functional Success: 안정성 단계 8/70(11.43%)
+3. Live Strict Success: 안정성 단계 7/70(10%)
+4. Paraphrase Strict Success: 2/14(14.29%)
+
+따라서 현재 판정은 **RDB deterministic path PASS, 실시간 HCX 포함 운영 안정성
+FAIL, 재설계 필요**다. 다음 실험은 이번 결과를 고정한 뒤 HCX latency 원인을 먼저
+분리해야 한다. prompt 길이·출력 schema/token·API endpoint/queue·timeout 정책 중
+하나만 독립변수로 바꾸어 비교하며, 안정성 결과를 개선하기 전에 Graph/Vector 범위로
+확장하지 않는다.
+
+후속 단일변수 실험의 명세·실행 결과는
+[`6_2_result_query_frame_latency.md`](6_2_result_query_frame_latency.md)에 분리해 누적한다.
