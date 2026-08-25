@@ -1,92 +1,104 @@
 # 데이터 레이어 계획 (원본 / 보강 / 관계)
 
-새로 만드는 모든 값을 어디에 둘지에 대한 단일 기준. 근거 표시(주최측 데이터 vs 외부 보강 구분)와 15초 응답(RDB 선필터)을 동시에 만족하기 위한 구조다.
+> 현행 기준: 주최측 2026-08-24 배포본 · 외부 데이터 허용 상한 `as_of <= 2026-08-24`
 
-## 판단 기준
+## 1. 판단 기준
 
-| 값의 모양 | 저장 위치 | 예시 |
+1. 주최측 원천은 `data/csv/`에 그대로 두며 값 수정·컬럼 추가를 하지 않는다.
+2. 1:1 스칼라 보강은 `data/enriched/`, 1:N 관계는 `data/relations/`에 둔다.
+3. 외부 원천은 `data/external/`에 원본과 `{원본파일명}.meta.json`을 함께 둔다.
+4. 주최측 값과 외부 값이 충돌하면 주최측을 우선하고 충돌 사실을 기록한다.
+5. 기준일을 추정하지 않는다. 정책 상한과 실제 `as_of`를 분리한다.
+
+## 2. 디렉터리와 파일명
+
+```text
+data/csv/        주최측 Excel 변환본(동결)
+data/enriched/   원천과 동일 그레인의 스칼라 보강
+data/relations/  주어-목적어 1건/행 관계
+data/external/   외부 원본 + sidecar metadata
+ontology/        TBox와 생성 ABox
+artifacts/       재생성 가능한 빌드 결과
+```
+
+| 종류 | 규칙 | 예시 |
 |---|---|---|
-| 상품 1개당 값 1개 (스칼라) 또는 원본의 재그레인 | 파생 테이블 (`data/enriched/`) | ter(총보수), replication, hedge_type, is_sellable, 등급 ordinal, 펀드 dedup |
-| 상품 1개당 값 N개 / 엔티티 간 연결 | 관계 테이블 (`data/relations/`) → ttl 트리플 | themes, 구성종목, 기업↔자회사, ETF↔지수 |
+| 주최측 변환본 | `{테이블코드}_{슬러그}_{종류}_{스냅샷}.csv` | `PRFD01N001_fund_pub_master_20260824.csv` |
+| 파생·관계 | `{슬러그}_{종류}.csv` | `bond_kr_enriched.csv`, `etf_theme.csv` |
+| 외부 원천 | 출처 식별자와 실제 기준일 포함 | `dart_corpcode_20260711.xml` |
+| 외부 sidecar | 원본 전체 파일명 뒤 `.meta.json` | `dart_corpcode_20260711.xml.meta.json` |
 
-- 다중값을 CSV 컬럼에 `;`로 이어붙이면 SQL 필터·그래프 탐색 둘 다 망가진다 → 관계는 반드시 롱포맷 관계 테이블.
-- 스칼라를 그래프에만 두면 정렬·비교 질의가 SPARQL로 밀려 15초 제한에 불리하다 → 스칼라는 RDB 컬럼.
-- 관계 테이블은 온톨로지의 원천이다: 같은 CSV에서 RDB 적재와 `ontology/*.ttl` 트리플 생성을 둘 다 뽑는다(이중 작업 아님).
+## 3. 생성 규칙
 
-## 디렉터리 구조
+- builder는 입력·출력 경로와 PK를 명시하고 결정적으로 실행되어야 한다.
+- 원천 컬럼은 소문자 이름과 UTF-8 BOM을 그대로 처리한다.
+- 파생 테이블은 원천 PK를 보존한다. 채권은 `(pd_no,pd_exg_mkt,info_seq)`, ETF는 `pd_itm_no`다.
+- 펀드는 `itm_no`가 단독 유일키이고 `prfd_attr_cds`가 집약돼 있으므로 별도 dedup을 만들지 않는다.
+- 관계 테이블은 `source`와 실제 `as_of`를 가진다. 기준일이 불명인 경우 빈 값으로 남긴다.
+- 외부 데이터는 sidecar의 `as_of <= 2026-08-24`를 검증한 뒤 사용한다.
 
-```
-data/csv/        원본 변환본만. 동결 — 파생물 저장 금지, 컬럼 추가·값 수정 금지
-data/enriched/   원본 파생 테이블 (재그레인 + 스칼라 보강). 원본 PK + 출처 컬럼(*_source)
-data/relations/  롱포맷 관계 테이블 (주어ID, 목적어, source, as_of)
-data/external/   외부 수집 원천 (EXTERNAL_DATA_PLAN.md 규칙: as_of ≤ 2026-07-11, 사이드카 JSON)
-ontology/*.ttl   relations + enriched 스키마에서 생성
+## 4. 산출물 현황
 
-script/*.py      실행 스크립트 (build_*.py 파생 생성, collect_*.py 수집, validate_*.py 검증)
-EDA/src/*.py     jupytext 노트북 소스 전용 (01~05). 실행 스크립트를 여기 두지 않는다
-docs/docs_data_layer/ · docs/docs_data_collection/  문서
-```
-
-### 파일명 규칙
-
-| 대상 | 규칙 | 예 |
-|---|---|---|
-| 원본 변환본 | `{테이블코드}_{슬러그}_{종류}_{스냅샷}.csv` — 출처 추적이 필요하므로 테이블코드·날짜 유지 | `PRFD01N001_fund_pub_master_20260711.csv` |
-| 파생/관계 테이블 | `{슬러그}_{종류}.csv` — 스냅샷이 하나뿐이라 날짜 중복 표기 안 함 | `fund_pub_dedup.csv`, `etf_theme.csv` |
-| 외부 수집 원천 | `{식별자}_{as_of}.{확장자}` + 사이드카 `{원본파일명}.meta.json` | `kodex_200_20260710.xls` + `kodex_200_20260710.xls.meta.json` |
-
-파일명은 **ASCII만** 사용한다. 원본 xlsx가 NFD 한글이라 경로 하드코딩이 깨졌던 전례가 있다.
-
-## 외부 원천 → 관계 테이블 파이프라인
-
-`data/external/`은 **원천 보관소**이고 질의에 직접 쓰이지 않는다. 반드시 `script/build_*.py`를 거쳐 정규화된 `data/relations/` 또는 `data/enriched/`로 떨어뜨린 뒤 사용한다.
-
-```
-data/external/{항목}/{파일} + 사이드카 JSON(source, as_of, retrieved_at, url)
-        │  script/build_*.py — 식별자 정규화, 조인키 매핑, as_of·source 부여
-        ▼
-data/relations/*.csv (관계) 또는 data/enriched/*.csv (스칼라)
-        │  ontology 빌드
-        ▼
-ontology/*.ttl
-```
-
-관계 테이블의 `as_of`는 사이드카 JSON의 `as_of`를 그대로 승계한다. 시점을 모르는 관계는 `as_of`를 빈 값으로 두되 **추정 날짜를 채워 넣지 않는다** — 근거 표시에서 거짓 기준일이 되기 때문이다.
-
-## 생성 규칙
-
-1. **원본 동결**: `data/csv/`에는 원본 변환본만 둔다. 값 수정·컬럼 추가는 물론 파생 테이블 저장도 금지. 깨진 행(펀드 itm_no=`"`) 배제도 파생 테이블에서만.
-2. **출처 컬럼 필수**: 보강 스칼라에는 `{컬럼}_source`를, 관계 테이블에는 `source`·`as_of`를 붙인다 (`RDB` = 주최측 값, `LSEG` 등 = 외부). 답변 evidence가 이 컬럼을 그대로 인용한다.
-3. **우선순위**: 주최측 값이 0이 아닌 실값이면 주최측 우선 → 결측·0.0 더미면 외부로 보완 → 둘 다 없으면 결측 유지("확인할 수 없음" 대상).
-4. **재현 가능**: 모든 파생 테이블은 `script/build_*.py` 스크립트로 생성한다. 수작업 편집 금지.
-
-## 산출물 현황
-
-`원천데이터` 열은 이 파일이 어느 데이터에서 파생됐는지를 나타낸다. **주최측**은 2026-07-11 스냅샷 원본(`data/csv/`), **외부**는 대회 규칙상 `as_of ≤ 2026-07-11`을 지켜 별도 수집한 데이터(상세는 `EXTERNAL_DATA_SOURCES.md`), **내부 파생**은 이 표의 다른 행을 조합해 만든 2차 산출물이다.
-
-| 파일 | 내용 | 원천데이터 | 스크립트 |
+| 산출물 | 그레인·역할 | 원천 | builder |
 |---|---|---|---|
-| `data/enriched/fund_pub_dedup.csv` | 펀드 1행화(11,138), 속성코드는 `prfd_attr_cds`로 집약 | 주최측 `PRFD01N001_fund_pub_master` | `build_fund_dedup.py` |
-| `data/enriched/etf_kr_enriched.csv` | 국내ETF/ETN PK + LSEG 스칼라(ter·replication·base_market·base_asset·hedge_type) + `charge_rt_final`/`charge_rt_source` | 주최측 `PREF01N001_etf_kr_master` + 외부 LSEG(`lseg_static_metadata.json`) | `build_etf_enrichment.py` |
-| `data/enriched/bond_kr_enriched.csv` | 국내채권 PK + 등급 ordinal(`crd_grd_rank`, 1=AAA) + 잔존만기(`remaining_days`/`maturity_bucket`, 2026-07-11 기준 재계산) + `is_sellable`(254건) | 주최측 `PRBD01N001_bond_kr_master` | `build_bond_enrichment.py` |
-| `data/relations/etf_theme.csv` | 국내ETF↔테마 (LSEG themes, 176종) 롱포맷. `as_of`는 LSEG 수집 시점 미확인이라 공란 | 외부 LSEG(`lseg_static_metadata.json`) | `build_etf_enrichment.py` |
-| `data/relations/etf_holding.csv` | 국내ETF↔편입종목 (KODEX/TIGER/RISE/ACE 4사, `as_of` 2026-07-10) 롱포맷. 식별자는 원본 보존(`holding_code_raw`/`holding_code_type`) | 외부 운용사 4사 API(KODEX/TIGER/RISE/ACE) | `collect_etf_holdings.py` → `build_etf_holding.py` |
-| `data/enriched/company_master.csv` | DART 기업 고유번호 마스터(118,709, 상장 3,983/비상장 114,726) + 정규화명 `corp_name_norm` | 외부 DART `corpCode` + KIND 상장법인목록 | `build_company_relations.py` |
-| `data/enriched/holding_code_map.csv` | 편입종목 ticker6 1,393종 식별자 해소: 정확매칭 1,211 / 모ETF 72(`etf_isin`) / 우선주→보통주 20(`common_ticker`) / 미해소 90(대부분 회사채 코드 — 오매칭 위험으로 공란 유지). `match_rule`로 판정 근거 기록 | 내부 파생 (`etf_holding.csv` + `company_master.csv` + 주최측 `PREF01N001`) | `build_holding_code_map.py` |
-| `data/relations/company_subsidiary.csv` | 기업↔자회사 지분율 (29,524행, 모회사 2,266사) 롱포맷. 자회사는 법인명 문자열이라 `child_corp_code`로 마스터에 되붙임(**행 기준 30.33%** = 8,955/29,524, 판정 근거는 `child_match_rule`: unique_name 7,780 / clean_unique_name 868 / unique_listed 275 / clean_unique_listed 32). 고유 자회사명 기준으로는 **26.48%**(6,572/24,818)다 — **두 수치는 분모가 다를 뿐 둘 다 맞다. 인용할 때 기준을 함께 적는다**. 비상장 동명이인·사명변경은 미매칭 유지. `as_of`는 공시 접수일(`rcept_no`), 2026-07-11 초과분 제외 | 외부 DART `otrCprInvstmntSttus`(타법인출자현황) | `collect_dart.py` → `build_company_relations.py` |
-| `ontology/instances_*.ttl` | 위 관계·마스터 테이블의 TTL 인스턴스 5파일(1,392,793트리플, 약 64MB). fp:Holding·fp:SubsidiaryRelation n-ary, 결정적 출력. **gitignore 대상**(재생성 가능·주최측 데이터 파생) | 내부 파생 (위 `data/relations/`·`data/enriched/` 전체) | `build_ontology_instances.py` (검증 `validate_ontology.py`) |
-| `docs/docs_data_layer/DATA_INVENTORY.md` | 위 전체의 행수·컬럼·결측률 스냅샷 (문서, 자동 생성) | 내부 파생 (위 전체) | `build_data_inventory.py` |
+| `data/enriched/bond_kr_enriched.csv` | 채권 복합 PK별 등급 rank·잔존만기·구매가능 | 주최측 채권 master | `build_bond_enrichment.py` |
+| `data/enriched/etf_kr_enriched.csv` | ETF별 총보수·복제방식 보완 | 주최측 ETF + LSEG | `build_etf_enrichment.py` |
+| `data/enriched/company_master.csv` | 기업 1건/행 | DART corpCode + KIND | `build_company_relations.py` |
+| `data/enriched/holding_code_map.csv` | 편입코드 1건/행 | ETF holding + company master | `build_holding_code_map.py` |
+| `data/relations/etf_theme.csv` | ETF-테마 1건/행 | LSEG | `build_etf_enrichment.py` |
+| `data/relations/etf_holding.csv` | ETF-편입종목 1건/행 | 운용사 snapshot | `build_etf_holding.py` |
+| `data/relations/company_subsidiary.csv` | 모회사-자회사 출자 1건/행 | DART 공시 | `build_company_relations.py` |
 
-채권 보강 테이블은 전 컬럼이 원본 파생이라 컬럼별 `*_source` 대신 테이블 전체에 `source` = `derived:PRBD01N001` 한 컬럼을 둔다.
+정확한 행수·컬럼수는 `DATA_INVENTORY.md`에서만 관리한다.
 
-## 변경 추적
+## 5. 도메인별 안전 규칙
 
-데이터 구조 변경 이력은 수기 changelog 대신 `docs/docs_data_layer/DATA_INVENTORY.md`의 `git diff`로 관리한다.
+### 채권
 
-1. 원본 교체·파생 테이블 추가·컬럼 변경이 생기면 `python3 script/build_data_inventory.py`를 재실행한다.
-2. 갱신된 `DATA_INVENTORY.md`를 함께 커밋한다. `git diff`가 곧 "어느 파일의 어느 컬럼이 언제 바뀌었나"의 답이 된다.
-3. 문서는 직접 편집하지 않는다. 출력은 결정적이어야 하므로 생성 시각 같은 매 실행마다 바뀌는 값을 넣지 않는다(diff 노이즈 방지).
+- 물리 조인은 복합키를 사용하고 종목 집계는 `DISTINCT pd_no`로 한다.
+- `buyable_quantity`는 조회·필터·evidence에 쓰지 않는다.
+- 구매가능은 원화이면서 `remaining_days > 0`인 종목으로 정의한다.
 
-## 다음 후보 (미생성)
+### ETF
 
-- `data/relations/product_index.csv`: 상품↔기초지수/벤치마크 — 지수 별칭 매핑 후
+- 국내 ETF 질의는 `pd_grp_no='ETF'`가 필수다.
+- LSEG 보강은 주최측 값이 비었거나 명백한 0.0 dummy일 때만 사용한다.
+- ETF holding은 실제 `as_of=2026-07-10` 외부 snapshot이다.
+
+### 펀드
+
+- 1행=1펀드이며 `itm_no`가 단독 PK다.
+- 공모 질의는 `prvo_pbff_desc='공모'`로 사모를 제외한다.
+- 판매중·당사판매 모집단은 `sale_yn`과 `thco_sale_yn`을 함께 적용한다.
+- 보수 4종은 천분율을 %로 변환하고 `fd_prsv_r`은 합산하지 않는다.
+
+## 6. 외부 provenance
+
+허용 상한 2026-08-24는 실제 수집일을 뜻하지 않는다.
+
+- ETF 편입관계: `as_of=2026-07-10`
+- DART/KIND 기업 원천: 파일·sidecar의 `as_of=2026-07-11`
+- 자회사 관계: 공시 접수번호에서 구한 행별 날짜
+- ETF theme: 기준일 미확인, NULL 유지
+
+과거 날짜가 파일명에 있다는 이유로 08-24로 이름을 바꾸거나 metadata를 덮어쓰지 않는다.
+
+## 7. 변경 추적과 검증
+
+```bash
+python3 script/build_data_inventory.py
+python3 src/kb/build_rdb.py --check
+python3 src/kb/build_schema_catalog.py --check
+python3 script/validate_external.py
+python3 script/validate_ontology.py
+python3 script/test_rdb_vertical_slice.py --db
+```
+
+`DATA_INVENTORY.md`와 `table_definition_v1_0.csv`는 생성기로만 갱신한다.
+
+## 8. 다음 후보
+
+- 해외 ETF와 공모펀드 편입종목 관계
+- 펀드 투자전략·운용철학 content index
+- Graph Store 적재와 SPARQL runtime
+- cutoff 이하 최신 외부 snapshot 선택 로직

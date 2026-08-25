@@ -1,44 +1,41 @@
 # DB Table 정의서 v1.0
 
-> 코드 기준: 2026-08-24 · 데이터 cutoff: **2026-07-11**
+> 코드·주최측 배포본 기준: 2026-08-24 · 외부 데이터 허용 상한: `as_of <= 2026-08-24`
 
-왕규/이정 전달용 물리·의미 스키마 정의서다. 컬럼 단위 원본은 [table_definition_v1_0.csv](table_definition_v1_0.csv)이며 `python3 src/kb/build_schema_catalog.py`로 재생성한다.
+컬럼 단위 정본은 자동 생성 파일 `table_definition_v1_0.csv`다. 이 문서는 객체·관계 요약이며 수치는 생성 CSV와 실제 DB 검증에서 가져온다.
 
-## 1. 정의 범위와 상태
+## 1. 정의 범위
 
-| Store | 정의 대상 | 상태 |
-|---|---|---|
-| PostgreSQL/RDB | 3 schema, 12 tables, 312 columns | live DB 검증 완료 (2026-08-24) |
-| PostgreSQL/pgvector | 2 tables, 12 columns | live DB 검증 완료 (2026-08-24) |
-| RDF Graph | TBox 5 + ABox 5 TTL | TTL 생성·검증 완료; pyoxigraph runtime 미구현 |
-| Content Vector | 해당 없음 | 미구현 |
-
-RDB는 원천 예상 행수와 live DB 행수, PK/FK 20개, cutoff 위반 0건을 대조했다. pgvector는 `bond_schema_terms` 130행과 `schema_terms_all` 188행이 모두 1024차원이고 embedding NULL이 없음을 확인했다.
+| 저장소 | 객체 | 정의 컬럼 | 상태 |
+|---|---:|---:|---|
+| PostgreSQL/RDB | 3 schema, 11 tables | 340 | live DB 검증 완료 |
+| PostgreSQL/pgvector | 2 tables | 12 | live DB 검증 완료 |
+| 합계 | 13 tables | 352 | 정의 CSV 352행 |
+| RDF Graph | TBox 5 + ABox 5 TTL | RDF property | TTL 검증 완료, Graph Store 미구현 |
 
 ## 2. PostgreSQL RDB 객체
 
-| Schema | Table | Grain | Rows | Columns | Primary key |
+| schema | table | grain | rows | columns | primary key |
 |---|---|---|---:|---:|---|
-| raw | bond_kr_master | 채권 1건 | 42,394 | 40 | `pd_no` |
-| raw | etf_kr_master | 국내 ETF·ETN 1건 | 1,733 | 73 | `pd_itm_no` |
-| raw | etf_gl_master | 해외 ETF·ETN 1건 | 5,646 | 49 | `pd_itm_no` |
-| raw | fund_pub_master | 펀드-속성코드 1건 | 95,618 | 45 | `itm_no, prfd_attr_cd` |
-| enriched | bond_kr_enriched | 채권 1건 | 42,394 | 12 | `pd_no` |
-| enriched | etf_kr_enriched | 국내 ETF·ETN 1건 | 1,733 | 12 | `pd_itm_no` |
-| enriched | fund_pub_dedup | 펀드 1건 | 11,138 | 45 | `itm_no` |
+| raw | bond_kr_master | 채권 거래·정보차수 1건 | 21,882 | 58 | `(pd_no,pd_exg_mkt,info_seq)` |
+| raw | etf_kr_master | 국내 ETF·ETN 상품 1건 | 1,779 | 98 | `pd_itm_no` |
+| raw | etf_gl_master | 해외 ETF·ETN 상품 1건 | 6,037 | 49 | `pd_itm_no` |
+| raw | fund_pub_master | 펀드 1건 | 23,676 | 75 | `itm_no` |
+| enriched | bond_kr_enriched | 채권 거래·정보차수 1건 | 21,882 | 12 | `(pd_no,pd_exg_mkt,info_seq)` |
+| enriched | etf_kr_enriched | 국내 ETF·ETN 상품 1건 | 1,779 | 12 | `pd_itm_no` |
 | enriched | company_master | 기업 1건 | 118,709 | 5 | `corp_code` |
 | enriched | holding_code_map | 원본 편입코드 1건 | 1,393 | 8 | `holding_code_raw` |
-| relations | etf_theme | ETF-테마 1건 | 5,646 | 4 | `pd_itm_no, theme` |
+| relations | etf_theme | ETF-테마 1건 | 5,646 | 4 | `(pd_itm_no,theme)` |
 | relations | etf_holding | ETF-편입종목 1건 | 47,016 | 8 | `holding_id` identity |
-| relations | company_subsidiary | 기업-자회사 출자 1건 | 29,524 | 11 | `relation_id` identity |
+| relations | company_subsidiary | 출자관계 1건 | 30,097 | 11 | `relation_id` identity |
 
-CSV 컬럼은 310개이고 PostgreSQL이 추가하는 identity 2개를 포함해 RDB 물리 컬럼은 총 312개다.
+국내 ETF CSV는 1,780행이지만 `pd_itm_no='KR'` 오염 1행을 제외해 RDB에는 1,779행을 적재한다.
 
 ### 핵심 관계
 
 ```mermaid
 erDiagram
-    BOND_KR_MASTER ||--|| BOND_KR_ENRICHED : pd_no
+    BOND_KR_MASTER ||--|| BOND_KR_ENRICHED : "pd_no + pd_exg_mkt + info_seq"
     ETF_KR_MASTER ||--|| ETF_KR_ENRICHED : pd_itm_no
     ETF_KR_MASTER ||--o{ ETF_THEME : pd_itm_no
     ETF_KR_MASTER ||--o{ ETF_HOLDING : pd_itm_no
@@ -48,77 +45,47 @@ erDiagram
     COMPANY_MASTER o|--o{ COMPANY_SUBSIDIARY : child_corp_code
 ```
 
-공모펀드 원본과 dedup은 깨진 원본 행과 grain 변경 때문에 DB FK를 강제하지 않는다. 의미상 lineage는 유지하되 물리 FK로 허위 완전성을 표현하지 않는다.
+펀드는 `raw.fund_pub_master`를 직접 사용한다. 별도 dedup 테이블이 없다.
 
-## 3. pgvector 객체
+## 3. 제약과 품질 계약
 
-두 테이블의 컬럼 구조는 같다.
+- PK/FK 합계는 19개 이상이어야 한다.
+- 채권 raw↔enriched FK는 세 컬럼 복합키 전체를 사용한다.
+- 국내 ETF 관련 테이블은 오염키 `KR` 1행을 동일하게 제외한다.
+- 관계 테이블의 `as_of`는 2026-08-24를 초과할 수 없다.
+- `buyable_quantity`는 원천 보존만 하며 select/filter binding으로 노출하지 않는다.
+- 공모펀드 모집단은 `prvo_pbff_desc='공모'`로 제한한다.
 
-| Column | Type | Nullable | 설명 |
-|---|---|---|---|
-| `term_uri` | text | N | TBox resource 식별자, PK |
-| `label` | text | N | 대표 라벨 |
-| `comment` | text | N | 근거가 되는 TBox 설명 |
-| `alt_labels` | text[] | N | 검색용 대체 라벨 |
-| `content` | text | N | URI·label·altLabel·comment 결합 문자열 |
-| `embedding` | vector(1024) | N | CLOVA Studio `bge-m3` 임베딩 |
+## 4. pgvector 객체
 
-| Table | Rows | Source | Runtime use |
-|---|---:|---|---|
-| `public.bond_schema_terms` | 130 | `common.ttl`, `bond_kr.ttl` | 운영 채권 grounding |
-| `public.schema_terms_all` | 188 | TBox 5파일 | 전체 도메인 평가 |
+| table | grain | rows | columns | primary key |
+|---|---|---:|---:|---|
+| `public.bond_schema_terms` | TBox resource 1건 | 130 | 6 | `term_uri` |
+| `public.schema_terms_all` | TBox resource 1건 | 188 | 6 | `term_uri` |
 
-두 테이블은 목적이 다르므로 병합하지 않는다. `schema_terms_all`은 평가용이며 운영 테이블을 암묵적으로 대체하지 않는다.
+두 테이블의 embedding은 1024차원이며 NULL이 없어야 한다. Vector는 schema grounding에만 사용한다.
 
-## 4. Graph 스키마 정의
+## 5. Graph 스키마
 
-Graph는 관계형 table 목록에 포함하지 않는다.
-
-| 구분 | 물리 객체 | 역할 | 상태 |
-|---|---|---|---|
-| TBox | `common.ttl` + 도메인 TTL 4개 | 클래스·property·domain/range·코드리스트 | 구현 완료 |
-| ABox | `instances_*.ttl` 5개 | 상품·기업·증권·관계 인스턴스 | 생성 완료 |
-| Store | pyoxigraph 영속 store | TTL 적재와 SPARQL 실행 | 미구현 |
-
-URI namespace는 개념 `http://mafest.ai/product#`, 인스턴스 `http://mafest.ai/instance/`다. 상품 URI는 `bond-`, `etfkr-`, `etfgl-`, `fund-`; 기업은 `corp-`; 편입관계는 `hold-`; 자회사관계는 `sub-` 규칙을 사용한다.
-
-관계에 속성이 필요한 편입·자회사 연결은 각각 `fp:Holding`, `fp:SubsidiaryRelation` n-ary 노드로 표현한다. 단순 ObjectProperty로 축약하지 않는다.
-
-## 5. CSV 필드 정의
-
-| Field | 설명 |
-|---|---|
-| `store`, `schema`, `table` | 물리 객체 위치 |
-| `table_description`, `grain` | 객체 역할과 행 단위 |
-| `source_file`, `row_count` | 생성 원천과 적재 예상 행수 |
-| `column_order`, `column_name`, `column_description` | 컬럼 순서·이름·업무 설명 |
-| `data_type`, `nullable`, `primary_key`, `foreign_key` | 물리 제약 |
-| `unit`, `as_of_basis` | 단위와 값의 실질 기준일 |
-| `source_priority` | organizer·derived·external 우선순위 |
-| `transformation_rule`, `quality_rule` | 파생·필터·검증 규칙 |
-| `implementation_status` | builder와 live DB 상태 구분 |
-
-원천 schema와 검증된 binding 어디에도 설명이 없는 컬럼은 `확인할 수 없음`이다. 컬럼명을 보고 의미를 추측해 채우지 않는다.
+- TBox: `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl`
+- ABox: `instances_common.ttl`과 도메인별 instances 4파일
+- 편입관계는 `fp:Holding` n-ary 패턴으로 weight·asOf·supportedBy를 보존한다.
+- DatatypeProperty는 `fp:sourceTable`과 `fp:sourceColumn`을 가진다.
+- Graph Store와 SPARQL runtime은 아직 구현되지 않았다.
 
 ## 6. 생성과 검증
 
 ```bash
-python3 src/kb/build_schema_catalog.py
+python3 src/kb/build_rdb.py --check
 python3 src/kb/build_schema_catalog.py --check
+python3 script/validate_ontology.py
+python3 script/test_rdb_vertical_slice.py --db
 ```
 
-생성 결과:
+통과 기준은 RDB 11테이블, PK/FK 19개, cutoff 위반 0, 정의 CSV 352행, 펀드 ABox 23,676개다.
 
-- `artifacts/schema_catalog.json`: 에이전트용 compact physical catalog
-- `docs/docs_data_layer/table_definition_v1_0.csv`: 전달·검토용 324컬럼 정의
+## 7. 미구현 항목
 
-두 번 생성한 CSV의 SHA-256이 같아야 한다. RDB 312행과 pgvector 12행, 총 324행이 아니면 실패로 본다.
-
-## 7. 전달 시 확인할 미구현 항목
-
-1. pyoxigraph loader·store 경로·SPARQL read-only runtime 확정
-2. Content Vector 대상 컬럼과 evidence chunk 규격 확정
-3. 배포 PostgreSQL에서 12개 RDB 테이블과 2개 pgvector 테이블 실적재 대조
-4. `확인할 수 없음` 컬럼 설명은 주최측 정의서가 추가될 때만 보완
-
-전체 구축 경로와 데이터 함정은 [CURRENT_DATA_BUILD_STRUCTURE.md](CURRENT_DATA_BUILD_STRUCTURE.md)를 따른다.
+- Graph Store 적재와 SPARQL 실행
+- content vector index
+- 해외 ETF·공모펀드 편입종목 확보
