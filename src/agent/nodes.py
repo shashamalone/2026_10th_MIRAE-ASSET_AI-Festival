@@ -7,7 +7,7 @@ import decimal
 
 from agent import query_frame
 from agent.state import State
-from tools import rdb, schema_context, validate
+from tools import rdb, route, schema_context, validate
 
 
 def extract_query_frame(state: State) -> dict:
@@ -37,6 +37,17 @@ def validate_query(state: State) -> dict:
     trace = list(state.get("trace") or [])
     trace.append("validation: PASS" if not abstain else f"validation: {abstain['code']}")
     return {"abstain": abstain, "trace": trace}
+
+
+def select_route(state: State) -> dict:
+    selected = route.select_route(state["intent"], state["plan"])
+    query_type, reason = selected["query_type"], selected["reason"]
+    abstain = None
+    if query_type == "unsupported":
+        abstain = {"code": "ABSTAIN_UNSUPPORTED_ROUTE", "reason": reason}
+    trace = list(state.get("trace") or [])
+    trace.append(f"route: {query_type} steps={len(selected['execution_plan'])} — {reason}")
+    return {"route": selected, "abstain": abstain, "trace": trace}
 
 
 def execute_rdb(state: State) -> dict:

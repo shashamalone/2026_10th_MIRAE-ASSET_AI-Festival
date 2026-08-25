@@ -10,6 +10,7 @@ requests
 
 # 온톨로지
 rdflib
+pyoxigraph
 
 # KnowledgeBase
 psycopg[binary]   # PostgreSQL 드라이버 (스키마 벡터 인덱스)

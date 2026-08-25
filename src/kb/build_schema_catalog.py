@@ -208,8 +208,12 @@ def validate(cat: dict, metadata: dict, rules: dict) -> None:
     missing = referenced - set(ids)
     if missing:
         bad.append(f"rule이 없는 binding 참조 {sorted(missing)}")
-    if rules.get("data_cutoff") != "2026-08-24":
-        bad.append("data cutoff는 2026-08-24여야 함")
+    if rules.get("data_cutoff") != "2026-07-11":
+        bad.append("data cutoff는 2026-07-11이어야 함")
+    cutoff = rules.get("data_cutoff", "")
+    for domain, item in rules.get("domain_as_of", {}).items():
+        if item.get("value", "") > cutoff:
+            bad.append(f"{domain}: as_of {item['value']}가 cutoff {cutoff} 이후")
     if bad:
         raise ValueError("\n".join(bad))
     print(f"PASS schema catalog — tables={len(tables)} bindings={len(bindings)} "

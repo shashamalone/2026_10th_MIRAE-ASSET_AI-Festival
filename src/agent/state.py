@@ -9,6 +9,7 @@ class State(TypedDict):
     intent: dict          # 1단계 Query Frame (agent/query_frame.py, 14필드)
     metadata_context: dict  # verified binding으로 grounding된 LogicalPlan 후보
     plan: dict            # 물리 SQL 문자열이 없는 LogicalPlan
+    route: dict           # query_type enum + 최대 3단계 constrained execution plan
     results: dict         # rows/columns/evidence/abstain
     evidence: list        # 최종 응답에 노출할 source/as_of 근거
     abstain: dict | None  # 결정적 validator의 실패 사유

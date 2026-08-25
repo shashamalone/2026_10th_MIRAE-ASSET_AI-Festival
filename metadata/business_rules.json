@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "data_cutoff": "2026-08-24",
+  "data_cutoff": "2026-07-11",
   "domain_as_of": {
     "bond_kr": {"value": "2026-08-21", "basis": "raw.bond_kr_master.info_base_dt (2026-08-24 배포본)"},
     "etf_kr": {"value": "2026-08-21", "basis": "가격·기준가 기준일; du_ 변동정보는 2026-08-24"},
