@@ -3,7 +3,7 @@ set -euo pipefail
 
 api_url="${API_URL:-http://127.0.0.1:${API_PORT:-8000}}"
 health="$(curl --fail --silent --show-error "${api_url}/health")"
-python3 -c 'import json,sys; h=json.load(sys.stdin); assert h["status"]=="ok", h; assert h["data"]["dataset_version"]=="financial-products-2026-08-24", h' <<<"${health}"
+python3 -c 'import json,sys; h=json.load(sys.stdin); assert h["status"]=="ok", h; assert h["data"]["dataset_version"]=="financial-products-2026-07-11", h' <<<"${health}"
 curl --fail --silent --show-error "${api_url}/db/version" >/dev/null
 curl --fail --silent --show-error "${api_url}/db/catalog" >/dev/null
 curl --fail --silent --show-error "${api_url}/db/coverage" >/dev/null

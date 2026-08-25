@@ -60,12 +60,17 @@ LANGUAGE sql
 IMMUTABLE
 RETURNS NULL ON NULL INPUT
 AS $$
+    WITH normalized AS (
+        SELECT regexp_replace(split_part(btrim(value), ' ', 1), '\.0+$', '') AS v
+    )
     SELECT CASE
-        WHEN btrim(value) ~ '^[0-9]{8}$'
-         AND to_char(to_date(btrim(value), 'YYYYMMDD'), 'YYYYMMDD') = btrim(value)
-        THEN to_date(btrim(value), 'YYYYMMDD')
+        WHEN v ~ '^[0-9]{8}$' AND to_char(to_date(v, 'YYYYMMDD'), 'YYYYMMDD') = v
+        THEN to_date(v, 'YYYYMMDD')
+        WHEN v ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+         AND to_char(to_date(v, 'YYYY-MM-DD'), 'YYYY-MM-DD') = v
+        THEN to_date(v, 'YYYY-MM-DD')
         ELSE NULL
-    END
+    END FROM normalized
 $$;
 
 CREATE TABLE __ENRICHED__.product_master (
@@ -145,7 +150,7 @@ CREATE TABLE __ENRICHED__.etf_gl (
     manager text,
     base_index text,
     currency text,
-    listing_date date,
+    inception_date date,
     effective_as_of date NOT NULL
 );
 
@@ -170,7 +175,7 @@ CREATE TABLE __ENRICHED__.etn_gl (
     isin text,
     issuer text,
     currency text,
-    listing_date date,
+    inception_date date,
     effective_as_of date NOT NULL
 );
 
@@ -195,7 +200,7 @@ CREATE TABLE __ENRICHED__.product_metric (
     metric_code text NOT NULL,
     value numeric,
     unit text NOT NULL,
-    as_of date NOT NULL,
+    as_of date,
     source text NOT NULL,
     source_column text NOT NULL,
     method text NOT NULL,
@@ -232,11 +237,11 @@ CREATE TABLE __RELATIONS__.source_document (
     document_id text PRIMARY KEY,
     title text NOT NULL,
     publisher text NOT NULL,
-    published_at date NOT NULL CHECK (published_at <= DATE '2026-08-24'),
+    published_at date NOT NULL CHECK (published_at <= DATE '__CUTOFF_DATE__'),
     url text NOT NULL,
     source_hash text NOT NULL,
     source_type text NOT NULL,
-    as_of date CHECK (as_of <= DATE '2026-08-24'),
+    as_of date CHECK (as_of <= DATE '__CUTOFF_DATE__'),
     ingested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     UNIQUE (source_hash)
 );
@@ -247,7 +252,7 @@ CREATE TABLE __RELATIONS__.product_holding (
     security_id text NOT NULL REFERENCES __ENRICHED__.security_master(security_id),
     weight numeric,
     unit text NOT NULL DEFAULT 'percent',
-    as_of date NOT NULL CHECK (as_of <= DATE '2026-08-24'),
+    as_of date NOT NULL CHECK (as_of <= DATE '__CUTOFF_DATE__'),
     source_document_id text NOT NULL REFERENCES __RELATIONS__.source_document(document_id),
     source text NOT NULL,
     UNIQUE (product_id, security_id, as_of, source_document_id)
@@ -260,7 +265,7 @@ CREATE TABLE __RELATIONS__.product_classification (
     product_id text NOT NULL REFERENCES __ENRICHED__.product_master(product_id),
     classification_type text NOT NULL CHECK (classification_type IN ('theme', 'sector', 'region', 'asset_type')),
     classification_value text NOT NULL,
-    as_of date NOT NULL CHECK (as_of <= DATE '2026-08-24'),
+    as_of date NOT NULL CHECK (as_of <= DATE '__CUTOFF_DATE__'),
     source_document_id text REFERENCES __RELATIONS__.source_document(document_id),
     source text NOT NULL,
     UNIQUE (product_id, classification_type, classification_value, as_of, source)
@@ -271,7 +276,7 @@ CREATE TABLE __RELATIONS__.company_subsidiary (
     parent_security_id text NOT NULL REFERENCES __ENRICHED__.security_master(security_id),
     child_security_id text NOT NULL REFERENCES __ENRICHED__.security_master(security_id),
     ownership_pct numeric,
-    as_of date NOT NULL CHECK (as_of <= DATE '2026-08-24'),
+    as_of date NOT NULL CHECK (as_of <= DATE '__CUTOFF_DATE__'),
     source_document_id text NOT NULL REFERENCES __RELATIONS__.source_document(document_id),
     source text NOT NULL,
     UNIQUE (parent_security_id, child_security_id, as_of, source_document_id)
@@ -329,7 +334,7 @@ CREATE TABLE __VEC__.document_chunk (
     page_number integer,
     citation_text text NOT NULL,
     chunk_text text NOT NULL,
-    published_at date NOT NULL CHECK (published_at <= DATE '2026-08-24'),
+    published_at date NOT NULL CHECK (published_at <= DATE '__CUTOFF_DATE__'),
     source_url text NOT NULL,
     content_hash text NOT NULL,
     embedding_model text NOT NULL CHECK (embedding_model = 'bge-m3'),

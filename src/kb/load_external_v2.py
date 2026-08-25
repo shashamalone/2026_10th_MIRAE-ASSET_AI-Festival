@@ -2,7 +2,7 @@
 """검증된 외부 JSONL bundle을 ``*_next``에 적재한다.
 
 외부 원문과 산출 JSONL은 artifacts(비커밋)에 두며, 모든 published_at/as_of가
-2026-08-24 이하여야 한 행이라도 적재된다.
+2026-07-11 이하여야 한 행이라도 적재된다.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
@@ -18,7 +18,12 @@ import psycopg
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kb.build_data_platform_v2 import SCHEMAS, dsn  # noqa: E402
-from kb.collect_lseg_returns_v2 import OUTPUT as LSEG_OUTPUT  # noqa: E402
+from kb.collect_lseg_returns_v2 import (  # noqa: E402
+    END_DATE as LSEG_END_DATE,
+    OBSERVATION_EDGE_TOLERANCE_DAYS,
+    OUTPUT as LSEG_OUTPUT,
+    START_DATE as LSEG_START_DATE,
+)
 from kb.v2_manifest import EXTERNAL_CUTOFF, ROOT  # noqa: E402
 
 DEFAULT_BUNDLE = ROOT / "artifacts" / "external_v2"
@@ -31,7 +36,7 @@ FILES = {
     "company_subsidiaries": "company_subsidiaries.jsonl",
     "product_documents": "product_documents.jsonl",
 }
-DATE_FIELDS = {"published_at", "as_of"}
+DATE_FIELDS = {"published_at", "as_of", "observation_start", "observation_end"}
 
 
 def execute_many(conn: psycopg.Connection, statement: str, rows) -> None:
@@ -97,6 +102,19 @@ def validate_bundle(records: dict[str, list[dict[str, object]]]) -> dict[str, in
             if identity in ids:
                 raise ValueError(f"{name}:{index}: 중복 식별자 {identity}")
             ids.add(identity)
+    for index, record in enumerate(records["lseg_returns"], 1):
+        if not record.get("is_available"):
+            continue
+        start, end = required(
+            record,
+            ("observation_start", "observation_end"),
+            f"lseg_returns:{index}",
+        )
+        if not (
+            LSEG_START_DATE <= start <= LSEG_START_DATE + timedelta(days=OBSERVATION_EDGE_TOLERANCE_DAYS)
+            and LSEG_END_DATE - timedelta(days=OBSERVATION_EDGE_TOLERANCE_DAYS) <= end <= LSEG_END_DATE
+        ):
+            raise ValueError(f"lseg_returns:{index}: 1년 관측창 불충족 {start}..{end}")
     return {name: len(values) for name, values in records.items()}
 
 

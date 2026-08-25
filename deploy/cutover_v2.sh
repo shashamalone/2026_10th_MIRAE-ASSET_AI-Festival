@@ -17,9 +17,6 @@ if [[ "${recorded_volume}" != "${OXIGRAPH_VOLUME}" ]]; then
   exit 2
 fi
 
-docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-  < sql/v2/090_cutover.sql
-
 rollback_on_error() {
   status=$?
   trap - ERR
@@ -28,6 +25,11 @@ rollback_on_error() {
   exit "${status}"
 }
 trap rollback_on_error ERR
+
+docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+  < sql/v2/090_cutover.sql
+docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+  < sql/v2/100_readonly_grants.sql
 
 docker compose stop graph
 docker compose rm -f graph

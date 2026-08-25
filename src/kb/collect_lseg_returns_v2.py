@@ -10,7 +10,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import psycopg
@@ -20,9 +20,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from kb.build_data_platform_v2 import SCHEMAS, dsn  # noqa: E402
 from kb.v2_manifest import EXTERNAL_CUTOFF, ROOT  # noqa: E402
 
-START_DATE = date(2025, 8, 24)
+START_DATE = date(2025, 7, 11)
 END_DATE = EXTERNAL_CUTOFF
-OUTPUT = ROOT / "artifacts" / "lseg_return_1y_20260824.jsonl"
+OUTPUT = ROOT / "artifacts" / "lseg_return_1y_20260711.jsonl"
+OBSERVATION_EDGE_TOLERANCE_DAYS = 7
 ADJUSTMENTS = [
     "exchangeCorrection",
     "manualCorrection",
@@ -118,16 +119,32 @@ def adjusted_return(ld, ric: str) -> dict[str, object]:
         series = frame.iloc[:, 0].dropna()
         if len(series) < 2:
             return {**base, "value": None, "is_available": False, "unavailable_reason": "INSUFFICIENT_ADJUSTED_HISTORY"}
+        observation_start = date.fromisoformat(str(series.index[0])[:10])
+        observation_end = date.fromisoformat(str(series.index[-1])[:10])
+        window_start_limit = START_DATE + timedelta(days=OBSERVATION_EDGE_TOLERANCE_DAYS)
+        window_end_limit = END_DATE - timedelta(days=OBSERVATION_EDGE_TOLERANCE_DAYS)
+        if not (START_DATE <= observation_start <= window_start_limit) or not (
+            window_end_limit <= observation_end <= END_DATE
+        ):
+            return {
+                **base,
+                "value": None,
+                "is_available": False,
+                "unavailable_reason": "INSUFFICIENT_1Y_OBSERVATION_WINDOW",
+                "observation_start": observation_start.isoformat(),
+                "observation_end": observation_end.isoformat(),
+            }
         first, last = float(series.iloc[0]), float(series.iloc[-1])
         if first == 0:
             return {**base, "value": None, "is_available": False, "unavailable_reason": "ZERO_START_VALUE"}
         return {
             **base,
+            "as_of": observation_end.isoformat(),
             "value": (last / first - 1.0) * 100.0,
             "is_available": True,
             "unavailable_reason": None,
-            "observation_start": str(series.index[0])[:10],
-            "observation_end": str(series.index[-1])[:10],
+            "observation_start": observation_start.isoformat(),
+            "observation_end": observation_end.isoformat(),
         }
     except Exception as exc:
         # 오류 본문에 토큰은 포함하지 않지만 길이는 제한한다. 필드 권한/상품 미존재를
@@ -176,6 +193,7 @@ def check(limit: int) -> dict[str, object]:
         "start": START_DATE.isoformat(),
         "end": END_DATE.isoformat(),
         "adjustments": ADJUSTMENTS,
+        "observation_edge_tolerance_days": OBSERVATION_EDGE_TOLERANCE_DAYS,
         "plain_close_fallback": False,
         "credentials_configured": all(
             os.environ.get(name) for name in ("LSEG_APP_KEY", "LSEG_CLIENT_ID", "LSEG_CLIENT_SECRET")

@@ -4,15 +4,24 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
+
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from kb.build_catalog_v2 import build_outputs  # noqa: E402
 from kb.catalog_v2 import build_catalog  # noqa: E402
-from kb.v2_manifest import SOURCES, snapshot_hash, validate_source_dir  # noqa: E402
-from kb.regression_v2 import load_cases  # noqa: E402
+from kb.collect_lseg_returns_v2 import adjusted_return  # noqa: E402
+from kb.regression_v2 import (  # noqa: E402
+    enforce_case_deadline,
+    load_cases,
+    required_evidence,
+    validate_answer,
+)
+from kb.v2_manifest import DATASET_VERSION, EXTERNAL_CUTOFF, LookAheadError, snapshot_hash, validate_source_dir  # noqa: E402
 from tools.sql_guard import ensure_read_only_sparql, ensure_read_only_sql  # noqa: E402
 
 
@@ -24,10 +33,12 @@ class SourceContractTest(unittest.TestCase):
     def test_exact_source_shapes_and_primary_keys(self):
         self.assertEqual(
             [(item.row_count, len(item.columns)) for item in self.inspections],
-            [(21_882, 58), (1_780, 98), (6_037, 49), (23_676, 75)],
+            [(42_394, 40), (1_734, 73), (5_646, 49), (95_619, 45)],
         )
-        self.assertEqual(self.inspections[0].spec.primary_key, ("pd_no", "pd_exg_mkt", "info_base_dt", "info_seq"))
-        self.assertTrue(any(item.as_dict()["official_nullable_conflicts"] for item in self.inspections))
+        self.assertEqual(self.inspections[0].spec.primary_key, ("pd_no",))
+        self.assertEqual(self.inspections[3].spec.primary_key, ("itm_no", "prfd_attr_cd"))
+        self.assertEqual(self.inspections[3].excluded_rows, 1)
+        self.assertEqual(EXTERNAL_CUTOFF, date(2026, 7, 11))
 
     def test_catalog_contains_every_raw_column_once(self):
         catalog = build_catalog(self.inspections)
@@ -41,8 +52,14 @@ class SourceContractTest(unittest.TestCase):
         outputs = build_outputs()
         target = ROOT / "metadata" / "schema_catalog.json"
         payload = json.loads(outputs[target])
+        self.assertEqual(payload["dataset_version"], DATASET_VERSION)
         self.assertEqual(payload["snapshot_hash"], snapshot_hash(self.inspections))
         self.assertEqual(payload["business_rules"]["buyable_quantity"], "storage_only_never_use_for_purchasability")
+
+    def test_august_snapshot_is_rejected_before_load(self):
+        august = ROOT.parent / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
+        with self.assertRaises(LookAheadError):
+            validate_source_dir(august)
 
 
 class QueryGuardTest(unittest.TestCase):
@@ -82,12 +99,86 @@ class SqlPolicyTest(unittest.TestCase):
         self.assertGreaterEqual(text.count("value is not null and value <> 0"), 4)
         self.assertIn("lseg_adjusted_or_total_return_field_unavailable", text)
 
+    def test_metric_dates_and_fund_expense_semantics(self):
+        text = (ROOT / "sql" / "v2" / "010_enrich.sql").read_text(encoding="utf-8").lower()
+        self.assertIn("'aum', du_last_aum::numeric, 'du_last_aum', __meta__.yyyymmdd(du_upt_dt::text)", text)
+        self.assertIn("'expense_ratio', nullif(btrim(cu_charge_rt), '')::numeric, 'cu_charge_rt', __meta__.yyyymmdd(cu_upt_dt)", text)
+        self.assertNotIn("zrin_fd_cmst_rt", text)
+        self.assertIn("official_axis_absent", text)
+
+    def test_global_inception_and_asset_type_contracts(self):
+        ddl = (ROOT / "sql" / "v2" / "001_platform_schema.sql").read_text(encoding="utf-8")
+        graph = (ROOT / "src" / "kb" / "build_graph_v2.py").read_text(encoding="utf-8")
+        self.assertIn("inception_date date", ddl)
+        self.assertIn('"asset_type": ("hasAssetType", "AssetType")', graph)
+
+    def test_builder_image_and_cutover_grants(self):
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        cutover = (ROOT / "deploy" / "cutover_v2.sh").read_text(encoding="utf-8")
+        self.assertIn("COPY docs/docs_data_layer /app/docs/docs_data_layer", dockerfile)
+        self.assertLess(cutover.index("trap rollback_on_error ERR"), cutover.index("090_cutover.sql"))
+        self.assertLess(cutover.index("100_readonly_grants.sql"), cutover.index("verify_v2.sh"))
+
+
+class LsegWindowTest(unittest.TestCase):
+    class FakeLseg:
+        def __init__(self, frame):
+            self.frame = frame
+
+        def get_history(self, **_kwargs):
+            return self.frame
+
+    def test_short_history_is_not_return_1y(self):
+        frame = pd.DataFrame(
+            {"TRDPRC_1": [100.0, 110.0]},
+            index=pd.to_datetime(["2026-01-02", "2026-07-10"]),
+        )
+        result = adjusted_return(self.FakeLseg(frame), "NEW.RIC")
+        self.assertFalse(result["is_available"])
+        self.assertEqual(result["unavailable_reason"], "INSUFFICIENT_1Y_OBSERVATION_WINDOW")
+
+    def test_full_window_uses_actual_last_observation(self):
+        frame = pd.DataFrame(
+            {"TRDPRC_1": [100.0, 110.0]},
+            index=pd.to_datetime(["2025-07-11", "2026-07-10"]),
+        )
+        result = adjusted_return(self.FakeLseg(frame), "FULL.RIC")
+        self.assertTrue(result["is_available"])
+        self.assertEqual(result["as_of"], "2026-07-10")
+
 
 class RegressionContractTest(unittest.TestCase):
     def test_expected_question_fixture_has_exactly_35_cases(self):
         cases = load_cases()
         self.assertEqual(len(cases), 35)
         self.assertEqual([case["id"] for case in cases], [str(number) for number in range(1, 36)])
+
+    def test_required_evidence_is_checked_per_question(self):
+        case = load_cases()[0]
+        records = [
+            {
+                "requirement_code": item["code"],
+                "requirement_label": item["label"],
+                "subject": "bond_kr:TEST",
+                "source": "PRBD01N001",
+                "source_column": "pd_no",
+                "as_of": "2026-02-24",
+                "evidence_value": "TEST",
+            }
+            for item in required_evidence(case)
+        ]
+        validate_answer(case, {"answer": "ok", "retrieved_context": records})
+        with self.assertRaises(ValueError):
+            validate_answer(case, {"answer": "ok", "retrieved_context": records[:-1]})
+        mislabeled = [{**record} for record in records]
+        mislabeled[0]["requirement_label"] = "다른 근거"
+        with self.assertRaises(ValueError):
+            validate_answer(case, {"answer": "ok", "retrieved_context": mislabeled})
+
+    def test_15_second_boundary_is_enforced(self):
+        enforce_case_deadline("1", 15.0)
+        with self.assertRaises(TimeoutError):
+            enforce_case_deadline("1", 15.001)
 
 
 if __name__ == "__main__":

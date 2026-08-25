@@ -15,8 +15,8 @@ from kb.build_data_platform_v2 import dsn
 from tools.sql_guard import ensure_read_only_sparql, ensure_read_only_sql
 
 APP_VERSION = "2.0.0"
-MAX_ROWS = int(os.environ.get("API_MAX_ROWS", "1000"))
-STATEMENT_TIMEOUT_MS = int(os.environ.get("DB_STATEMENT_TIMEOUT_MS", "10000"))
+MAX_ROWS = int(os.environ.get("API_MAX_ROWS", "100"))
+STATEMENT_TIMEOUT_MS = int(os.environ.get("DB_STATEMENT_TIMEOUT_MS", "2000"))
 OXIGRAPH_URL = os.environ.get("OXIGRAPH_URL", "http://graph:7878").rstrip("/")
 
 app = FastAPI(title="금융상품 데이터 플랫폼", version=APP_VERSION)

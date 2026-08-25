@@ -6,7 +6,7 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
 ################################################################################
-# fp-fund-pub — 국내 공모펀드 (PRFD01N001, 23,676종 중 공모 14,716종)
+# fp-fund-pub — 국내 펀드 클래스 (PRFD01N001, 95,619행 / 정상 상품 11,130종 / 공모 11,115종)
 #
 # 그레인 주의
 #   최신 원본은 itm_no가 유일한 1행 그레인이다. 구버전의 (itm_no × prfd_attr_cd)
@@ -27,7 +27,7 @@
 #   두 클래스가 owl:disjointWith라 owl:sameAs로 병합하지 않는다.
 #
 # 데이터 실태
-#   - fd_daily_bas_dt·fd_price_bas_dt의 최신 실질 기준일은 2026-08-21이며 상품별
+#   - 공식 원천에는 행별 수치 기준일 축이 없으며 2026-07-11 스냅샷임을 evidence에 명시한다.
 #     오래된 기준일도 있으므로 각 수치에 실제 as_of를 붙인다.
 #   - kofia_fd_ccd(금투협 20자리 분류코드)는 자리별 의미가 역추정 가설 단계이고
 #     공식 코드 이름 대응이 없어 **분류 필터축으로 쓰지 않는다**. 식별자로만 싣는다.
@@ -39,7 +39,7 @@
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내 공모펀드 온톨로지"@ko, "Korean Public Fund Ontology"@en ;
     rdfs:comment "국내 펀드 마스터(PRFD01N001)의 공모 상품 스키마. 사모는 RDB에 보존하되 이 ABox에서 제외하며 클래스 계층, 공식 모펀드 키, 벤치마크와 분류축을 정의한다."@ko ;
-    dcterms:source "prfd01n001_data.xlsx, prfd01n001_schema.xlsx (2026-08-24 배포)" .
+    dcterms:source "PRFD01N001_fund_pub_master_20260711.csv, PRFD01N001_fund_pub_schema_20260711.csv" .
 
 ################################################################################
 # 1. 분류축 클래스 — 주최측 axis_* 라벨 6종

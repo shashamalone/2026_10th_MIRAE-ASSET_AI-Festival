@@ -23,8 +23,8 @@
 #  5) 공통 랭킹에 채택하지 않은 시세·보조 컬럼은 온톨로지에 올리지 않는다.
 #     raw에는 0을 그대로 보존하되, 측정값 0/NULL은 비교·랭킹에서 "값 없음"이다.
 #
-# 데이터 기준일: 도메인별로 다르다 (bond 2026-08-21 / etf_kr 2026-08-24 /
-#   etf_gl 2026-08-22 / fund 수치 2026-08-21, 스냅샷 2026-08-24).
+# 데이터 cutoff: 2026-07-11. 실질 관측축은 bond 2026-02-24,
+#   etf_kr/etf_gl 행별 갱신일이며 fund는 행별 수치일 없이 2026-07-11 스냅샷만 제공한다.
 #   도메인 간 수치 비교 시 fp:asOf를 각각 표기해야 한다.
 ################################################################################
 
@@ -32,7 +32,7 @@
     rdfs:label "금융상품 공통 온톨로지"@ko, "Financial Product Common Ontology"@en ;
     rdfs:comment "국내채권·국내ETF·해외ETF·공모펀드 4개 도메인이 공유하는 상위 클래스, 관계, 코드리스트(신용등급·위험등급·자산군·투자지역·통화·복제방식)를 정의한다. 도메인 4파일은 이 온톨로지를 owl:imports 한다."@ko ;
     dcterms:created "2026-08-13"^^xsd:date ;
-    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-08-24 스냅샷)" .
+    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-07-11 스냅샷)" .
 
 ################################################################################
 # 0. 출처 추적 애노테이션
@@ -76,7 +76,7 @@ fp:ETN a owl:Class ;
     rdfs:comment "발행 증권사의 채무증권. 최신 정본의 국내 545종·해외 65종이 ETF와 한 파일에 혼재하므로 pd_grp_no로 분리한다. **편입종목·NAV·총보수 개념이 없어 fp:hasHolding의 domain에서 제외**하며 fp:ETF와 서로소다."@ko .
 
 # 국내/해외 ETF·ETN은 원천·통화·가용 축이 달라 ABox에서 별도 클래스로 유지한다.
-# grounding 188행 계약을 유지하기 위해 상세 설명은 각 도메인 온톨로지 헤더에 둔다.
+# grounding 중복을 피하기 위해 상세 설명은 각 도메인 온톨로지 헤더에 둔다.
 fp:KoreanETF a owl:Class ; rdfs:subClassOf fp:ETF ; rdfs:label "국내 ETF"@ko .
 fp:GlobalETF a owl:Class ; rdfs:subClassOf fp:ETF ; rdfs:label "해외 ETF"@ko .
 fp:KoreanETN a owl:Class ; rdfs:subClassOf fp:ETN ; rdfs:label "국내 ETN"@ko .
@@ -86,7 +86,7 @@ fp:PublicFund a owl:Class ;
     rdfs:subClassOf fp:Product ;
     owl:disjointWith fp:Bond, fp:ETF, fp:ETN ;
     rdfs:label "공모펀드"@ko, "Public Offering Fund"@en ;
-    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위 14,716종). **공모 한정 클래스다** — 최신 원본은 itm_no가 유일한 23,676행이며 사모 8,960종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다."@ko .
+    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위 11,115종). **공모 한정 클래스다** — 95,619개 클래스 속성 행을 (itm_no, prfd_attr_cd) 그레인으로 보존하고 사모 15종은 RDB enriched.fund에 보존하되 이 클래스의 ABox에서는 제외한다."@ko .
 
 fp:ShareClass a owl:Class ;
     rdfs:subClassOf fp:PublicFund ;
@@ -129,7 +129,7 @@ fp:Theme a owl:Class ;
     rdfs:label "테마"@ko, "Theme"@en ;
     rdfs:comment "투자 테마(반도체·AI·방산 등). 상품·기업이 fp:relatedToTheme로 연결된다. 외부 근거의 기준일·출처 문서가 검증된 관계만 ABox에 생성하며 미수집 상품은 coverage unavailable로 남긴다."@ko .
 
-# v2 분류 관계용 클래스. grounding 188행 계약을 유지하기 위해 설명은 연결 속성에 둔다.
+# v2 분류 관계용 클래스. grounding 중복을 피하기 위해 설명은 연결 속성에 둔다.
 fp:Sector a owl:Class ;
     rdfs:label "섹터"@ko, "Sector"@en .
 
@@ -354,7 +354,7 @@ fp:relatedToTheme a owl:ObjectProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Product fp:Company ) ] ;
     rdfs:range fp:Theme ;
     rdfs:label "테마 연관"@ko, "related to theme"@en ;
-    rdfs:comment "상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-08-24 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다."@ko ;
+    rdfs:comment "상품·기업 → 테마. 주최측 분류축 또는 published_at/as_of가 2026-07-11 이하로 검증된 공식 문서만 근거로 쓴다. 상품명에 테마어가 있다는 사실만으로 관계를 확정하지 않는다."@ko ;
     fp:sourceTable "derived:etf_theme" ; fp:sourceColumn "theme" .
 
 fp:hasSector a owl:ObjectProperty ;
@@ -503,7 +503,7 @@ fp:listingDate a owl:DatatypeProperty ;
     rdfs:range xsd:date ;
     rdfs:label "상장일"@ko, "listing date"@en ;
     rdfs:comment "거래 가능 개시일. '최근 상장 ETF' 질의축이다."@ko ;
-    fp:sourceTable "PREF01N001", "PREF02N001" ; fp:sourceColumn "pd_lstg_dt" .
+    fp:sourceTable "PREF01N001" ; fp:sourceColumn "pd_lstg_dt" .
 
 fp:onSale a owl:DatatypeProperty ;
     rdfs:domain fp:Product ;
@@ -651,7 +651,7 @@ fp:documentPublishedDate a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:date ;
     rdfs:label "문서 발행일"@ko, "document published date"@en ;
-    rdfs:comment "근거 문서의 발행일. 2026-08-24 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다."@ko ;
+    rdfs:comment "근거 문서의 발행일. 2026-07-11 이후 문서는 전체 빌드를 실패시키며 답변 근거로 쓰지 않는다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
 
 fp:documentQuote a owl:DatatypeProperty ;

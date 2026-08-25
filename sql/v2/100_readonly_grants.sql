@@ -16,4 +16,4 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA relations GRANT SELECT ON TABLES TO agent_rea
 ALTER DEFAULT PRIVILEGES IN SCHEMA vec GRANT SELECT ON TABLES TO agent_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA core GRANT SELECT ON TABLES TO agent_reader;
 ALTER ROLE agent_reader SET default_transaction_read_only = on;
-ALTER ROLE agent_reader SET statement_timeout = '10s';
+ALTER ROLE agent_reader SET statement_timeout = '2s';

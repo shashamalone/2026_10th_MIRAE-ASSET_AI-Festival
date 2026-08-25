@@ -34,8 +34,8 @@ services:
       OXIGRAPH_URL: http://graph:7878
       CLOVA_API_KEY: ${CLOVA_API_KEY:-}
       CLOVA_HOST: ${CLOVA_HOST:-https://clovastudio.stream.ntruss.com}
-      API_MAX_ROWS: ${API_MAX_ROWS:-1000}
-      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-10000}
+      API_MAX_ROWS: ${API_MAX_ROWS:-100}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-2000}
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
       LSEG_CLIENT_ID: ${LSEG_CLIENT_ID:-}
       LSEG_CLIENT_SECRET: ${LSEG_CLIENT_SECRET:-}
     volumes:
-      - "${DATASET_DIR:?DATASET_DIR must point to the 8 canonical XLSX files}:/data/source:ro"
+      - "${DATASET_DIR:?DATASET_DIR must point to the approved 2026-07-11 CSV bundle}:/data/source:ro"
       - ./artifacts:/app/artifacts
     depends_on:
       db:

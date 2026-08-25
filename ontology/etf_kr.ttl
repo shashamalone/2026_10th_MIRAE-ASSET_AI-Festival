@@ -6,7 +6,7 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
 ################################################################################
-# fp-etf-kr — 국내 ETF·ETN (PREF01N001, 1,780종 = ETF 1,235 / ETN 545)
+# fp-etf-kr — 국내 ETF·ETN (PREF01N001, 1,734종 = ETF 1,202 / ETN 532)
 #
 # ETF와 ETN의 분리
 #   fp-common에서 fp:ETN owl:disjointWith fp:ETF로 선언했다. 한 파일에 혼재하므로
@@ -27,14 +27,14 @@
 #   - 상수 컬럼(거래소·시장·통화·SPAC 등) → **제외**
 #   위 컬럼을 온톨로지에 올리면 "값이 있다"는 잘못된 신호가 된다.
 #
-# 기준일: 구성/상품 2026-08-24, 시세·주간 2026-08-21.
+# cutoff 2026-07-11. 실제 수치 기준일은 행별 cu_upt_dt·du_upt_dt·wu_upt_dt를 사용한다.
 ################################################################################
 
 <http://mafest.ai/ontology/fp-etf-kr> a owl:Ontology ;
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내 ETF·ETN 온톨로지"@ko, "Korean Domestic ETF/ETN Ontology"@en ;
     rdfs:comment "국내 ETF·ETN 마스터(PREF01N001) 기반 스키마. fp:KoreanETF/fp:KoreanETN 분리, 레버리지·연금·분류축과 근거 문서가 있는 관계만 정의한다."@ko ;
-    dcterms:source "pref01n001_data.xlsx, pref01n001_schema.xlsx (2026-08-24 배포)" .
+    dcterms:source "PREF01N001_etf_kr_master_20260711.csv, PREF01N001_etf_kr_schema_20260711.csv" .
 
 ################################################################################
 # 1. 분류축 클래스 — 주최측 axis_* 라벨 7종

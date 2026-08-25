@@ -111,6 +111,7 @@ def build_from_db(conn: psycopg.Connection) -> dict[str, set[str]]:
         "theme": ("relatedToTheme", "Theme"),
         "sector": ("hasSector", "Sector"),
         "region": ("hasInvestmentRegion", "InvestmentRegion"),
+        "asset_type": ("hasAssetType", "AssetType"),
     }
     for record in rows(
         conn,

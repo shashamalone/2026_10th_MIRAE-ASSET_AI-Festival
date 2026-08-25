@@ -4,10 +4,10 @@
 
 ## 데이터 계약
 
-- 버전: `financial-products-2026-08-24`
-- 배포일/외부 근거 상한: `2026-08-24`
-- 전체 manifest SHA-256: `ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
-- 원천: 정상 XLSX 8개만 허용하며 `__MACOSX/._*`는 탐색 단계에서 제외합니다.
+- 버전: `financial-products-2026-07-11`
+- 배포일/외부 근거 상한: `2026-07-11`
+- 전체 manifest SHA-256: `0f27e46933a327bd313458a6ef69c456e956c21921497e216675ebb4b1e0aec0`
+- 원천: `_conversion_manifest.json`이 승인한 2026-07-11 데이터 CSV 4개와 스키마 CSV 4개만 사용합니다.
 - 런타임: PostgreSQL 17 + pgvector + Oxigraph + 읽기전용 FastAPI
 - 제출 경로에서 제외: DuckDB, FAISS, pyoxigraph, Gemini
 
@@ -15,14 +15,14 @@
 
 | 코드 | 데이터 파일 | 행 | 열 | 실질 기준일 | 공식 Nullable 충돌(NULL 건수) | SHA-256 |
 |---|---|---:|---:|---|---|---|
-| PRBD01N001 | `prbd01n001_data.xlsx` | 21,882 | 58 | 2026-08-21 | - | `574ae5d6c1d98704712c256ed5352cbaed065ea9c3a6eb7b2a52adb305fa9001` |
-| PREF01N001 | `pref01n001_data.xlsx` | 1,780 | 98 | 2026-08-24 | pd_exg_mkt_cd=3 | `18c4329d8fc8768d030316816f3e6e48226a3c217db3354245b766a2c6f6c592` |
-| PREF02N001 | `pref02n001_data.xlsx` | 6,037 | 49 | 2026-08-22 | - | `ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067` |
-| PRFD01N001 | `prfd01n001_data.xlsx` | 23,676 | 75 | 2026-08-21 | zrin_fd_ivst_risk_gcd=14,987 | `81b3ce3f1d5042b32fd52a76acff094fc5b8dd9fa36289af2fb54c195eb5d94c` |
+| PRBD01N001 | `PRBD01N001_bond_kr_master_20260711.csv` | 42,394 | 40 | 2026-02-24 | - | `e62894688f48c7a56735024d64881e34c1d7bfead3c1b8800c8f2b4d5f47cc3e` |
+| PREF01N001 | `PREF01N001_etf_kr_master_20260711.csv` | 1,734 | 73 | 2026-06-15 | - | `0f8a1d0ac3f755f450a5a3ea7ff11c2e1fbe8f2210282d5e7d20c46eca92481f` |
+| PREF02N001 | `PREF02N001_etf_gl_master_20260711.csv` | 5,646 | 49 | 2026-06-16 | - | `ada15bc0da0327db226e9ffc2e223e60f71c7f9977e34868af20295aabc166a1` |
+| PRFD01N001 | `PRFD01N001_fund_pub_master_20260711.csv` | 95,619 | 45 | 2026-07-11 | - | `073a5f13c775422dd343bdf870a3184d2743cdde95923e297045dba6b9bb4ed1` |
 
 ## 빌드 순서
 
-1. 원천 8개 집합·SHA-256·행/열·공식 헤더·PK 유일성 검사
+1. 승인 manifest·SHA-256·행/열·공식 헤더·PK 유일성·cutoff 검사
 2. `raw_next`에 공식 타입·컬럼 그대로 적재(공백만 NULL, 0 보존)
 3. `enriched_next`·`relations_next`·`meta_next` 생성
 4. 결정적 ABox TTL 5개 생성 및 TBox/ABox RDF 검증

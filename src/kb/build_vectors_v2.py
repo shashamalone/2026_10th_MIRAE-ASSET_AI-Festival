@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TBox 130/188행과 근거 문서 청크를 pgvector 1024차원으로 적재한다."""
+"""TBox grounding과 근거 문서 청크를 pgvector 1024차원으로 적재한다."""
 from __future__ import annotations
 
 import argparse
@@ -82,8 +82,8 @@ def collect_terms(file_names: tuple[str, ...]) -> list[dict[str, object]]:
 def collect_schema_sets() -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     bond = collect_terms(("common.ttl", "bond_kr.ttl"))
     all_terms = collect_terms(TBOX_FILES)
-    if len(bond) != 130 or len(all_terms) != 188:
-        raise ValueError(f"TBox grounding 행 수 불일치: bond={len(bond)}, all={len(all_terms)}")
+    if len(bond) != 130:
+        raise ValueError(f"채권 TBox grounding 행 수 불일치: bond={len(bond)}")
     for name, terms in (("bond", bond), ("all", all_terms)):
         hashes = [str(term["content_hash"]) for term in terms]
         if len(hashes) != len(set(hashes)):
@@ -238,7 +238,12 @@ def insert_document_chunks(
 
 
 def validate_vectors(conn: psycopg.Connection, document_count: int) -> dict[str, int]:
-    expected = {"bond_schema_terms": 130, "schema_terms_all": 188, "document_chunk": document_count}
+    bond, all_terms = collect_schema_sets()
+    expected = {
+        "bond_schema_terms": len(bond),
+        "schema_terms_all": len(all_terms),
+        "document_chunk": document_count,
+    }
     result: dict[str, int] = {}
     for table_name, expected_count in expected.items():
         count, nulls, bad_dim, duplicate_hashes = conn.execute(

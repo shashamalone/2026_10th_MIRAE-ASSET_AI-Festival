@@ -31,6 +31,7 @@ from kb.v2_manifest import (  # noqa: E402
     RELEASE_DATE,
     ROOT,
     SourceInspection,
+    exclusion_reason,
     iter_data_rows,
     snapshot_hash,
     validate_source_dir,
@@ -75,6 +76,9 @@ def render_sql(path: Path) -> str:
     content = path.read_text(encoding="utf-8")
     for token, schema in SCHEMAS.items():
         content = content.replace(f"__{token}__", schema)
+    content = content.replace("__CUTOFF_DATE__", EXTERNAL_CUTOFF.isoformat())
+    content = content.replace("__RELEASE_DATE__", RELEASE_DATE.isoformat())
+    content = content.replace("__DATASET_VERSION__", DATASET_VERSION)
     leftovers = [token for token in ("META", "RAW", "ENRICHED", "RELATIONS", "VEC", "CORE") if f"__{token}__" in content]
     if leftovers:
         raise ValueError(f"{path}: 치환되지 않은 토큰 {leftovers}")
@@ -127,10 +131,13 @@ def load_raw_table(conn: psycopg.Connection, item: SourceInspection) -> int:
     count = 0
     with conn.cursor().copy(statement) as copy:
         for row in iter_data_rows(item.data_path, item.columns):
+            if exclusion_reason(item.spec, row, names):
+                continue
             copy.write_row(row)
             count += 1
-    if count != item.row_count:
-        raise RuntimeError(f"{item.spec.code}: COPY {count:,} != 원천 {item.row_count:,}")
+    expected = item.row_count - item.excluded_rows
+    if count != expected:
+        raise RuntimeError(f"{item.spec.code}: COPY {count:,} != 적재 대상 {expected:,}")
     return count
 
 
@@ -174,7 +181,9 @@ def insert_catalog(conn: psycopg.Connection, inspections) -> int:
 
 
 def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
-    expected_raw = {item.spec.raw_table: item.row_count for item in inspections}
+    expected_raw = {
+        item.spec.raw_table: item.row_count - item.excluded_rows for item in inspections
+    }
     actual_raw = {}
     for table, expected in expected_raw.items():
         actual = conn.execute(
@@ -195,12 +204,27 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
         "BOND": conn.execute(
             f"SELECT count(DISTINCT pd_no) FROM {SCHEMAS['RAW']}.bond_kr_master"
         ).fetchone()[0],
-        "ETF_KR": 1_235,
-        "ETN_KR": 545,
-        "ETF_GL": 5_972,
-        "ETN_GL": 65,
-        "FUND_PUB": 14_716,
-        "FUND_PRIVATE": 8_960,
+        "ETF_KR": conn.execute(
+            f"SELECT count(*) FROM {SCHEMAS['RAW']}.etf_kr_master WHERE btrim(pd_grp_no)='ETF'"
+        ).fetchone()[0],
+        "ETN_KR": conn.execute(
+            f"SELECT count(*) FROM {SCHEMAS['RAW']}.etf_kr_master WHERE btrim(pd_grp_no)='ETN'"
+        ).fetchone()[0],
+        "ETF_GL": conn.execute(
+            f"SELECT count(*) FROM {SCHEMAS['RAW']}.etf_gl_master WHERE btrim(pd_grp_no)='ETF'"
+        ).fetchone()[0],
+        "ETN_GL": conn.execute(
+            f"SELECT count(*) FROM {SCHEMAS['RAW']}.etf_gl_master WHERE btrim(pd_grp_no)='ETN'"
+        ).fetchone()[0],
+        "FUND_PUB": conn.execute(
+            f"SELECT count(DISTINCT itm_no) FROM {SCHEMAS['RAW']}.fund_pub_master WHERE btrim(prvo_pbff_desc)='공모'"
+        ).fetchone()[0],
+        "FUND_PRIVATE": conn.execute(
+            f"SELECT count(DISTINCT itm_no) FROM {SCHEMAS['RAW']}.fund_pub_master WHERE btrim(prvo_pbff_desc)='사모'"
+        ).fetchone()[0],
+    }
+    expected_product_counts = {
+        product_type: count for product_type, count in expected_product_counts.items() if count
     }
     if product_counts != expected_product_counts:
         raise RuntimeError(
@@ -224,8 +248,9 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
         f"""
         SELECT count(*) FROM {SCHEMAS['ENRICHED']}.bond_kr_product
         WHERE is_assumed_purchasable IS DISTINCT FROM
-              (maturity_date IS NULL OR maturity_date > DATE '2026-08-24')
+              (maturity_date IS NULL OR maturity_date > %s)
         """
+        , (EXTERNAL_CUTOFF,)
     ).fetchone()[0]
     if purchasability_bad:
         raise RuntimeError(f"채권 구매가능 가정 규칙 위반 {purchasability_bad}행")
@@ -237,9 +262,30 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
           UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.product_holding
           UNION ALL SELECT as_of FROM {SCHEMAS['RELATIONS']}.company_subsidiary
           UNION ALL SELECT published_at FROM {SCHEMAS['VEC']}.document_chunk
-        ) dates WHERE d > DATE '2026-08-24'
+        ) dates WHERE d > %s
+        """
+        , (EXTERNAL_CUTOFF,)
+    ).fetchone()[0]
+
+    metric_date_bad = conn.execute(
+        f"""
+        SELECT count(*) FROM {SCHEMAS['ENRICHED']}.product_metric
+        WHERE is_available AND (as_of IS NULL OR as_of > %s)
+        """,
+        (EXTERNAL_CUTOFF,),
+    ).fetchone()[0]
+    metric_axis_bad = conn.execute(
+        f"""
+        SELECT count(*) FROM {SCHEMAS['ENRICHED']}.product_metric
+        WHERE source='PREF01N001'
+          AND ((metric_code IN ('AUM','RETURN_1Y') AND source_column NOT IN ('du_last_aum','du_er_1y'))
+            OR (metric_code='EXPENSE_RATIO' AND source_column <> 'cu_charge_rt'))
         """
     ).fetchone()[0]
+    if metric_date_bad or metric_axis_bad:
+        raise RuntimeError(
+            f"지표 기준일/출처축 위반 date={metric_date_bad}, axis={metric_axis_bad}"
+        )
     if cutoff_bad:
         raise RuntimeError(f"외부 cutoff 초과 {cutoff_bad}행")
 
@@ -251,6 +297,8 @@ def validate_stage(conn: psycopg.Connection, inspections) -> dict[str, object]:
         "available_metric_zero_or_null": metric_zero_bad,
         "purchasability_rule_mismatch": purchasability_bad,
         "external_cutoff_violations": cutoff_bad,
+        "metric_date_violations": metric_date_bad,
+        "metric_axis_violations": metric_axis_bad,
     }
 
 
@@ -302,7 +350,16 @@ def build(data_dir: str | Path | None = None) -> dict[str, object]:
                 run_id,
                 snapshot_id,
                 started_at,
-                json.dumps({item.spec.code: item.row_count for item in inspections}),
+                json.dumps(
+                    {
+                        item.spec.code: {
+                            "source": item.row_count,
+                            "loaded": item.row_count - item.excluded_rows,
+                            "excluded": item.excluded_rows,
+                        }
+                        for item in inspections
+                    }
+                ),
                 json.dumps(loaded_rows),
             ),
         )
@@ -344,7 +401,7 @@ def read_only_check(data_dir: str | Path | None = None) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="금융상품 데이터 플랫폼 v2 stage 빌더")
-    parser.add_argument("--data-dir", help="정본 XLSX 디렉터리")
+    parser.add_argument("--data-dir", help="2026-07-11 승인 CSV와 _conversion_manifest.json 디렉터리")
     parser.add_argument(
         "--check", action="store_true", help="파일·DB를 변경하지 않고 원천/카탈로그만 검증"
     )

@@ -22,10 +22,10 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 MASTER_DIR = ROOT / "data/external/company_master"
 GOV_DIR = ROOT / "data/external/company_governance"
-KIND = MASTER_DIR / "kind_listed_corp_20260824.csv"
+KIND = MASTER_DIR / "kind_listed_corp_20260711.csv"
 HOLDING = ROOT / "data/relations/etf_holding.csv"
-CORPCODE = MASTER_DIR / "dart_corpcode_20260824.xml"
-AS_OF = "2026-08-24"  # 외부 공시 published_at/as_of의 절대 상한
+CORPCODE = MASTER_DIR / "dart_corpcode_20260711.xml"
+AS_OF = "2026-07-11"  # 외부 공시 published_at/as_of의 절대 상한
 YMD = AS_OF.replace("-", "")
 BSNS_YEAR, REPRT_CODE = "2025", "11011"  # FY2025 사업보고서 — 접수일 2026-03 전후라 컷오프보다 안전
 SLEEP = float(os.environ.get("DART_SLEEP", 0.3))

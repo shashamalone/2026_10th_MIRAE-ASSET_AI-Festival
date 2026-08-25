@@ -57,7 +57,7 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 - 버전: `{DATASET_VERSION}`
 - 배포일/외부 근거 상한: `{RELEASE_DATE.isoformat()}`
 - 전체 manifest SHA-256: `{snapshot_hash(inspections)}`
-- 원천: 정상 XLSX 8개만 허용하며 `__MACOSX/._*`는 탐색 단계에서 제외합니다.
+- 원천: `_conversion_manifest.json`이 승인한 2026-07-11 데이터 CSV 4개와 스키마 CSV 4개만 사용합니다.
 - 런타임: PostgreSQL 17 + pgvector + Oxigraph + 읽기전용 FastAPI
 - 제출 경로에서 제외: DuckDB, FAISS, pyoxigraph, Gemini
 
@@ -69,7 +69,7 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 
 ## 빌드 순서
 
-1. 원천 8개 집합·SHA-256·행/열·공식 헤더·PK 유일성 검사
+1. 승인 manifest·SHA-256·행/열·공식 헤더·PK 유일성·cutoff 검사
 2. `raw_next`에 공식 타입·컬럼 그대로 적재(공백만 NULL, 0 보존)
 3. `enriched_next`·`relations_next`·`meta_next` 생성
 4. 결정적 ABox TTL 5개 생성 및 TBox/ABox RDF 검증
@@ -278,7 +278,7 @@ def write_or_check(outputs: dict[Path, str], check: bool) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="v2 데이터 카탈로그 4종 생성")
-    parser.add_argument("--data-dir", help="정본 XLSX 8개가 있는 디렉터리")
+    parser.add_argument("--data-dir", help="2026-07-11 승인 CSV와 _conversion_manifest.json 디렉터리")
     parser.add_argument(
         "--check", action="store_true", help="어떤 파일도 쓰지 않고 재생성 결과만 비교"
     )

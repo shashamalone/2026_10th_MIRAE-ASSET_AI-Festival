@@ -5,8 +5,15 @@
 @prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
+fp:inceptionDate a owl:DatatypeProperty ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:GlobalETF fp:GlobalETN ) ] ;
+    rdfs:range xsd:date ;
+    rdfs:label "설정일"@ko, "inception date"@en ;
+    rdfs:comment "해외 ETF/ETN의 설정일. PREF02 pd_lstg_dt는 공식 정의상 상장일이 아니므로 listingDate로 노출하지 않는다."@ko ;
+    fp:sourceTable "PREF02N001" ; fp:sourceColumn "pd_lstg_dt" .
+
 ################################################################################
-# fp-etf-gl — 해외 ETF·ETN (PREF02N001, 6,037종 = ETF 5,972 / ETN 65)
+# fp-etf-gl — 해외 ETF·ETN (PREF02N001, 5,646종 = ETF 5,587 / ETN 59)
 #
 # Q35("VOO가 직접 발행한 회사채") 판정의 주 무대
 #   VOO는 이 도메인의 fp:ETF 개체다. fp:issuedBy는 fp-common에서
@@ -37,7 +44,7 @@
 #     ru_mkt_volume ≡ du_vol_1d) → **중복 적재하지 않음**
 #   - 시세성 컬럼(du_clpr·du_opr·du_hpr·du_bpr·du_last_nav 등) → **제외**
 #
-# 기준일: 상품·NAV 갱신 2026-08-22. 개별 관측 기준일은 source/as_of와 함께 쓴다.
+# cutoff 2026-07-11. 개별 관측 기준일은 source/as_of와 함께 쓴다.
 #
 # 주최측 axis 라벨: 해외ETF axis_sample에는 axis_* 컬럼이 제공되지 않았다.
 #   국내ETF 축(자산군·지역·전략·복제방식·레버리지)을 준용하되, 레버리지 축은
@@ -48,7 +55,7 @@
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "해외 ETF 온톨로지"@ko, "Global ETF Ontology"@en ;
     rdfs:comment "해외(미국 상장) ETF·ETN 마스터(PREF02N001) 기반 스키마. 외부 조인키(ISIN·CIK·Lipper), 복제방식, 서술형 투자전략 텍스트, 거래소 축을 정의한다."@ko ;
-    dcterms:source "pref02n001_data.xlsx, pref02n001_schema.xlsx (2026-08-24 배포)" .
+    dcterms:source "PREF02N001_etf_gl_master_20260711.csv, PREF02N001_etf_gl_schema_20260711.csv" .
 
 ################################################################################
 # 1. 외부 조인키 — 편입종목·기업관계 확보의 열쇠

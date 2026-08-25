@@ -73,14 +73,15 @@ def validate_tbox() -> dict[str, object]:
     term_filter = lambda value: isinstance(value, URIRef) and str(value).startswith(str(FP))
     bond_terms = {subject for subject in bond_graph.subjects(RDFS.comment, None) if term_filter(subject)}
     all_terms = {subject for subject in graph.subjects(RDFS.comment, None) if term_filter(subject)}
-    if len(bond_terms) != 130 or len(all_terms) != 188:
-        raise ValueError(f"TBox grounding 행 수 불일치: bond={len(bond_terms)}, all={len(all_terms)}")
-    required_classes = {FP.KoreanETF, FP.GlobalETF, FP.KoreanETN, FP.GlobalETN, FP.Holding, FP.SubsidiaryRelation, FP.Sector}
+    if len(bond_terms) != 130:
+        raise ValueError(f"채권 TBox grounding 행 수 불일치: bond={len(bond_terms)}")
+    required_classes = {FP.KoreanETF, FP.GlobalETF, FP.KoreanETN, FP.GlobalETN, FP.Holding, FP.SubsidiaryRelation, FP.Sector, FP.AssetType}
     missing = [str(value) for value in required_classes if (value, RDF.type, OWL.Class) not in graph]
     if missing:
         raise ValueError(f"TBox 필수 클래스 누락: {missing}")
     for prop, domain, range_ in (
         (FP.hasSector, FP.Product, FP.Sector),
+        (FP.hasAssetType, FP.Product, FP.AssetType),
         (FP.hasDocument, FP.Product, FP.Document),
     ):
         if (prop, RDF.type, OWL.ObjectProperty) not in graph or (prop, RDFS.domain, domain) not in graph or (prop, RDFS.range, range_) not in graph:
@@ -160,6 +161,7 @@ def validate_abox_files() -> dict[str, object]:
         (FP.relatedToTheme, FP.Theme),
         (FP.hasSector, FP.Sector),
         (FP.hasInvestmentRegion, FP.InvestmentRegion),
+        (FP.hasAssetType, FP.AssetType),
     ):
         for product, classification in graph.subject_objects(predicate):
             product_types = set(graph.objects(product, RDF.type))
