@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""TBox grounding과 근거 문서 청크를 pgvector 1024차원으로 적재한다."""
+"""pgvector 1024차원 계약을 검증하고 동일 해시 운영 벡터만 재사용한다.
+
+이 릴리스에서는 신규 CLOVA 임베딩 호출을 절대 수행하지 않는다. 재사용 계약을
+모두 만족하지 못하면 세 테이블을 비우고 ``vector_status=pending``을 기록한다.
+"""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -20,7 +23,6 @@ except ImportError:  # --check는 DB 드라이버 없이도 순수 검증으로 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import clova  # noqa: E402
 from kb.build_data_platform_v2 import SCHEMAS, dsn  # noqa: E402
 from kb.v2_manifest import EXTERNAL_CUTOFF, ROOT  # noqa: E402
 
@@ -147,38 +149,29 @@ def read_document_chunks(path: Path = DOCUMENT_CHUNKS) -> list[dict[str, object]
     return chunks
 
 
-def existing_embeddings(conn: psycopg.Connection, hashes: set[str]) -> dict[str, list[float]]:
+def existing_embeddings(
+    conn: psycopg.Connection, table_name: str, hashes: set[str]
+) -> dict[str, list[float]]:
+    """정식 ``vec``에서 모델·차원·content hash가 모두 맞는 벡터만 읽는다."""
     if not hashes:
         return {}
     result: dict[str, list[float]] = {}
-    for schema_name in (SCHEMAS["VEC"], "vec"):
-        for table_name in ("bond_schema_terms", "schema_terms_all", "document_chunk"):
-            exists = conn.execute(
-                "SELECT to_regclass(%s)", (f"{schema_name}.{table_name}",)
-            ).fetchone()[0]
-            if not exists:
-                continue
-            rows = conn.execute(
-                f"SELECT content_hash, embedding::text FROM {schema_name}.{table_name} "
-                "WHERE embedding_model=%s AND content_hash = ANY(%s)",
-                (MODEL, list(hashes)),
-            ).fetchall()
-            for content_hash, vector_text in rows:
-                result[content_hash] = json.loads(vector_text)
+    exists = conn.execute(
+        "SELECT to_regclass(%s)", (f"vec.{table_name}",)
+    ).fetchone()[0]
+    if not exists:
+        return result
+    rows = conn.execute(
+        f"SELECT content_hash, embedding::text FROM vec.{table_name} "
+        "WHERE embedding_model=%s AND embedding_dim=%s "
+        "AND vector_dims(embedding)=%s AND content_hash = ANY(%s)",
+        (MODEL, DIMENSION, DIMENSION, list(hashes)),
+    ).fetchall()
+    for content_hash, vector_text in rows:
+        vector = json.loads(vector_text)
+        if len(vector) == DIMENSION:
+            result[content_hash] = [float(value) for value in vector]
     return result
-
-
-def embeddings_for(
-    conn: psycopg.Connection, records: list[dict[str, object]], cache: dict[str, list[float]]
-) -> list[list[float]]:
-    missing_records = [record for record in records if record["content_hash"] not in cache]
-    if missing_records:
-        vectors = clova.embed_many([str(record.get("content") or record["chunk_text"]) for record in missing_records])
-        for record, vector in zip(missing_records, vectors):
-            if len(vector) != DIMENSION:
-                raise ValueError(f"CLOVA 임베딩 차원 {len(vector)} != {DIMENSION}")
-            cache[str(record["content_hash"])] = [float(value) for value in vector]
-    return [cache[str(record["content_hash"])] for record in records]
 
 
 def insert_terms(
@@ -260,14 +253,85 @@ def insert_document_chunks(
     )
 
 
-def validate_vectors(conn: psycopg.Connection, document_count: int) -> dict[str, int]:
+def validate_chunk_foreign_keys(
+    conn: psycopg.Connection, chunks: list[dict[str, object]]
+) -> None:
+    document_ids = {str(chunk["document_id"]) for chunk in chunks}
+    product_ids = {
+        str(chunk["product_id"])
+        for chunk in chunks
+        if chunk.get("product_id") not in (None, "")
+    }
+    if document_ids:
+        found = {
+            row[0]
+            for row in conn.execute(
+                f"SELECT document_id FROM {SCHEMAS['RELATIONS']}.source_document "
+                "WHERE document_id = ANY(%s)",
+                (list(document_ids),),
+            ).fetchall()
+        }
+        if found != document_ids:
+            raise ValueError(f"document_chunk FK 미해결: {sorted(document_ids - found)[:10]}")
+    if product_ids:
+        found = {
+            row[0]
+            for row in conn.execute(
+                f"SELECT product_id FROM {SCHEMAS['ENRICHED']}.product_master "
+                "WHERE product_id = ANY(%s)",
+                (list(product_ids),),
+            ).fetchall()
+        }
+        if found != product_ids:
+            raise ValueError(f"document_chunk product FK 미해결: {sorted(product_ids - found)[:10]}")
+
+
+def latest_vector_status(conn: psycopg.Connection) -> str:
+    row = conn.execute(
+        f"SELECT validation_result->>'vector_status' "
+        f"FROM {SCHEMAS['META']}.load_run ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()
+    return str(row[0] or "pending") if row else "pending"
+
+
+def validate_vectors(
+    conn: psycopg.Connection, document_count: int | None = None
+) -> dict[str, object]:
     bond, all_terms = collect_schema_sets()
+    if not conn.execute(
+        "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname='vector')"
+    ).fetchone()[0]:
+        raise RuntimeError("pgvector extension이 없습니다")
+    expected_document_count = len(read_document_chunks())
+    if document_count is not None and document_count not in {0, expected_document_count}:
+        raise RuntimeError(
+            f"document_chunk 입력/DB 행 수 계약 불일치: {document_count}/{expected_document_count}"
+        )
     expected = {
         "bond_schema_terms": len(bond),
         "schema_terms_all": len(all_terms),
-        "document_chunk": document_count,
+        "document_chunk": expected_document_count,
     }
     result: dict[str, int] = {}
+    column_types = dict(
+        conn.execute(
+            """
+            SELECT c.relname, format_type(a.atttypid,a.atttypmod)
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid=a.attrelid
+            JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname=%s AND c.relname = ANY(%s)
+              AND a.attname='embedding' AND NOT a.attisdropped
+            """,
+            (SCHEMAS["VEC"], list(expected)),
+        ).fetchall()
+    )
+    if column_types != {name: "vector(1024)" for name in expected}:
+        raise RuntimeError(f"vector(1024) 컬럼 계약 불일치: {column_types}")
+
+    status = latest_vector_status(conn)
+    if status not in {"pending", "ready"}:
+        raise RuntimeError(f"알 수 없는 vector_status={status}")
     for table_name, expected_count in expected.items():
         count, nulls, bad_dim, duplicate_hashes = conn.execute(
             f"""
@@ -277,12 +341,47 @@ def validate_vectors(conn: psycopg.Connection, document_count: int) -> dict[str,
             FROM {SCHEMAS['VEC']}.{table_name}
             """
         ).fetchone()
-        if (count, nulls, bad_dim, duplicate_hashes) != (expected_count, 0, 0, 0):
+        required_count = expected_count if status == "ready" else 0
+        if (count, nulls, bad_dim, duplicate_hashes) != (required_count, 0, 0, 0):
             raise RuntimeError(
-                f"{table_name}: rows={count}/{expected_count}, null={nulls}, dim={bad_dim}, dup={duplicate_hashes}"
+                f"{table_name}: rows={count}/{required_count}, null={nulls}, "
+                f"dim={bad_dim}, dup={duplicate_hashes}, status={status}"
             )
         result[table_name] = count
-    return result
+    hnsw = conn.execute(
+        "SELECT count(*) FROM pg_indexes WHERE schemaname=%s "
+        "AND indexdef ILIKE '%%USING hnsw%%'",
+        (SCHEMAS["VEC"],),
+    ).fetchone()[0]
+    expected_hnsw = (
+        sum(1 for expected_count in expected.values() if expected_count > 0)
+        if status == "ready"
+        else 0
+    )
+    if hnsw != expected_hnsw:
+        raise RuntimeError(f"HNSW index={hnsw} != {expected_hnsw} for vector_status={status}")
+    reader_write_privileges = 0
+    if conn.execute("SELECT to_regrole('agent_reader') IS NOT NULL").fetchone()[0]:
+        reader_write_privileges = conn.execute(
+            """
+            SELECT count(*) FROM unnest(%s::text[]) AS t(table_name)
+            WHERE has_table_privilege(
+              'agent_reader', format('%I.%I', %s, table_name),
+              'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+            )
+            """,
+            (list(expected), SCHEMAS["VEC"]),
+        ).fetchone()[0]
+        if reader_write_privileges:
+            raise RuntimeError(
+                f"agent_reader가 vec stage 쓰기 권한을 가짐: {reader_write_privileges}"
+            )
+    return {
+        "status": status,
+        "rows": result,
+        "hnsw_indexes": hnsw,
+        "agent_reader_write_privileges": reader_write_privileges,
+    }
 
 
 def build() -> dict[str, object]:
@@ -290,35 +389,98 @@ def build() -> dict[str, object]:
         raise RuntimeError("실제 적재에는 requirements.txt의 psycopg가 필요합니다")
     bond, all_terms = collect_schema_sets()
     chunks = read_document_chunks()
-    all_records = all_terms + chunks
-    hashes = {str(record["content_hash"]) for record in all_records}
     with psycopg.connect(dsn()) as conn:
         if not conn.execute(
             "SELECT to_regclass(%s)", (f"{SCHEMAS['VEC']}.schema_terms_all",)
         ).fetchone()[0]:
             raise RuntimeError("vec_next가 없습니다. RDB stage 빌더를 먼저 실행하세요")
-        cache = existing_embeddings(conn, hashes)
-        all_vectors = embeddings_for(conn, all_terms, cache)
-        vector_by_hash = {
-            str(term["content_hash"]): vector for term, vector in zip(all_terms, all_vectors)
+        validate_chunk_foreign_keys(conn, chunks)
+        expected_sets = {
+            "bond_schema_terms": bond,
+            "schema_terms_all": all_terms,
+            "document_chunk": chunks,
         }
-        bond_vectors = [vector_by_hash[str(term["content_hash"])] for term in bond]
-        chunk_vectors = embeddings_for(conn, chunks, cache)
-        insert_terms(conn, "bond_schema_terms", bond, bond_vectors)
-        insert_terms(conn, "schema_terms_all", all_terms, all_vectors)
-        insert_document_chunks(conn, chunks, chunk_vectors)
-        for table_name in ("bond_schema_terms", "schema_terms_all", "document_chunk"):
-            conn.execute(
-                f"CREATE INDEX IF NOT EXISTS {table_name}_embedding_hnsw_idx "
-                f"ON {SCHEMAS['VEC']}.{table_name} USING hnsw (embedding vector_cosine_ops)"
+        caches = {
+            table_name: existing_embeddings(
+                conn,
+                table_name,
+                {str(record["content_hash"]) for record in records},
             )
-        counts = validate_vectors(conn, len(chunks))
-        conn.execute(
-            f"UPDATE {SCHEMAS['META']}.load_run SET phase='vectors_validated', "
-            "validation_result=validation_result || %s::jsonb WHERE status='passed'",
-            (json.dumps({"vector_rows": counts}),),
+            for table_name, records in expected_sets.items()
+        }
+        reusable = all(
+            len(caches[table_name]) == len(records)
+            for table_name, records in expected_sets.items()
         )
-    return {"model": MODEL, "dimension": DIMENSION, "rows": counts, "document_source": str(DOCUMENT_CHUNKS)}
+
+        conn.execute(
+            f"TRUNCATE {SCHEMAS['VEC']}.document_chunk, "
+            f"{SCHEMAS['VEC']}.bond_schema_terms, {SCHEMAS['VEC']}.schema_terms_all"
+        )
+        for table_name in expected_sets:
+            conn.execute(
+                f"DROP INDEX IF EXISTS {SCHEMAS['VEC']}.{table_name}_embedding_hnsw_idx"
+            )
+
+        status = "pending"
+        if reusable:
+            insert_terms(
+                conn,
+                "bond_schema_terms",
+                bond,
+                [caches["bond_schema_terms"][str(term["content_hash"])] for term in bond],
+            )
+            insert_terms(
+                conn,
+                "schema_terms_all",
+                all_terms,
+                [caches["schema_terms_all"][str(term["content_hash"])] for term in all_terms],
+            )
+            insert_document_chunks(
+                conn,
+                chunks,
+                [caches["document_chunk"][str(chunk["content_hash"])] for chunk in chunks],
+            )
+            for table_name, records in expected_sets.items():
+                if not records:
+                    continue
+                conn.execute(
+                    f"CREATE INDEX {table_name}_embedding_hnsw_idx "
+                    f"ON {SCHEMAS['VEC']}.{table_name} USING hnsw "
+                    "(embedding vector_cosine_ops)"
+                )
+            status = "ready"
+
+        row_counts = {
+            table_name: conn.execute(
+                f"SELECT count(*) FROM {SCHEMAS['VEC']}.{table_name}"
+            ).fetchone()[0]
+            for table_name in expected_sets
+        }
+        conn.execute(
+            f"UPDATE {SCHEMAS['META']}.load_run SET "
+            "validation_result=validation_result || %s::jsonb "
+            "WHERE run_id=(SELECT run_id FROM "
+            f"{SCHEMAS['META']}.load_run ORDER BY started_at DESC LIMIT 1)",
+            (
+                json.dumps(
+                    {
+                        "vector_status": status,
+                        "vector_rows": row_counts,
+                        "embedding_calls": 0,
+                    }
+                ),
+            ),
+        )
+        validation = validate_vectors(conn, len(chunks))
+    return {
+        "model": MODEL,
+        "dimension": DIMENSION,
+        "vector_status": status,
+        "embedding_calls": 0,
+        "validation": validation,
+        "document_source": str(DOCUMENT_CHUNKS),
+    }
 
 
 def check() -> dict[str, object]:
@@ -333,6 +495,8 @@ def check() -> dict[str, object]:
         "document_chunks": len(chunks),
         "model": MODEL,
         "dimension": DIMENSION,
+        "embedding_calls": 0,
+        "new_embedding_generation": "disabled_for_this_release",
     }
 
 

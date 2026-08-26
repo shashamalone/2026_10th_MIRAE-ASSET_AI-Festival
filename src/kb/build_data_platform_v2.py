@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kb.build_catalog_v2 import build_outputs, write_or_check  # noqa: E402
 from kb.catalog_v2 import build_catalog  # noqa: E402
+from kb.compatibility_v2 import create_compatibility_views  # noqa: E402
 from kb.v2_manifest import (  # noqa: E402
     DATASET_VERSION,
     EXTERNAL_CUTOFF,
@@ -70,6 +71,47 @@ def dsn() -> str:
         "dbname": os.environ["PGDATABASE"],
     }
     return " ".join(f"{key}={env[key]}" for key in keys)
+
+
+def mark_latest_run_failed(phase: str, error_message: str) -> bool:
+    """공식 stage 파이프라인의 후속 명령 실패를 최신 실행에 기록한다.
+
+    RDB 빌더가 ``rdb_validated``를 기록한 뒤 관계/Graph/Vector 단계는 별도
+    프로세스로 실행된다. 이 함수는 그 프로세스나 Graph volume 적재가 실패했을
+    때 실행 레코드가 ``running``으로 방치되지 않도록 하는 운영 진입점이다.
+    """
+    if psycopg is None:
+        raise RuntimeError("실패 상태 기록에는 requirements.txt의 psycopg가 필요합니다")
+    conn = psycopg.connect(dsn())
+    try:
+        relation = conn.execute(
+            "SELECT to_regclass(%s)", (f"{SCHEMAS['META']}.load_run",)
+        ).fetchone()[0]
+        if relation is None:
+            return False
+        row = conn.execute(
+            f"""
+            SELECT run_id FROM {SCHEMAS['META']}.load_run
+            WHERE status='running'
+            ORDER BY started_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if row is None:
+            return False
+        conn.execute(
+            f"""
+            UPDATE {SCHEMAS['META']}.load_run
+            SET finished_at=clock_timestamp(), status='failed', phase=%s,
+                error_message=%s
+            WHERE run_id=%s AND status='running'
+            """,
+            (phase[:200], error_message[:2000], row[0]),
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
 
 
 def render_sql(path: Path) -> str:
@@ -357,12 +399,10 @@ def build(data_dir: str | Path | None = None) -> dict[str, object]:
     started_at = datetime.now(timezone.utc)
     loaded_rows: dict[str, int] = {}
 
-    with psycopg.connect(dsn()) as conn:
+    conn = psycopg.connect(dsn())
+    phase = "initializing"
+    try:
         recreate_stage_schemas(conn)
-        for item in inspections:
-            create_raw_table(conn, item)
-            loaded_rows[f"raw.{item.spec.raw_table}"] = load_raw_table(conn, item)
-
         conn.execute(render_sql(SQL_DIR / "001_platform_schema.sql"))
         source_files = [item.as_dict() for item in inspections]
         domain_as_of = {
@@ -389,7 +429,7 @@ def build(data_dir: str | Path | None = None) -> dict[str, object]:
             f"""
             INSERT INTO {SCHEMAS['META']}.load_run
               (run_id,snapshot_id,started_at,status,phase,source_rows,loaded_rows,validation_result)
-            VALUES (%s,%s,%s,'running','raw_loaded',%s::jsonb,%s::jsonb,'{{}}'::jsonb)
+            VALUES (%s,%s,%s,'running','initializing',%s::jsonb,%s::jsonb,'{{}}'::jsonb)
             """,
             (
                 run_id,
@@ -408,18 +448,63 @@ def build(data_dir: str | Path | None = None) -> dict[str, object]:
                 json.dumps(loaded_rows),
             ),
         )
+        # run row를 먼저 확정해 이후 어느 단계가 실패해도 failed/error stage를 남긴다.
+        conn.commit()
+
+        phase = "raw_loading"
+        for item in inspections:
+            create_raw_table(conn, item)
+            loaded_rows[f"raw.{item.spec.raw_table}"] = load_raw_table(conn, item)
+        conn.execute(
+            f"UPDATE {SCHEMAS['META']}.load_run SET phase='raw_loaded', "
+            "loaded_rows=%s::jsonb WHERE run_id=%s",
+            (json.dumps(loaded_rows), run_id),
+        )
+        conn.commit()
+
+        phase = "rdb_enriching"
         loaded_rows["meta.column_catalog"] = insert_catalog(conn, inspections)
         conn.execute(render_sql(SQL_DIR / "010_enrich.sql"))
+        create_compatibility_views(conn, inspections, SCHEMAS)
+        conn.commit()
+
+        phase = "rdb_validating"
         validation = validate_stage(conn, inspections)
         conn.execute(
             f"""
             UPDATE {SCHEMAS['META']}.load_run
-            SET finished_at=clock_timestamp(), status='passed', phase='rdb_validated',
+            SET status='running', phase='rdb_validated',
                 loaded_rows=%s::jsonb, validation_result=%s::jsonb
             WHERE run_id=%s
             """,
-            (json.dumps(loaded_rows), json.dumps(validation), run_id),
+            (
+                json.dumps(loaded_rows),
+                json.dumps({"rdb": validation, "vector_status": "pending"}),
+                run_id,
+            ),
         )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        try:
+            if conn.execute(
+                "SELECT to_regclass(%s)", (f"{SCHEMAS['META']}.load_run",)
+            ).fetchone()[0]:
+                conn.execute(
+                    f"""
+                    UPDATE {SCHEMAS['META']}.load_run
+                    SET finished_at=clock_timestamp(), status='failed', phase=%s,
+                        error_message=%s
+                    WHERE run_id=%s
+                    """,
+                    (phase, f"{type(exc).__name__}: {str(exc)[:2000]}", run_id),
+                )
+                conn.commit()
+        except Exception:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return {
         "snapshot_id": str(snapshot_id),
@@ -450,12 +535,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--check", action="store_true", help="파일·DB를 변경하지 않고 원천/카탈로그만 검증"
     )
+    parser.add_argument(
+        "--mark-failed",
+        metavar="PHASE",
+        help="공식 stage 후속 명령 실패를 최신 running 실행에 기록",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    result = read_only_check(args.data_dir) if args.check else build(args.data_dir)
+    if args.check and args.mark_failed:
+        raise SystemExit("--check와 --mark-failed는 함께 사용할 수 없습니다")
+    if args.mark_failed:
+        result = {
+            "marked_failed": mark_latest_run_failed(
+                args.mark_failed, "official stage command failed; inspect stage logs"
+            ),
+            "phase": args.mark_failed,
+        }
+    else:
+        result = read_only_check(args.data_dir) if args.check else build(args.data_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 

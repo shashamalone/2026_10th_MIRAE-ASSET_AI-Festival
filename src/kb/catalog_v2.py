@@ -197,7 +197,12 @@ STATIC_TABLES: tuple[TableDef, ...] = (
             c("pd_no", "text", "채권 상품번호", nullable=False),
             c("name", "text", "상품명", nullable=False),
             c("issuer", "text", "발행사"),
-            c("credit_rating", "text", "신용등급 원문"),
+            c(
+                "credit_rating",
+                "text",
+                "신용등급 원문; NULL은 필터·랭킹 제외(국채 무등급을 최저등급으로 간주 금지)",
+                zero="NULL=unavailable; sovereign unrated is not default risk",
+            ),
             c("currency", "text", "통화 코드"),
             c("issue_date", "date", "발행일"),
             c("maturity_date", "date", "만기일"),
@@ -242,7 +247,7 @@ STATIC_TABLES: tuple[TableDef, ...] = (
             c("ticker", "text", "국내 티커"),
             c("isin", "text", "ISIN"),
             c("manager", "text", "운용사"),
-            c("base_index", "text", "기초지수"),
+            c("base_index", "text", "기초지수; 알려진 비값 문자열은 NULL이며 필터·랭킹 제외"),
             c("currency", "text", "통화 코드"),
             c("listing_date", "date", "상장일"),
             c("delisting_date", "date", "상장종료일"),
@@ -458,7 +463,7 @@ STATIC_TABLES: tuple[TableDef, ...] = (
         "bond_schema_terms",
         "table",
         "채권 TBox grounding term 1개",
-        "common+bond TBox 주석 130행 CLOVA bge-m3 임베딩",
+        "common+bond TBox 주석용 vector(1024) 계약; 동일 해시 운영 벡터만 재사용",
         (
             c("term_uri", "text", "TBox URI", nullable=False, pk=1),
             c("label", "text", "라벨", nullable=False),
@@ -479,7 +484,7 @@ STATIC_TABLES: tuple[TableDef, ...] = (
         "schema_terms_all",
         "table",
         "전체 TBox grounding term 1개",
-        "5개 TBox 주석 189행 CLOVA bge-m3 임베딩",
+        "5개 TBox 주석용 vector(1024) 계약; 신규 임베딩 생성은 후속 릴리스",
         (
             c("term_uri", "text", "TBox URI", nullable=False, pk=1),
             c("label", "text", "라벨", nullable=False),
@@ -500,7 +505,7 @@ STATIC_TABLES: tuple[TableDef, ...] = (
         "document_chunk",
         "table",
         "문서 청크 1개",
-        "문서·상품·페이지·발행일·인용 위치가 있는 콘텐츠 임베딩",
+        "문서·상품·페이지·발행일·인용 위치가 있는 vector(1024) 계약",
         (
             c("chunk_id", "text", "결정적 청크 ID", nullable=False, pk=1),
             c("document_id", "text", "근거 문서 ID", nullable=False, fk="relations.source_document.document_id"),
@@ -531,6 +536,11 @@ VIEW_DEFINITIONS = (
     {"name": "core.etf_gl", "source": "enriched.etf_gl", "purpose": "Agent 호환"},
     {"name": "core.fund_pub", "source": "enriched.fund_pub", "purpose": "Agent 호환"},
     {"name": "core.etn", "source": "enriched.etn_kr UNION ALL enriched.etn_gl", "purpose": "Agent 호환"},
+    {"name": "relations.etf_holding", "source": "relations.product_holding", "purpose": "구 관계명 호환"},
+    {"name": "relations.etf_theme", "source": "relations.product_classification", "filter": "classification_type='theme'"},
+    {"name": "relations.company_subsidiary", "source": "relations.company_subsidiary", "kind": "table", "purpose": "정식 이름이 구 계약과 동일"},
+    {"name": "vec.doc_chunk", "source": "vec.document_chunk", "purpose": "구 벡터명 호환"},
+    {"name": "vec.schema_index", "source": "vec.schema_terms_all", "purpose": "구 벡터명 호환"},
     {"name": "enriched.product_search", "source": "product_master+product_metric+product_coverage", "kind": "materialized view"},
 )
 

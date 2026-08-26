@@ -461,7 +461,7 @@
 | 2 | `pd_no` | `text` | N |  |  |  |  | 채권 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 3 | `name` | `text` | N |  |  |  |  | 상품명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 4 | `issuer` | `text` | Y |  |  |  |  | 발행사 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 5 | `credit_rating` | `text` | Y |  |  |  |  | 신용등급 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
+| 5 | `credit_rating` | `text` | Y |  |  |  |  | 신용등급 원문; NULL은 필터·랭킹 제외(국채 무등급을 최저등급으로 간주 금지) | NULL=unavailable; sovereign unrated is not default risk | 주최측(1순위) | 파생 |
 | 6 | `currency` | `text` | Y |  |  |  |  | 통화 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 7 | `issue_date` | `date` | Y |  |  |  |  | 발행일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 8 | `maturity_date` | `date` | Y |  |  |  |  | 만기일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -512,7 +512,7 @@
 | 4 | `ticker` | `text` | Y |  |  |  |  | 국내 티커 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 5 | `isin` | `text` | Y |  |  |  |  | ISIN | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 6 | `manager` | `text` | Y |  |  |  |  | 운용사 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 7 | `base_index` | `text` | Y |  |  |  |  | 기초지수 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
+| 7 | `base_index` | `text` | Y |  |  |  |  | 기초지수; 알려진 비값 문자열은 NULL이며 필터·랭킹 제외 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 8 | `currency` | `text` | Y |  |  |  |  | 통화 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 9 | `listing_date` | `date` | Y |  |  |  |  | 상장일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 10 | `delisting_date` | `date` | Y |  |  |  |  | 상장종료일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -758,7 +758,7 @@
 ## `vec.bond_schema_terms`
 
 - 종류: table
-- 설명: common+bond TBox 주석 130행 CLOVA bge-m3 임베딩
+- 설명: common+bond TBox 주석용 vector(1024) 계약; 동일 해시 운영 벡터만 재사용
 - grain: 채권 TBox grounding term 1개
 - PK: `term_uri`
 - 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
@@ -781,7 +781,7 @@
 ## `vec.schema_terms_all`
 
 - 종류: table
-- 설명: 5개 TBox 주석 189행 CLOVA bge-m3 임베딩
+- 설명: 5개 TBox 주석용 vector(1024) 계약; 신규 임베딩 생성은 후속 릴리스
 - grain: 전체 TBox grounding term 1개
 - PK: `term_uri`
 - 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
@@ -804,7 +804,7 @@
 ## `vec.document_chunk`
 
 - 종류: table
-- 설명: 문서·상품·페이지·발행일·인용 위치가 있는 콘텐츠 임베딩
+- 설명: 문서·상품·페이지·발행일·인용 위치가 있는 vector(1024) 계약
 - grain: 문서 청크 1개
 - PK: `chunk_id`
 - 인덱스: embedding vector_cosine_ops (HNSW), document_id, product_id
@@ -839,4 +839,9 @@
 | `core.etf_gl` | view | `enriched.etf_gl` | Agent 호환 |
 | `core.fund_pub` | view | `enriched.fund_pub` | Agent 호환 |
 | `core.etn` | view | `enriched.etn_kr UNION ALL enriched.etn_gl` | Agent 호환 |
+| `relations.etf_holding` | view | `relations.product_holding` | 구 관계명 호환 |
+| `relations.etf_theme` | view | `relations.product_classification` | classification_type='theme' |
+| `relations.company_subsidiary` | table | `relations.company_subsidiary` | 정식 이름이 구 계약과 동일 |
+| `vec.doc_chunk` | view | `vec.document_chunk` | 구 벡터명 호환 |
+| `vec.schema_index` | view | `vec.schema_terms_all` | 구 벡터명 호환 |
 | `enriched.product_search` | materialized view | `product_master+product_metric+product_coverage` |  |

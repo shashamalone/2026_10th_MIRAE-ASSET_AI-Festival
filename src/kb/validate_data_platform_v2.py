@@ -4,17 +4,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
 from pathlib import Path
 
+import httpx
 from rdflib import OWL, RDF, RDFS, Graph, Namespace, URIRef
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kb.build_catalog_v2 import build_outputs, write_or_check  # noqa: E402
-from kb.v2_manifest import ROOT, validate_source_dir  # noqa: E402
+from kb.v2_manifest import (  # noqa: E402
+    EXPECTED_ABOX_TRIPLES,
+    EXPECTED_RELATION_COUNTS,
+    EXPECTED_SNAPSHOT_HASH,
+    RELEASE_ID,
+    ROOT,
+    validate_source_dir,
+)
 from tools.sql_guard import strip_literals_and_comments  # noqa: E402
 
 FP = Namespace("http://mafest.ai/product#")
@@ -22,6 +31,13 @@ FPI = "http://mafest.ai/instance/"
 SQL_PATH = ROOT / "sql" / "v2" / "010_enrich.sql"
 OUTPUT_DIR = ROOT / "artifacts" / "graph_v2"
 SCHEMAS = {"META": "meta_next", "RAW": "raw_next", "ENRICHED": "enriched_next", "RELATIONS": "relations_next", "VEC": "vec_next", "CORE": "core_next"}
+EXPECTED_ABOX_GRAPHS = {
+    "http://mafest.ai/graph/abox/bond_kr",
+    "http://mafest.ai/graph/abox/etf_kr",
+    "http://mafest.ai/graph/abox/etf_gl",
+    "http://mafest.ai/graph/abox/fund_pub",
+    "http://mafest.ai/graph/abox/company",
+}
 
 
 def validate_no_buyable_quantity_rule() -> dict[str, object]:
@@ -102,6 +118,9 @@ def validate_static(data_dir: str | Path | None = None) -> dict[str, object]:
 
 
 def validate_abox_files() -> dict[str, object]:
+    from kb.build_graph_v2 import validate_manifest_files
+
+    manifest = validate_manifest_files()
     expected = {
         "instances_bond_kr.ttl",
         "instances_etf_kr.ttl",
@@ -179,7 +198,67 @@ def validate_abox_files() -> dict[str, object]:
         raise ValueError("Graph domain/range/n-ary 오류: " + ", ".join(errors[:20]))
     if any(not str(subject).startswith(FPI) for subject in graph.subjects() if isinstance(subject, URIRef)):
         raise ValueError("ABox subject URI namespace 불안정")
-    return {"files": counts, "triples": len(graph), "domain_range_errors": 0}
+    if len(graph) != EXPECTED_ABOX_TRIPLES:
+        raise ValueError(
+            f"ABox 합계 {len(graph):,} != {EXPECTED_ABOX_TRIPLES:,}"
+        )
+    return {
+        "files": counts,
+        "triples": len(graph),
+        "domain_range_errors": 0,
+        "manifest_sha_verified": True,
+        "release_id": manifest["release_id"],
+    }
+
+
+def validate_graph_endpoint(url: str | None = None) -> dict[str, object]:
+    """별도 next volume의 실제 named graph 집합과 ABox triple 수를 검증한다."""
+    endpoint = (url or os.environ.get("OXIGRAPH_NEXT_QUERY_URL", "")).rstrip("/")
+    if not endpoint:
+        raise ValueError("--stage에는 OXIGRAPH_NEXT_QUERY_URL이 필요합니다")
+    if not endpoint.endswith("/query"):
+        endpoint += "/query"
+
+    def query(statement: str) -> dict[str, object]:
+        response = httpx.post(
+            endpoint,
+            content=statement.encode("utf-8"),
+            headers={
+                "Content-Type": "application/sparql-query",
+                "Accept": "application/sparql-results+json",
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    count_payload = query(
+        "SELECT (COUNT(*) AS ?triples) WHERE { GRAPH ?g { ?s ?p ?o } "
+        "FILTER(STRSTARTS(STR(?g), 'http://mafest.ai/graph/abox/')) }"
+    )
+    bindings = count_payload.get("results", {}).get("bindings", [])
+    triples = int(bindings[0]["triples"]["value"]) if bindings else -1
+    graph_payload = query(
+        "SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } "
+        "FILTER(STRSTARTS(STR(?g), 'http://mafest.ai/graph/abox/')) } ORDER BY ?g"
+    )
+    graphs = {
+        row["g"]["value"]
+        for row in graph_payload.get("results", {}).get("bindings", [])
+    }
+    if triples != EXPECTED_ABOX_TRIPLES or graphs != EXPECTED_ABOX_GRAPHS:
+        raise ValueError(
+            f"next Graph 계약 불일치 triples={triples}/{EXPECTED_ABOX_TRIPLES}, "
+            f"graphs={sorted(graphs)}"
+        )
+    # Graph 자체에 release metadata triple을 더해 manifest 행 수를 바꾸지 않는다.
+    # 정확한 ABox named graph 집합과 결정적 triple 수가 모두 맞을 때만 고정 hash로 판정한다.
+    return {
+        "release_id": RELEASE_ID,
+        "snapshot_hash": EXPECTED_SNAPSHOT_HASH,
+        "triples": triples,
+        "named_graphs": sorted(graphs),
+    }
 
 
 def validate_stage(data_dir: str | Path | None = None) -> dict[str, object]:
@@ -193,6 +272,18 @@ def validate_stage(data_dir: str | Path | None = None) -> dict[str, object]:
     with psycopg.connect(dsn()) as conn:
         conn.execute("SET TRANSACTION READ ONLY")
         rdb = validate_rdb_stage(conn, inspections)
+        relation_counts = {
+            "product_holdings": conn.execute(
+                f"SELECT count(*) FROM {SCHEMAS['RELATIONS']}.product_holding"
+            ).fetchone()[0],
+            "company_subsidiaries": conn.execute(
+                f"SELECT count(*) FROM {SCHEMAS['RELATIONS']}.company_subsidiary"
+            ).fetchone()[0],
+        }
+        if relation_counts != EXPECTED_RELATION_COUNTS:
+            raise ValueError(
+                f"관계 행 수 불일치 actual={relation_counts} expected={EXPECTED_RELATION_COUNTS}"
+            )
         document_count = conn.execute(f"SELECT count(*) FROM {SCHEMAS['VEC']}.document_chunk").fetchone()[0]
         vectors = validate_vectors(conn, document_count)
         plans = conn.execute(
@@ -234,24 +325,64 @@ def validate_stage(data_dir: str | Path | None = None) -> dict[str, object]:
             ).fetchone()[0]
             if not unavailable:
                 raise ValueError("삼성전자 교차질의가 0행인데 미확보 coverage도 없음")
-        hnsw = conn.execute(
-            "SELECT count(*) FROM pg_indexes WHERE schemaname=%s AND indexdef ILIKE '%%USING hnsw%%'",
-            (SCHEMAS["VEC"],),
-        ).fetchone()[0]
-        if hnsw < 3:
-            raise ValueError(f"cosine HNSW 인덱스 부족: {hnsw}")
     graph_preview = build_graph(check_only=True)
     graph_files = validate_abox_files()
-    return {
+    graph_endpoint = validate_graph_endpoint()
+    result = {
         "rdb": rdb,
+        "relations": relation_counts,
         "vectors": vectors,
-        "hnsw_indexes": hnsw,
+        "hnsw_indexes": vectors["hnsw_indexes"],
         "bond_plan_buyable_quantity": False,
         "cross_query_rows": len(cross_rows),
         "cross_query_seconds": round(elapsed, 4),
         "graph_preview": graph_preview,
         "graph_files": graph_files,
+        "graph_endpoint": graph_endpoint,
     }
+    with psycopg.connect(dsn()) as conn:
+        latest = conn.execute(
+            f"SELECT run_id FROM {SCHEMAS['META']}.load_run "
+            "WHERE status='running' ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()
+        if not latest:
+            raise ValueError("cutover_ready로 전환할 running load_run이 없습니다")
+        run_id = latest[0]
+        conn.execute(
+            f"UPDATE {SCHEMAS['META']}.load_run SET phase='graph_validated', "
+            "validation_result=validation_result || %s::jsonb WHERE run_id=%s",
+            (json.dumps({"graph": graph_endpoint}), run_id),
+        )
+        conn.commit()
+        conn.execute(
+            f"UPDATE {SCHEMAS['META']}.load_run SET status='passed', "
+            "phase='cutover_ready', finished_at=clock_timestamp(), "
+            "validation_result=validation_result || %s::jsonb WHERE run_id=%s",
+            (json.dumps({"cutover_ready": True}), run_id),
+        )
+        conn.commit()
+    return result
+
+
+def mark_stage_failed(error: Exception) -> None:
+    """통합 검증 실패를 최신 running run에 보존한다."""
+    try:
+        import psycopg
+
+        from kb.build_data_platform_v2 import dsn
+
+        with psycopg.connect(dsn()) as conn:
+            conn.execute(
+                f"UPDATE {SCHEMAS['META']}.load_run SET status='failed', "
+                "phase='stage_validation_failed', finished_at=clock_timestamp(), "
+                "error_message=%s WHERE run_id=(SELECT run_id FROM "
+                f"{SCHEMAS['META']}.load_run WHERE status='running' "
+                "ORDER BY started_at DESC LIMIT 1)",
+                (f"{type(error).__name__}: {str(error)[:2000]}",),
+            )
+    except Exception:
+        # 원래 검증 오류를 가리지 않는다. DB 자체가 실패한 경우 배포 스크립트가 중단된다.
+        return
 
 
 def main() -> None:
@@ -261,7 +392,11 @@ def main() -> None:
     args = parser.parse_args()
     result = {"static": validate_static(args.data_dir)}
     if args.stage:
-        result["stage"] = validate_stage(args.data_dir)
+        try:
+            result["stage"] = validate_stage(args.data_dir)
+        except Exception as exc:
+            mark_stage_failed(exc)
+            raise
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 

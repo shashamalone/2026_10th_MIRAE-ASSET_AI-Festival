@@ -20,6 +20,7 @@ from kb.db_definition_docs_v2 import (  # noqa: E402
 from kb.v2_manifest import (  # noqa: E402
     DATASET_VERSION,
     EXTERNAL_CUTOFF,
+    RELEASE_ID,
     RELEASE_DATE,
     ROOT,
     snapshot_hash,
@@ -63,6 +64,7 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 ## 데이터 계약
 
 - 버전: `{DATASET_VERSION}`
+- release ID: `{RELEASE_ID}`
 - 배포일/외부 근거 상한: `{RELEASE_DATE.isoformat()}`
 - 전체 manifest SHA-256: `{snapshot_hash(inspections)}`
 - 원천: 주최측이 제공한 2026-08-24 데이터 XLSX 4개와 스키마 XLSX 4개만 사용합니다.
@@ -82,8 +84,8 @@ def structure_markdown(inspections, catalog: tuple[TableDef, ...]) -> str:
 2. `raw_next`에 공식 타입·컬럼 그대로 적재(공백만 NULL, 0 보존)
 3. `enriched_next`·`relations_next`·`meta_next` 생성
 4. 결정적 ABox TTL 5개 생성 및 TBox/ABox RDF 검증
-5. CLOVA Studio `bge-m3` 1024차원 schema/content embedding 적재
-6. PK/FK·cutoff·Graph·Vector·교차질의·금지 SQL 검증
+5. `vec_next`의 `vector(1024)` 계약 생성 후 동일 해시 운영 벡터만 재사용
+6. PK/FK·cutoff·Graph·Vector schema/status·교차질의·금지 SQL 검증
 7. 검증 완료 후에만 `*_next → 정식`, 기존 정식 → `*_prev` 전환
 
 모든 빌더의 `--check`는 파일과 DB를 변경하지 않습니다. 데이터·외부 원문·임베딩은
@@ -245,6 +247,7 @@ def agent_catalog(inspections, catalog: tuple[TableDef, ...]) -> str:
     payload = {
         "catalog_version": "2.0",
         "dataset_version": DATASET_VERSION,
+        "release_id": RELEASE_ID,
         "release_date": RELEASE_DATE.isoformat(),
         "external_cutoff": EXTERNAL_CUTOFF.isoformat(),
         "snapshot_hash": snapshot_hash(inspections),
@@ -252,6 +255,9 @@ def agent_catalog(inspections, catalog: tuple[TableDef, ...]) -> str:
         "business_rules": {
             "buyable_quantity": "storage_only_never_use_for_purchasability",
             "bond_purchasability": "present_in_latest_and_not_explicitly_matured_or_delisted",
+            "bond_missing_credit_rating": "unavailable_never_treat_as_lowest_or_rank; sovereign_unrated_is_not_default_risk",
+            "dummy_divergence_rate": "raw_storage_only_never_filter_or_rank_without_verified_as_of_and_semantics",
+            "string_sentinel": "normalize_known_non_value_text_to_null_before_filter_or_rank",
             "metric_zero_null": "unavailable_exclude_from_ranking",
             "code_zero": "preserve_and_use_official_name_only",
             "source_priority": "organizer_axis_first_external_only_when_axis_absent",

@@ -5,6 +5,7 @@
 물리 정의의 정본은 [단일 카탈로그](../../src/kb/catalog_v2.py)와 [PostgreSQL DDL](../../sql/v2/001_platform_schema.sql)입니다. `vec.*` 상세는 [VectorDB 정의서](VECTORDB_DEFINITION_V2_0.md)가 소유합니다.
 
 - 데이터 버전: `financial-products-2026-08-24`
+- release ID: `financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
 - 배포일: `2026-08-24`
 - 외부 근거 cutoff: `2026-08-24`
 
@@ -31,10 +32,12 @@
 | API | 용도 |
 |---|---|
 | `GET /db/version` | dataset version, release/cutoff, snapshot hash |
-| `GET /db/tables` / `GET /db/columns` | 물리 테이블·컬럼 탐색 |
+| `GET /db/tables` / `GET /db/columns` / `GET /db/columns/{schema}/{table}` | 물리 테이블·컬럼 탐색 |
+| `GET /db/stats` | raw·상품·관계·vector 행 수 |
 | `GET /db/catalog` | Agent용 전체 schema catalog |
 | `GET /db/coverage` | 상품별 holdings·문서·성과 확보 상태 |
-| `POST /db/sql` | 읽기 전용 SELECT/CTE 실행 |
+| `POST /db`, `POST /db/sql` | 읽기 전용 SELECT/CTE 실행; `sql`/`query` 별칭 |
+| `POST /db/sparql` | 읽기 전용 SPARQL; `sparql`/`query` 별칭 |
 
 직접 연결과 API 모두 쓰기 쿼리를 허용하지 않습니다. 운영 쓰기·스키마 승격은 서버 운영자 계정만 수행합니다.
 
@@ -58,7 +61,7 @@
 | `meta` | snapshot, 적재 이력, 컬럼 카탈로그, 상품별 coverage | 4 | 0 |
 | `raw` | 공식 XLSX의 컬럼·타입·grain 보존 | 4 | 4 |
 | `enriched` | 공통 상품·지표·식별자와 도메인별 1상품 grain | 11 | 2 |
-| `relations` | 문서·편입·분류·자회사·상품문서 관계 | 5 | 0 |
+| `relations` | 문서·편입·분류·자회사·상품문서 관계 | 5 | 3 |
 | `core` | 기존 Agent 호환 읽기 뷰 | 0 | 5 |
 
 ## 식별자와 조인 지도
@@ -147,6 +150,11 @@
 | `core.etf_gl` | view | `enriched.etf_gl` | Agent 호환 |
 | `core.fund_pub` | view | `enriched.fund_pub` | Agent 호환 |
 | `core.etn` | view | `enriched.etn_kr UNION ALL enriched.etn_gl` | Agent 호환 |
+| `relations.etf_holding` | view | `relations.product_holding` | 구 관계명 호환 |
+| `relations.etf_theme` | view | `relations.product_classification` | classification_type='theme' |
+| `relations.company_subsidiary` | table | `relations.company_subsidiary` | 정식 이름이 구 계약과 동일 |
+| `vec.doc_chunk` | view | `vec.document_chunk` | 구 벡터명 호환 |
+| `vec.schema_index` | view | `vec.schema_terms_all` | 구 벡터명 호환 |
 | `enriched.product_search` | materialized view | `product_master+product_metric+product_coverage` |  |
 
 ## 핵심 데이터 규칙
@@ -659,7 +667,7 @@ LIMIT 10;
 | 2 | `pd_no` | `text` | N |  |  |  |  | 채권 상품번호 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 3 | `name` | `text` | N |  |  |  |  | 상품명 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 4 | `issuer` | `text` | Y |  |  |  |  | 발행사 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 5 | `credit_rating` | `text` | Y |  |  |  |  | 신용등급 원문 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
+| 5 | `credit_rating` | `text` | Y |  |  |  |  | 신용등급 원문; NULL은 필터·랭킹 제외(국채 무등급을 최저등급으로 간주 금지) | NULL=unavailable; sovereign unrated is not default risk | 주최측(1순위) | 파생 |
 | 6 | `currency` | `text` | Y |  |  |  |  | 통화 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 7 | `issue_date` | `date` | Y |  |  |  |  | 발행일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 8 | `maturity_date` | `date` | Y |  |  |  |  | 만기일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
@@ -710,7 +718,7 @@ LIMIT 10;
 | 4 | `ticker` | `text` | Y |  |  |  |  | 국내 티커 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 5 | `isin` | `text` | Y |  |  |  |  | ISIN | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 6 | `manager` | `text` | Y |  |  |  |  | 운용사 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
-| 7 | `base_index` | `text` | Y |  |  |  |  | 기초지수 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
+| 7 | `base_index` | `text` | Y |  |  |  |  | 기초지수; 알려진 비값 문자열은 NULL이며 필터·랭킹 제외 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 8 | `currency` | `text` | Y |  |  |  |  | 통화 코드 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 9 | `listing_date` | `date` | Y |  |  |  |  | 상장일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |
 | 10 | `delisting_date` | `date` | Y |  |  |  |  | 상장종료일 | 빈 값=NULL; 0은 원본 값으로 보존 | 주최측(1순위) | 파생 |

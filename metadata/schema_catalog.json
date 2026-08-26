@@ -1,18 +1,22 @@
 {
   "business_rules": {
+    "bond_missing_credit_rating": "unavailable_never_treat_as_lowest_or_rank; sovereign_unrated_is_not_default_risk",
     "bond_purchasability": "present_in_latest_and_not_explicitly_matured_or_delisted",
     "buyable_quantity": "storage_only_never_use_for_purchasability",
     "code_zero": "preserve_and_use_official_name_only",
+    "dummy_divergence_rate": "raw_storage_only_never_filter_or_rank_without_verified_as_of_and_semantics",
     "external_cutoff": "2026-08-24",
     "global_etf_return_1y": "adjusted_price_or_total_return_only_never_plain_close",
     "metric_zero_null": "unavailable_exclude_from_ranking",
     "missing_holding": "coverage_unavailable_not_not_held",
-    "source_priority": "organizer_axis_first_external_only_when_axis_absent"
+    "source_priority": "organizer_axis_first_external_only_when_axis_absent",
+    "string_sentinel": "normalize_known_non_value_text_to_null_before_filter_or_rank"
   },
   "catalog_version": "2.0",
   "dataset_version": "financial-products-2026-08-24",
   "external_cutoff": "2026-08-24",
   "release_date": "2026-08-24",
+  "release_id": "financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38",
   "snapshot_hash": "ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38",
   "source_files": [
     {
@@ -24,6 +28,7 @@
       "excluded_rows": 0,
       "loaded_rows": 21882,
       "official_nullable_conflicts": {},
+      "partition_counts": {},
       "primary_key": [
         "pd_no",
         "pd_exg_mkt",
@@ -46,6 +51,10 @@
       "official_nullable_conflicts": {
         "pd_exg_mkt_cd": 3
       },
+      "partition_counts": {
+        "ETF": 1235,
+        "ETN": 545
+      },
       "primary_key": [
         "pd_itm_no"
       ],
@@ -63,6 +72,10 @@
       "excluded_rows": 0,
       "loaded_rows": 6037,
       "official_nullable_conflicts": {},
+      "partition_counts": {
+        "ETF": 5972,
+        "ETN": 65
+      },
       "primary_key": [
         "pd_itm_no"
       ],
@@ -81,6 +94,10 @@
       "loaded_rows": 23676,
       "official_nullable_conflicts": {
         "zrin_fd_ivst_risk_gcd": 14987
+      },
+      "partition_counts": {
+        "공모": 14716,
+        "사모": 8960
       },
       "primary_key": [
         "itm_no"
@@ -4646,7 +4663,7 @@
         {
           "as_of_column": "",
           "data_type": "text",
-          "description": "신용등급 원문",
+          "description": "신용등급 원문; NULL은 필터·랭킹 제외(국채 무등급을 최저등급으로 간주 금지)",
           "fk_target": "",
           "name": "credit_rating",
           "nullable": true,
@@ -4654,7 +4671,7 @@
           "source_priority": "주최측(1순위)",
           "transform_expression": "파생",
           "unit": "",
-          "zero_null_rule": "빈 값=NULL; 0은 원본 값으로 보존"
+          "zero_null_rule": "NULL=unavailable; sovereign unrated is not default risk"
         },
         {
           "as_of_column": "",
@@ -5023,7 +5040,7 @@
         {
           "as_of_column": "",
           "data_type": "text",
-          "description": "기초지수",
+          "description": "기초지수; 알려진 비값 문자열은 NULL이며 필터·랭킹 제외",
           "fk_target": "",
           "name": "base_index",
           "nullable": true,
@@ -6616,7 +6633,7 @@
         }
       ],
       "deployment_status": "미배포",
-      "description": "common+bond TBox 주석 130행 CLOVA bge-m3 임베딩",
+      "description": "common+bond TBox 주석용 vector(1024) 계약; 동일 해시 운영 벡터만 재사용",
       "fq_name": "vec.bond_schema_terms",
       "grain": "채권 TBox grounding term 1개",
       "implementation_status": "구현",
@@ -6775,7 +6792,7 @@
         }
       ],
       "deployment_status": "미배포",
-      "description": "5개 TBox 주석 189행 CLOVA bge-m3 임베딩",
+      "description": "5개 TBox 주석용 vector(1024) 계약; 신규 임베딩 생성은 후속 릴리스",
       "fq_name": "vec.schema_terms_all",
       "grain": "전체 TBox grounding term 1개",
       "implementation_status": "구현",
@@ -6947,7 +6964,7 @@
         }
       ],
       "deployment_status": "미배포",
-      "description": "문서·상품·페이지·발행일·인용 위치가 있는 콘텐츠 임베딩",
+      "description": "문서·상품·페이지·발행일·인용 위치가 있는 vector(1024) 계약",
       "fq_name": "vec.document_chunk",
       "grain": "문서 청크 1개",
       "implementation_status": "구현",
@@ -7011,6 +7028,32 @@
       "name": "core.etn",
       "purpose": "Agent 호환",
       "source": "enriched.etn_kr UNION ALL enriched.etn_gl"
+    },
+    {
+      "name": "relations.etf_holding",
+      "purpose": "구 관계명 호환",
+      "source": "relations.product_holding"
+    },
+    {
+      "filter": "classification_type='theme'",
+      "name": "relations.etf_theme",
+      "source": "relations.product_classification"
+    },
+    {
+      "kind": "table",
+      "name": "relations.company_subsidiary",
+      "purpose": "정식 이름이 구 계약과 동일",
+      "source": "relations.company_subsidiary"
+    },
+    {
+      "name": "vec.doc_chunk",
+      "purpose": "구 벡터명 호환",
+      "source": "vec.document_chunk"
+    },
+    {
+      "name": "vec.schema_index",
+      "purpose": "구 벡터명 호환",
+      "source": "vec.schema_terms_all"
     },
     {
       "kind": "materialized view",

@@ -5,6 +5,7 @@
 의미 정의의 정본은 [TBox TTL 5개](../../ontology/)이며 ABox 생성 규칙은 [Graph 빌더](../../src/kb/build_graph_v2.py)가 소유합니다.
 
 - 데이터 버전: `financial-products-2026-08-24`
+- release ID: `financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
 - 배포일: `2026-08-24`
 - 외부 근거 cutoff: `2026-08-24`
 
@@ -21,7 +22,7 @@
 - ontology namespace: `fp: <http://mafest.ai/product#>`
 - instance namespace: `fpi: <http://mafest.ai/instance/>`
 - TBox와 ABox는 별도 named graph로 벌크 로드하며 런타임에 TTL을 파싱하지 않습니다.
-- ABox 트리플 수는 입력 관계 데이터에 따라 달라지므로 정의서에 고정하지 않고 `graph_manifest.json`과 `/health`로 확인합니다.
+- ABox는 결정적으로 `655,388` 트리플이며 `graph_manifest.json`의 파일별 SHA-256과 `/health`로 확인합니다.
 - 담당 연산: 상품 분류, 편입·자회사·문서 연결, TBox 허용값과 domain/range 검증
 - 비담당 연산: AUM·수익률·보수의 정렬/집계는 RDB, 서술 문서의 의미 검색은 VectorDB가 담당
 

@@ -5,6 +5,7 @@
 물리 정의의 정본은 [단일 카탈로그](../../src/kb/catalog_v2.py), [Vector DDL](../../sql/v2/001_platform_schema.sql), [임베딩 빌더](../../src/kb/build_vectors_v2.py)입니다.
 
 - 데이터 버전: `financial-products-2026-08-24`
+- release ID: `financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
 - 배포일: `2026-08-24`
 - 외부 근거 cutoff: `2026-08-24`
 
@@ -18,9 +19,9 @@
 ## 범위와 엔진
 
 - 엔진: PostgreSQL 17의 pgvector 확장
-- 임베딩: CLOVA Studio `bge-m3`, 1024차원
+- 임베딩 계약: CLOVA Studio `bge-m3`, 1024차원(이번 릴리스 신규 호출 없음)
 - 거리: cosine distance (`<=>`), 점수 표시는 `1 - distance`
-- ANN 인덱스: HNSW + `vector_cosine_ops`
+- ANN 인덱스: 유효 벡터가 재사용된 테이블에만 HNSW + `vector_cosine_ops`
 - 저장 위치: PostgreSQL `vec` 스키마; 별도 FAISS 운영 경로 없음
 - 임베딩 원문과 벡터 산출물은 Git에 커밋하지 않습니다.
 - 담당 연산: 자연어↔TBox 용어 grounding, 후보 상품에 한정한 공식 문서 근거 검색
@@ -28,7 +29,7 @@
 
 ## 읽기 인터페이스
 
-Vector 검색은 별도 서비스가 아니라 PostgreSQL 읽기 경로를 공유합니다. Agent는 `POST /db/sql` 또는 `agent_reader` 직접 연결로 `vec.*` SELECT를 실행하며 임베딩 생성은 서버 내부 CLOVA 클라이언트만 수행합니다. API나 팀 계정은 vector INSERT/UPDATE와 인덱스 재생성을 할 수 없습니다.
+Vector 검색은 PostgreSQL 읽기 경로를 공유합니다. 이번 릴리스는 테이블과 `vector(1024)` 계약만 배포하며 신규 CLOVA 호출을 하지 않습니다. 동일 `content_hash`·`bge-m3`·1024차원·cutoff/FK 계약의 운영 벡터를 전부 재사용할 수 있을 때만 `ready`, 아니면 세 테이블을 비우고 `pending`으로 둡니다. API나 팀 계정은 vector INSERT/UPDATE와 인덱스 재생성을 할 수 없습니다.
 
 ## 라우팅 계약
 
@@ -76,7 +77,7 @@ Ontology Index와 Content Index는 목적·필터·갱신주기가 다르므로 
 ### `vec.bond_schema_terms`
 
 - 종류: table
-- 설명: common+bond TBox 주석 130행 CLOVA bge-m3 임베딩
+- 설명: common+bond TBox 주석용 vector(1024) 계약; 동일 해시 운영 벡터만 재사용
 - grain: 채권 TBox grounding term 1개
 - PK: `term_uri`
 - 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
@@ -99,7 +100,7 @@ Ontology Index와 Content Index는 목적·필터·갱신주기가 다르므로 
 ### `vec.schema_terms_all`
 
 - 종류: table
-- 설명: 5개 TBox 주석 189행 CLOVA bge-m3 임베딩
+- 설명: 5개 TBox 주석용 vector(1024) 계약; 신규 임베딩 생성은 후속 릴리스
 - grain: 전체 TBox grounding term 1개
 - PK: `term_uri`
 - 인덱스: embedding vector_cosine_ops (HNSW), content_hash,embedding_model
@@ -122,7 +123,7 @@ Ontology Index와 Content Index는 목적·필터·갱신주기가 다르므로 
 ### `vec.document_chunk`
 
 - 종류: table
-- 설명: 문서·상품·페이지·발행일·인용 위치가 있는 콘텐츠 임베딩
+- 설명: 문서·상품·페이지·발행일·인용 위치가 있는 vector(1024) 계약
 - grain: 문서 청크 1개
 - PK: `chunk_id`
 - 인덱스: embedding vector_cosine_ops (HNSW), document_id, product_id
@@ -186,9 +187,9 @@ LIMIT %(top_k)s;
 ## 빌드와 검증
 
 1. TBox 5개와 cutoff 이하 문서 청크를 읽고 원문 해시 중복을 검사합니다.
-2. 기존 `vec_next`와 정식 `vec`에서 같은 모델·원문 해시의 임베딩 캐시를 조회합니다.
-3. 누락된 원문만 CLOVA에 보내고 결과가 정확히 1024차원인지 확인합니다.
-4. 세 테이블을 upsert한 뒤 cosine HNSW 인덱스를 생성합니다.
-5. 행 수, embedding NULL, 차원, 중복 해시, HNSW 인덱스 3개를 검증합니다.
+2. 정식 `vec`에서 같은 모델·원문 해시·1024차원의 임베딩만 조회합니다.
+3. 모든 입력을 재사용할 수 있으면 적재하고, 하나라도 없으면 세 테이블을 빈 상태로 둡니다.
+4. 유효 벡터가 있는 테이블에만 cosine HNSW 인덱스를 생성합니다.
+5. 행 수, embedding NULL, 차원, 중복 해시, HNSW, `vector_status`와 읽기 전용 권한을 검증합니다.
 
-필수 비밀값은 `CLOVA_API_KEY`이며 host는 `CLOVA_HOST`로 주입합니다. 비밀값은 문서·로그·DB에 저장하지 않습니다.
+신규 임베딩 생성은 별도 후속 릴리스입니다. 이번 단계는 `CLOVA_API_KEY`를 요구하거나 호출하지 않으며 빈 검색 결과를 근거 부재로 해석하지 않습니다.

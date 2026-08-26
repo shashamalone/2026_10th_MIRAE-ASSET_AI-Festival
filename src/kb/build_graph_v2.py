@@ -15,7 +15,15 @@ from rdflib import Graph
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kb.build_data_platform_v2 import SCHEMAS, dsn  # noqa: E402
-from kb.v2_manifest import ROOT  # noqa: E402
+from kb.v2_manifest import (  # noqa: E402
+    DATASET_VERSION,
+    EXPECTED_ABOX_TRIPLES,
+    EXPECTED_RELATION_COUNTS,
+    EXPECTED_SNAPSHOT_HASH,
+    RELEASE_ID,
+    ROOT,
+    sha256_file,
+)
 
 FP = "http://mafest.ai/product#"
 FPI = "http://mafest.ai/instance/"
@@ -23,6 +31,7 @@ RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
 RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
 XSD = "http://www.w3.org/2001/XMLSchema#"
 OUTPUT_DIR = ROOT / "artifacts" / "graph_v2"
+MANIFEST_PATH = OUTPUT_DIR / "graph_manifest.json"
 PREFIX = """# 자동 생성. 직접 편집 금지.
 @prefix fp: <http://mafest.ai/product#> .
 @prefix fpi: <http://mafest.ai/instance/> .
@@ -225,10 +234,17 @@ def validate_turtle(contents: dict[str, str]) -> dict[str, int]:
 
 
 def manifest(contents: dict[str, str], counts: dict[str, int]) -> dict[str, object]:
-    tbox = {
-        name: {"named_graph": f"http://mafest.ai/graph/tbox/{Path(name).stem}", "path": f"ontology/{name}"}
-        for name in ("common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl")
-    }
+    tbox = {}
+    for name in ("common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl"):
+        path = ROOT / "ontology" / name
+        graph = Graph()
+        graph.parse(path, format="turtle")
+        tbox[name] = {
+            "named_graph": f"http://mafest.ai/graph/tbox/{path.stem}",
+            "path": f"ontology/{name}",
+            "triples": len(graph),
+            "sha256": sha256_file(path),
+        }
     abox = {
         name: {
             "named_graph": f"http://mafest.ai/graph/abox/{Path(name).stem.removeprefix('instances_')}",
@@ -238,12 +254,68 @@ def manifest(contents: dict[str, str], counts: dict[str, int]) -> dict[str, obje
         }
         for name, content in sorted(contents.items())
     }
-    return {"tbox": tbox, "abox": abox, "total_abox_triples": sum(counts.values())}
+    total = sum(counts.values())
+    if total != EXPECTED_ABOX_TRIPLES:
+        raise ValueError(
+            f"ABox triple 수 불일치: {total:,} != {EXPECTED_ABOX_TRIPLES:,}"
+        )
+    return {
+        "dataset_version": DATASET_VERSION,
+        "release_id": RELEASE_ID,
+        "snapshot_hash": EXPECTED_SNAPSHOT_HASH,
+        "tbox": tbox,
+        "abox": abox,
+        "total_abox_triples": total,
+    }
+
+
+def validate_manifest_files(path: Path = MANIFEST_PATH) -> dict[str, object]:
+    """커밋 TBox와 생성 ABox의 파일 집합·SHA·트리플 수를 다시 검증한다."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("release_id") != RELEASE_ID or payload.get("snapshot_hash") != EXPECTED_SNAPSHOT_HASH:
+        raise ValueError("Graph manifest release/snapshot 계약 불일치")
+    for section in ("tbox", "abox"):
+        for name, item in payload[section].items():
+            file_path = ROOT / str(item["path"])
+            if not file_path.is_file():
+                raise FileNotFoundError(f"Graph manifest 파일 누락: {file_path}")
+            if sha256_file(file_path) != item["sha256"]:
+                raise ValueError(f"Graph manifest SHA 불일치: {name}")
+            graph = Graph()
+            graph.parse(file_path, format="turtle")
+            if len(graph) != item["triples"]:
+                raise ValueError(f"Graph manifest triple 불일치: {name}")
+    abox_total = sum(int(item["triples"]) for item in payload["abox"].values())
+    if abox_total != EXPECTED_ABOX_TRIPLES or payload.get("total_abox_triples") != abox_total:
+        raise ValueError(
+            f"Graph manifest ABox 합계 불일치: {abox_total:,} != {EXPECTED_ABOX_TRIPLES:,}"
+        )
+    return payload
 
 
 def build(check_only: bool = False) -> dict[str, object]:
     with psycopg.connect(dsn()) as conn:
         conn.execute("SET TRANSACTION READ ONLY")
+        source_hash = conn.execute(
+            f"SELECT source_hash FROM {SCHEMAS['META']}.dataset_snapshot ORDER BY built_at DESC LIMIT 1"
+        ).fetchone()[0]
+        if source_hash != EXPECTED_SNAPSHOT_HASH:
+            raise ValueError(
+                f"RDB stage snapshot {source_hash} != {EXPECTED_SNAPSHOT_HASH}"
+            )
+        relation_counts = {
+            "product_holdings": conn.execute(
+                f"SELECT count(*) FROM {SCHEMAS['RELATIONS']}.product_holding"
+            ).fetchone()[0],
+            "company_subsidiaries": conn.execute(
+                f"SELECT count(*) FROM {SCHEMAS['RELATIONS']}.company_subsidiary"
+            ).fetchone()[0],
+        }
+        if relation_counts != EXPECTED_RELATION_COUNTS:
+            raise ValueError(
+                f"Graph 입력 관계 수 불일치 actual={relation_counts} "
+                f"expected={EXPECTED_RELATION_COUNTS}"
+            )
         contents = {name: serialize(triples) for name, triples in build_from_db(conn).items()}
     counts = validate_turtle(contents)
     result = manifest(contents, counts)
@@ -253,7 +325,7 @@ def build(check_only: bool = False) -> dict[str, object]:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, content in contents.items():
         (OUTPUT_DIR / name).write_text(content, encoding="utf-8", newline="\n")
-    (OUTPUT_DIR / "graph_manifest.json").write_text(
+    MANIFEST_PATH.write_text(
         json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
         newline="\n",
@@ -264,8 +336,16 @@ def build(check_only: bool = False) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="v2 결정적 ABox 5개 빌더")
     parser.add_argument("--check", action="store_true", help="파일을 쓰지 않고 DB→TTL 결과만 검증")
+    parser.add_argument(
+        "--validate-files",
+        action="store_true",
+        help="DB에 접속하지 않고 기존 TBox/ABox manifest·SHA·트리플을 검증",
+    )
     args = parser.parse_args()
-    print(json.dumps(build(args.check), ensure_ascii=False, indent=2))
+    if args.check and args.validate_files:
+        parser.error("--check와 --validate-files는 함께 사용할 수 없습니다")
+    result = validate_manifest_files() if args.validate_files else build(args.check)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

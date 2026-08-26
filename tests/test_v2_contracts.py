@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from kb.build_catalog_v2 import build_outputs  # noqa: E402
+from kb.build_rdb import V2_COMMAND, rejection_message  # noqa: E402
 from kb.catalog_v2 import build_catalog  # noqa: E402
 from kb.collect_lseg_returns_v2 import adjusted_return  # noqa: E402
 from kb.regression_v2 import (  # noqa: E402
@@ -22,7 +23,17 @@ from kb.regression_v2 import (  # noqa: E402
     required_evidence,
     validate_answer,
 )
-from kb.v2_manifest import DATASET_VERSION, EXTERNAL_CUTOFF, snapshot_hash, validate_source_dir  # noqa: E402
+from kb.v2_manifest import (  # noqa: E402
+    DATASET_VERSION,
+    EXPECTED_ABOX_TRIPLES,
+    EXPECTED_RELATION_COUNTS,
+    EXPECTED_SNAPSHOT_HASH,
+    EXTERNAL_CUTOFF,
+    RELEASE_ID,
+    WORKSPACE_ROOT,
+    snapshot_hash,
+    validate_source_dir,
+)
 from tools.sql_guard import ensure_read_only_sparql, ensure_read_only_sql  # noqa: E402
 
 
@@ -30,6 +41,7 @@ class SourceContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.inspections = validate_source_dir()
+        cls.outputs = build_outputs()
 
     def test_exact_source_shapes_and_primary_keys(self):
         self.assertEqual(
@@ -45,6 +57,11 @@ class SourceContractTest(unittest.TestCase):
         self.assertEqual(sum(item.row_count for item in self.inspections), 53_375)
         self.assertEqual(sum(len(item.columns) for item in self.inspections), 280)
         self.assertEqual(EXTERNAL_CUTOFF, date(2026, 8, 24))
+        self.assertEqual(snapshot_hash(self.inspections), EXPECTED_SNAPSHOT_HASH)
+        self.assertEqual(
+            [dict(item.partition_counts) for item in self.inspections],
+            [{}, {"ETF": 1_235, "ETN": 545}, {"ETF": 5_972, "ETN": 65}, {"공모": 14_716, "사모": 8_960}],
+        )
 
     def test_catalog_contains_every_raw_column_once(self):
         catalog = build_catalog(self.inspections)
@@ -55,19 +72,21 @@ class SourceContractTest(unittest.TestCase):
             self.assertEqual(len({column.name for column in table.columns}), len(table.columns))
 
     def test_generated_agent_catalog_matches_snapshot(self):
-        outputs = build_outputs()
         target = ROOT / "metadata" / "schema_catalog.json"
-        payload = json.loads(outputs[target])
+        payload = json.loads(self.outputs[target])
         self.assertEqual(payload["dataset_version"], DATASET_VERSION)
+        self.assertEqual(payload["release_id"], RELEASE_ID)
         self.assertEqual(payload["snapshot_hash"], snapshot_hash(self.inspections))
         self.assertEqual(payload["business_rules"]["buyable_quantity"], "storage_only_never_use_for_purchasability")
+        self.assertIn("never_treat_as_lowest", payload["business_rules"]["bond_missing_credit_rating"])
+        self.assertIn("never_filter_or_rank", payload["business_rules"]["dummy_divergence_rate"])
+        self.assertIn("normalize", payload["business_rules"]["string_sentinel"])
 
     def test_three_database_definitions_cover_their_owned_objects(self):
-        outputs = build_outputs()
         rdb_path = ROOT / "docs" / "docs_data_layer" / "RDB_DEFINITION_V2_0.md"
         vector_path = ROOT / "docs" / "docs_data_layer" / "VECTORDB_DEFINITION_V2_0.md"
         graph_path = ROOT / "docs" / "docs_data_layer" / "GRAPHDB_DEFINITION_V2_0.md"
-        rdb, vector, graph = (outputs[path] for path in (rdb_path, vector_path, graph_path))
+        rdb, vector, graph = (self.outputs[path] for path in (rdb_path, vector_path, graph_path))
         catalog = build_catalog(self.inspections)
         for table in catalog:
             owner = vector if table.schema == "vec" else rdb
@@ -96,22 +115,25 @@ class SourceContractTest(unittest.TestCase):
             self.assertIn(required, graph)
 
     def test_generated_database_definition_links_exist(self):
-        outputs = build_outputs()
         paths = [
             ROOT / "docs" / "docs_data_layer" / "RDB_DEFINITION_V2_0.md",
             ROOT / "docs" / "docs_data_layer" / "VECTORDB_DEFINITION_V2_0.md",
             ROOT / "docs" / "docs_data_layer" / "GRAPHDB_DEFINITION_V2_0.md",
         ]
         for path in paths:
-            for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", outputs[path]):
+            for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", self.outputs[path]):
                 if "://" in target:
                     continue
                 self.assertTrue((path.parent / target).resolve().exists(), f"{path.name}: {target}")
 
     def test_legacy_july_csv_bundle_is_rejected_before_load(self):
-        legacy = ROOT.parent / "data" / "data" / "csv"
+        legacy = WORKSPACE_ROOT / "data" / "data" / "csv"
         with self.assertRaises(ValueError):
             validate_source_dir(legacy)
+
+    def test_legacy_rdb_entrypoint_only_points_to_v2(self):
+        self.assertIn(V2_COMMAND, rejection_message())
+        self.assertIn("금지", rejection_message())
 
 
 class QueryGuardTest(unittest.TestCase):
@@ -146,6 +168,13 @@ class SqlPolicyTest(unittest.TestCase):
         self.assertTrue(decision_statements)
         self.assertTrue(all("buyable_quantity" not in statement.replace("buyable_quantity ignored", "") for statement in decision_statements))
 
+    def test_known_sentinel_and_missing_rating_are_not_rankable(self):
+        sql_text = (ROOT / "sql" / "v2" / "010_enrich.sql").read_text(encoding="utf-8").lower()
+        self.assertIn("index is not %", sql_text)
+        catalog_text = (ROOT / "src" / "kb" / "catalog_v2.py").read_text(encoding="utf-8")
+        self.assertIn("국채 무등급을 최저등급으로 간주 금지", catalog_text)
+        self.assertIn("비값 문자열은 NULL", catalog_text)
+
     def test_zero_metrics_are_never_available(self):
         text = (ROOT / "sql" / "v2" / "010_enrich.sql").read_text(encoding="utf-8").lower()
         self.assertGreaterEqual(text.count("value is not null and value <> 0"), 4)
@@ -177,6 +206,78 @@ class SqlPolicyTest(unittest.TestCase):
         self.assertIn("COPY expected_question /app/expected_question", dockerfile)
         self.assertLess(cutover.index("trap rollback_on_error ERR"), cutover.index("090_cutover.sql"))
         self.assertLess(cutover.index("100_readonly_grants.sql"), cutover.index("verify_v2.sh"))
+
+    def test_explicit_compatibility_views_cover_legacy_names(self):
+        compatibility = (ROOT / "src" / "kb" / "compatibility_v2.py").read_text(encoding="utf-8")
+        self.assertNotIn("SELECT *", compatibility.upper())
+        for name in (
+            "prbd01n001",
+            "pref01n001",
+            "pref02n001",
+            "prfd01n001",
+            "etf_holding",
+            "etf_theme",
+            "doc_chunk",
+            "schema_index",
+        ):
+            self.assertIn(f'"{name}"', compatibility)
+
+    def test_vector_release_is_schema_only_or_exact_reuse(self):
+        vectors = (ROOT / "src" / "kb" / "build_vectors_v2.py").read_text(encoding="utf-8")
+        self.assertNotIn("embed_many(", vectors)
+        self.assertNotIn("import clova", vectors)
+        self.assertIn('status = "pending"', vectors)
+        self.assertIn('"embedding_calls": 0', vectors)
+        self.assertIn("vector(1024)", (ROOT / "sql" / "v2" / "001_platform_schema.sql").read_text(encoding="utf-8"))
+
+    def test_graph_and_relation_acceptance_constants_are_fixed(self):
+        self.assertEqual(EXPECTED_RELATION_COUNTS, {"product_holdings": 46_951, "company_subsidiaries": 8_866})
+        self.assertEqual(EXPECTED_ABOX_TRIPLES, 655_388)
+        graph = (ROOT / "src" / "kb" / "build_graph_v2.py").read_text(encoding="utf-8")
+        self.assertIn("validate_manifest_files", graph)
+        self.assertIn("EXPECTED_ABOX_TRIPLES", graph)
+
+    def test_api_v1_v2_routes_aliases_and_envelope(self):
+        api = (ROOT / "src" / "api.py").read_text(encoding="utf-8")
+        for route in (
+            '@app.post("/db")',
+            '@app.post("/db/sql")',
+            '@app.post("/db/sparql")',
+            '@app.get("/db/stats")',
+            '@app.get("/db/columns/{table_schema}/{table_name}")',
+            '@app.get("/db/catalog")',
+            '@app.get("/db/coverage")',
+            '@app.get("/db/version")',
+        ):
+            self.assertIn(route, api)
+        for field in ('"columns"', '"rows"', '"row_count"', '"truncated"', '"elapsed_ms"'):
+            self.assertIn(field, api)
+        self.assertIn("STATEMENT_TIMEOUT_MS = min(2000", api)
+        self.assertIn('rdb_hash == graph_hash == EXPECTED_SNAPSHOT_HASH', api)
+        self.assertIn('vector_status in {"pending", "ready"}', api)
+
+    def test_backup_cutover_and_rollback_are_coupled(self):
+        backup = (ROOT / "deploy" / "backup_v2.sh").read_text(encoding="utf-8")
+        stage = (ROOT / "deploy" / "stage_v2.sh").read_text(encoding="utf-8")
+        cutover = (ROOT / "deploy" / "cutover_v2.sh").read_text(encoding="utf-8")
+        rollback = (ROOT / "deploy" / "rollback_v2.sh").read_text(encoding="utf-8")
+        for token in ("pg_restore --list", "tar -tzf", "SHA256SUMS", "restore-drill"):
+            self.assertIn(token, backup)
+        self.assertNotIn("CLOVA_API_KEY", stage)
+        self.assertLess(stage.index("load_graph_next_v2.sh"), stage.index("validate_data_platform_v2 --stage"))
+        self.assertLess(cutover.index("090_cutover.sql"), cutover.index("up -d graph"))
+        self.assertNotIn("|| true", cutover)
+        self.assertNotIn("|| true", rollback)
+        self.assertIn("verify_v2.sh --rollback", rollback)
+        self.assertIn("API remains closed", rollback)
+
+    def test_stage_failure_closes_the_running_load_record(self):
+        stage = (ROOT / "deploy" / "stage_v2.sh").read_text(encoding="utf-8")
+        builder = (ROOT / "src" / "kb" / "build_data_platform_v2.py").read_text(encoding="utf-8")
+        self.assertIn("trap mark_stage_failed ERR", stage)
+        self.assertIn("--mark-failed stage_command_failed", stage)
+        self.assertIn("def mark_latest_run_failed", builder)
+        self.assertIn("WHERE status='running'", builder)
 
     def test_legacy_holdings_document_uses_ddl_enum(self):
         audit = (ROOT / "src" / "kb" / "audit_legacy_evidence_v2.py").read_text(encoding="utf-8")

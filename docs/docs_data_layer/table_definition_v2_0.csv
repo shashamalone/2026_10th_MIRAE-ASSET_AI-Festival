@@ -339,7 +339,7 @@ enriched,bond_kr_product,table,국내채권 pd_no 1개,1,product_id,text,False,1
 enriched,bond_kr_product,table,국내채권 pd_no 1개,2,pd_no,text,False,,,,,채권 상품번호,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,bond_kr_product,table,국내채권 pd_no 1개,3,name,text,False,,,,,상품명,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,bond_kr_product,table,국내채권 pd_no 1개,4,issuer,text,True,,,,,발행사,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
-enriched,bond_kr_product,table,국내채권 pd_no 1개,5,credit_rating,text,True,,,,,신용등급 원문,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
+enriched,bond_kr_product,table,국내채권 pd_no 1개,5,credit_rating,text,True,,,,,신용등급 원문; NULL은 필터·랭킹 제외(국채 무등급을 최저등급으로 간주 금지),NULL=unavailable; sovereign unrated is not default risk,주최측(1순위),파생,구현,미배포
 enriched,bond_kr_product,table,국내채권 pd_no 1개,6,currency,text,True,,,,,통화 코드,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,bond_kr_product,table,국내채권 pd_no 1개,7,issue_date,date,True,,,,,발행일,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,bond_kr_product,table,국내채권 pd_no 1개,8,maturity_date,date,True,,,,,만기일,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
@@ -366,7 +366,7 @@ enriched,etf_kr,table,국내 ETF 1개,3,name,text,False,,,,,상품명,빈 값=NU
 enriched,etf_kr,table,국내 ETF 1개,4,ticker,text,True,,,,,국내 티커,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,etf_kr,table,국내 ETF 1개,5,isin,text,True,,,,,ISIN,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,etf_kr,table,국내 ETF 1개,6,manager,text,True,,,,,운용사,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
-enriched,etf_kr,table,국내 ETF 1개,7,base_index,text,True,,,,,기초지수,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
+enriched,etf_kr,table,국내 ETF 1개,7,base_index,text,True,,,,,기초지수; 알려진 비값 문자열은 NULL이며 필터·랭킹 제외,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,etf_kr,table,국내 ETF 1개,8,currency,text,True,,,,,통화 코드,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,etf_kr,table,국내 ETF 1개,9,listing_date,date,True,,,,,상장일,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포
 enriched,etf_kr,table,국내 ETF 1개,10,delisting_date,date,True,,,,,상장종료일,빈 값=NULL; 0은 원본 값으로 보존,주최측(1순위),파생,구현,미배포

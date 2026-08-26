@@ -17,6 +17,7 @@ import re
 import sys
 from collections import defaultdict
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
@@ -25,15 +26,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from kb.load_external_v2 import FILES, validate_bundle  # noqa: E402
 from kb.v2_manifest import (  # noqa: E402
     EXTERNAL_CUTOFF,
+    EXPECTED_RELATION_COUNTS,
     ROOT,
     SOURCES,
+    WORKSPACE_ROOT,
     dataset_dir,
     inspect_source,
     iter_data_rows,
 )
 
 DEFAULT_LEGACY_ROOT = Path(
-    os.environ.get("LEGACY_DATA_DIR", ROOT.parent / "data" / "data")
+    os.environ.get("LEGACY_DATA_DIR", WORKSPACE_ROOT / "data" / "data")
 ).resolve()
 DEFAULT_OUTPUT = ROOT / "artifacts" / "external_v2"
 AUDIT_FILE = "legacy_audit_report.json"
@@ -44,6 +47,7 @@ def digest_text(*parts: object, length: int = 32) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:length]
 
 
+@lru_cache(maxsize=None)
 def file_hash(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -383,6 +387,18 @@ def build_bundle(
     subsidiary_records, subsidiary_audit = build_subsidiaries(legacy_root)
     records = merge_records(holding_records, subsidiary_records)
     counts = validate_bundle({**records, "lseg_returns": []})
+    if counts["product_holdings"] != EXPECTED_RELATION_COUNTS["product_holdings"]:
+        raise ValueError(
+            "ETF 편입 관계 감사 행 수 불일치: "
+            f"{counts['product_holdings']:,} != "
+            f"{EXPECTED_RELATION_COUNTS['product_holdings']:,}"
+        )
+    if counts["company_subsidiaries"] != EXPECTED_RELATION_COUNTS["company_subsidiaries"]:
+        raise ValueError(
+            "자회사 관계 감사 행 수 불일치: "
+            f"{counts['company_subsidiaries']:,} != "
+            f"{EXPECTED_RELATION_COUNTS['company_subsidiaries']:,}"
+        )
     audit = {
         "canonical_dataset": "financial-products-2026-08-24",
         "legacy_root": str(legacy_root),

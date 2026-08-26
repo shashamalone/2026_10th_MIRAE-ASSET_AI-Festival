@@ -24,7 +24,7 @@ from kb.collect_lseg_returns_v2 import (  # noqa: E402
     OUTPUT as LSEG_OUTPUT,
     START_DATE as LSEG_START_DATE,
 )
-from kb.v2_manifest import EXTERNAL_CUTOFF, ROOT  # noqa: E402
+from kb.v2_manifest import EXTERNAL_CUTOFF, EXPECTED_RELATION_COUNTS, ROOT  # noqa: E402
 
 DEFAULT_BUNDLE = ROOT / "artifacts" / "external_v2"
 FILES = {
@@ -121,6 +121,11 @@ def validate_bundle(records: dict[str, list[dict[str, object]]]) -> dict[str, in
 def load(directory: Path) -> dict[str, int]:
     records = read_bundle(directory)
     counts = validate_bundle(records)
+    for relation_name, expected in EXPECTED_RELATION_COUNTS.items():
+        if counts[relation_name] != expected:
+            raise ValueError(
+                f"{relation_name}: 검증된 bundle {counts[relation_name]:,} != 기대 {expected:,}"
+            )
     with psycopg.connect(dsn()) as conn:
         r = records
         execute_many(

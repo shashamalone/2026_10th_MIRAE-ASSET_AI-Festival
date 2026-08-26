@@ -19,11 +19,31 @@ from typing import Iterable, Iterator
 from openpyxl import load_workbook
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def find_workspace_root() -> Path:
+    """기본 checkout과 ``worktrees/*`` 양쪽에서 공유 data root를 찾는다."""
+    for candidate in (ROOT.parent, *ROOT.parents):
+        if (candidate / "workspace.json").is_file() and (candidate / "data").is_dir():
+            return candidate
+    return ROOT.parent
+
+
+WORKSPACE_ROOT = find_workspace_root()
 DATASET_VERSION = "financial-products-2026-08-24"
+EXPECTED_SNAPSHOT_HASH = (
+    "ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38"
+)
+RELEASE_ID = f"{DATASET_VERSION}@{EXPECTED_SNAPSHOT_HASH}"
+EXPECTED_RELATION_COUNTS = {
+    "product_holdings": 46_951,
+    "company_subsidiaries": 8_866,
+}
+EXPECTED_ABOX_TRIPLES = 655_388
 RELEASE_DATE = date(2026, 8, 24)
 EXTERNAL_CUTOFF = RELEASE_DATE
 DEFAULT_DATASET_DIR = (
-    ROOT.parent / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
+    WORKSPACE_ROOT / "data" / "ai-festival2026_금융상품Agent_DtataSet260824"
 )
 
 SCHEMA_HEADER = ("순번", "컬럼명", "데이터타입", "Nullable", "컬럼코멘트")
@@ -48,6 +68,9 @@ class SourceSpec:
     primary_key: tuple[str, ...]
     effective_as_of_columns: tuple[str, ...]
     grain: str
+    partition_column: str | None = None
+    expected_partitions: tuple[tuple[str, int], ...] = ()
+    expected_nullable_conflicts: tuple[tuple[str, int], ...] = ()
 
 
 SOURCES: tuple[SourceSpec, ...] = (
@@ -72,6 +95,9 @@ SOURCES: tuple[SourceSpec, ...] = (
         ("pd_itm_no",),
         ("cu_upt_dt", "du_upt_dt", "wu_upt_dt", "fn_base_dt", "ref_base_dt"),
         "국내 ETF/ETN 상품",
+        "pd_grp_no",
+        (("ETF", 1_235), ("ETN", 545)),
+        (("pd_exg_mkt_cd", 3),),
     ),
     SourceSpec(
         "PREF02N001",
@@ -83,6 +109,8 @@ SOURCES: tuple[SourceSpec, ...] = (
         ("pd_itm_no",),
         ("cu_upt_dt", "du_upt_dt", "wu_upt_dt", "du_clpr_base_dt", "du_nav_base_dt"),
         "해외 ETF/ETN 상품",
+        "pd_grp_no",
+        (("ETF", 5_972), ("ETN", 65)),
     ),
     SourceSpec(
         "PRFD01N001",
@@ -94,6 +122,9 @@ SOURCES: tuple[SourceSpec, ...] = (
         ("itm_no",),
         ("fd_daily_bas_dt", "fd_price_bas_dt"),
         "펀드 상품(공모·사모)",
+        "prvo_pbff_desc",
+        (("공모", 14_716), ("사모", 8_960)),
+        (("zrin_fd_ivst_risk_gcd", 14_987),),
     ),
 )
 
@@ -118,6 +149,7 @@ class SourceInspection:
     effective_as_of: date | None
     data_sha256: str
     schema_sha256: str
+    partition_counts: tuple[tuple[str, int], ...] = ()
     excluded_rows: int = 0
 
     def as_dict(self) -> dict[str, object]:
@@ -139,6 +171,7 @@ class SourceInspection:
             "effective_as_of": self.effective_as_of.isoformat()
             if self.effective_as_of
             else None,
+            "partition_counts": dict(self.partition_counts),
             "data_sha256": self.data_sha256,
             "schema_sha256": self.schema_sha256,
         }
@@ -296,6 +329,8 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
 
     key_indexes = [names.index(name) for name in spec.primary_key]
     date_indexes = [names.index(name) for name in spec.effective_as_of_columns]
+    partition_index = names.index(spec.partition_column) if spec.partition_column else None
+    partition_counts: dict[str, int] = {}
     seen: set[tuple[str, ...]] = set()
     maximum_as_of: date | None = None
     row_count = 0
@@ -305,6 +340,9 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
         for index, value in enumerate(row):
             if value is None:
                 null_counts[index] += 1
+        if partition_index is not None:
+            partition = normalized_key_value(row[partition_index]) or "<NULL>"
+            partition_counts[partition] = partition_counts.get(partition, 0) + 1
         key = tuple(normalized_key_value(row[index]) for index in key_indexes)
         if any(value is None for value in key):
             raise ValueError(f"{spec.code}:{excel_row}: PK NULL {key!r}")
@@ -326,6 +364,27 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
         raise ValueError(
             f"{spec.code}: {row_count:,}행 != 기대 {spec.expected_rows:,}행"
         )
+    actual_partitions = tuple(sorted(partition_counts.items()))
+    expected_partitions = tuple(sorted(spec.expected_partitions))
+    if actual_partitions != expected_partitions:
+        raise ValueError(
+            f"{spec.code}: 분할 행 수 불일치 actual={dict(actual_partitions)} "
+            f"expected={dict(expected_partitions)}"
+        )
+    actual_nullable_conflicts = tuple(
+        sorted(
+            (column.name, null_counts[column.ordinal - 1])
+            for column in columns
+            if not column.nullable and null_counts[column.ordinal - 1] > 0
+        )
+    )
+    expected_nullable_conflicts = tuple(sorted(spec.expected_nullable_conflicts))
+    if actual_nullable_conflicts != expected_nullable_conflicts:
+        raise ValueError(
+            f"{spec.code}: 공식 Nullable 충돌 불일치 "
+            f"actual={dict(actual_nullable_conflicts)} "
+            f"expected={dict(expected_nullable_conflicts)}"
+        )
     return SourceInspection(
         spec=spec,
         data_path=data_path,
@@ -336,6 +395,7 @@ def inspect_source(root: Path, spec: SourceSpec) -> SourceInspection:
         effective_as_of=maximum_as_of,
         data_sha256=sha256_file(data_path),
         schema_sha256=sha256_file(schema_path),
+        partition_counts=actual_partitions,
     )
 
 
@@ -358,7 +418,14 @@ def validate_source_dir(value: str | Path | None = None) -> tuple[SourceInspecti
             f"누락={sorted(expected - actual)}, 초과={sorted(actual - expected)}, "
             f"정상파일수={len(candidates)}"
         )
-    return tuple(inspect_source(root, spec) for spec in SOURCES)
+    inspections = tuple(inspect_source(root, spec) for spec in SOURCES)
+    actual_hash = snapshot_hash(inspections)
+    if actual_hash != EXPECTED_SNAPSHOT_HASH:
+        raise ValueError(
+            f"공식 snapshot hash 불일치 actual={actual_hash} "
+            f"expected={EXPECTED_SNAPSHOT_HASH}"
+        )
+    return inspections
 
 
 def snapshot_hash(inspections: Iterable[SourceInspection]) -> str:

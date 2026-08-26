@@ -5,6 +5,7 @@
 ## 데이터 계약
 
 - 버전: `financial-products-2026-08-24`
+- release ID: `financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
 - 배포일/외부 근거 상한: `2026-08-24`
 - 전체 manifest SHA-256: `ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`
 - 원천: 주최측이 제공한 2026-08-24 데이터 XLSX 4개와 스키마 XLSX 4개만 사용합니다.
@@ -27,8 +28,8 @@
 2. `raw_next`에 공식 타입·컬럼 그대로 적재(공백만 NULL, 0 보존)
 3. `enriched_next`·`relations_next`·`meta_next` 생성
 4. 결정적 ABox TTL 5개 생성 및 TBox/ABox RDF 검증
-5. CLOVA Studio `bge-m3` 1024차원 schema/content embedding 적재
-6. PK/FK·cutoff·Graph·Vector·교차질의·금지 SQL 검증
+5. `vec_next`의 `vector(1024)` 계약 생성 후 동일 해시 운영 벡터만 재사용
+6. PK/FK·cutoff·Graph·Vector schema/status·교차질의·금지 SQL 검증
 7. 검증 완료 후에만 `*_next → 정식`, 기존 정식 → `*_prev` 전환
 
 모든 빌더의 `--check`는 파일과 DB를 변경하지 않습니다. 데이터·외부 원문·임베딩은

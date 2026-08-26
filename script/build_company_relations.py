@@ -20,7 +20,7 @@ BOND = ROOT / "data/csv/PRBD01N001_bond_kr_master_20260711.csv"
 HOLDING = ROOT / "data/relations/etf_holding.csv"
 OUT_MASTER = ROOT / "data/enriched/company_master.csv"
 OUT_SUB = ROOT / "data/relations/company_subsidiary.csv"
-CUTOFF = "2026-07-11"
+CUTOFF = "2026-08-24"
 
 # 한글 음차 → 영문 약칭. 실제 조인에서 확인된 것만 둔다(오탐 방지). 긴 것부터 치환한다.
 ALIAS = {"에스케이": "SK", "엘지": "LG", "케이티": "KT", "지에스": "GS", "씨제이": "CJ",
