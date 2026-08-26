@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import os
 import re
@@ -133,11 +134,18 @@ def validate_abox_files() -> dict[str, object]:
         raise ValueError(f"ABox 5개 집합 불일치: actual={sorted(actual)}")
     graph = Graph()
     counts = {}
+    triple_membership: Counter[tuple[object, object, object]] = Counter()
     for path in sorted(OUTPUT_DIR.glob("instances_*.ttl")):
         one = Graph()
         one.parse(path, format="turtle")
         counts[path.name] = len(one)
+        triple_membership.update(one)
         graph += one
+    named_graph_quad_total = sum(counts.values())
+    union_triples = len(graph)
+    cross_graph_duplicates = sum(
+        multiplicity - 1 for multiplicity in triple_membership.values() if multiplicity > 1
+    )
 
     subclass_graph = Graph()
     for path in sorted((ROOT / "ontology").glob("*.ttl")):
@@ -198,13 +206,17 @@ def validate_abox_files() -> dict[str, object]:
         raise ValueError("Graph domain/range/n-ary 오류: " + ", ".join(errors[:20]))
     if any(not str(subject).startswith(FPI) for subject in graph.subjects() if isinstance(subject, URIRef)):
         raise ValueError("ABox subject URI namespace 불안정")
-    if len(graph) != EXPECTED_ABOX_TRIPLES:
+    if named_graph_quad_total != EXPECTED_ABOX_TRIPLES:
         raise ValueError(
-            f"ABox 합계 {len(graph):,} != {EXPECTED_ABOX_TRIPLES:,}"
+            f"ABox named graph quad 합계 {named_graph_quad_total:,} "
+            f"!= {EXPECTED_ABOX_TRIPLES:,}"
         )
     return {
         "files": counts,
-        "triples": len(graph),
+        "triples": named_graph_quad_total,
+        "named_graph_quad_total": named_graph_quad_total,
+        "union_triples": union_triples,
+        "cross_graph_duplicates": cross_graph_duplicates,
         "domain_range_errors": 0,
         "manifest_sha_verified": True,
         "release_id": manifest["release_id"],

@@ -234,8 +234,13 @@ class SqlPolicyTest(unittest.TestCase):
         self.assertEqual(EXPECTED_RELATION_COUNTS, {"product_holdings": 46_951, "company_subsidiaries": 8_866})
         self.assertEqual(EXPECTED_ABOX_TRIPLES, 655_388)
         graph = (ROOT / "src" / "kb" / "build_graph_v2.py").read_text(encoding="utf-8")
+        validator = (ROOT / "src" / "kb" / "validate_data_platform_v2.py").read_text(encoding="utf-8")
         self.assertIn("validate_manifest_files", graph)
         self.assertIn("EXPECTED_ABOX_TRIPLES", graph)
+        self.assertIn("named_graph_quad_total = sum(counts.values())", validator)
+        self.assertIn("triple_membership.update(one)", validator)
+        self.assertIn('"cross_graph_duplicates": cross_graph_duplicates', validator)
+        self.assertNotIn("if len(graph) != EXPECTED_ABOX_TRIPLES", validator)
 
     def test_api_v1_v2_routes_aliases_and_envelope(self):
         api = (ROOT / "src" / "api.py").read_text(encoding="utf-8")
