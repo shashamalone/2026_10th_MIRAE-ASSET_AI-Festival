@@ -1,0 +1,31 @@
+{
+  "base_sha": "7105519383833db80e6c6f163c240b4394414d19",
+  "canonical_release": "2026-08-24",
+  "disposition_counts": {
+    "ABSTAIN": 5,
+    "ANSWER": 30
+  },
+  "gold": {
+    "normalized_lf_sha256": "ae1dd33783fb2cd36d1e9bb1fae788ab4ad699541a33da9ffefaa0ab81e30743",
+    "path": "vectordb_test/6_official_eval/official_eval_gold.jsonl"
+  },
+  "hash_contract": {
+    "algorithm": "sha256",
+    "encoding": "utf-8",
+    "file_newlines": "normalized-to-lf",
+    "question_evidence_set_sha256": "174d2cb4046b60a5c4e7f041116b8b7ad9a5f351ca166f27358d8d96b8bb159e"
+  },
+  "id_contract": {
+    "exactly_once": true,
+    "first": 1,
+    "last": 35
+  },
+  "name": "official-eval-35-offline",
+  "record_count": 35,
+  "schema_version": 1,
+  "source": {
+    "normalized_lf_sha256": "323574bdebc557abf26211cb7aeace3f939b2cd9375ccc75edf6439a48d64e0b",
+    "path": "expected_question/2026_expected_queries.csv"
+  },
+  "source_suite_declared_as_of": "2026-07-11"
+}
