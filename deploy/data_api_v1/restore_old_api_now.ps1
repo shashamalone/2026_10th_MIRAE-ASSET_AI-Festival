@@ -8,7 +8,8 @@ $ErrorActionPreference = 'Stop'
 $remoteScript = @'
 set -Eeuo pipefail
 container=financial-agent-prep-api-1
-test "$(docker inspect -f '{{.Config.Image}}' "${container}")" = financial-agent-prep-api-rollback:20260827t032046z
+api_ref=$(docker inspect -f '{{.Config.Image}}' "${container}")
+[[ "${api_ref}" =~ ^financial-agent-prep-api-rollback:[0-9]{8}t[0-9]{6}z$ ]]
 docker start "${container}" >/dev/null
 health=$(mktemp)
 stats=$(mktemp)

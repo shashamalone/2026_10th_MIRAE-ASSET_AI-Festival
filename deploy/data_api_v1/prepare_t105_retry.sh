@@ -101,13 +101,28 @@ if [[ "${canonical_count}|${next_count}|${prev_count}|${failed_count}" == '3|6|0
         "${ready_backup}" "${next_graph}"
     exit 0
 fi
-test "${canonical_count}|${next_count}|${prev_count}|${failed_count}" = '6|0|0|6'
-
-old_absent_schemas=$("${psql_at[@]}" "SELECT string_agg(nspname,',' ORDER BY nspname) FROM pg_namespace WHERE nspname IN ('meta','raw','enriched','relations','vec','core') AND obj_description(oid,'pg_namespace')='${placeholder_comment}' AND pg_get_userbyid(nspowner)=current_user")
+retry_state="${canonical_count}|${next_count}|${prev_count}|${failed_count}"
+case "${retry_state}" in
+    '6|0|0|6')
+        drop_retry_placeholders=1
+        old_absent_schemas=$("${psql_at[@]}" "SELECT string_agg(nspname,',' ORDER BY nspname) FROM pg_namespace WHERE nspname IN ('meta','raw','enriched','relations','vec','core') AND obj_description(oid,'pg_namespace')='${placeholder_comment}' AND pg_get_userbyid(nspowner)=current_user")
+        placeholder_count=$("${psql_at[@]}" "SELECT count(*) FROM pg_namespace WHERE nspname IN ('meta','raw','enriched','relations','vec','core') AND obj_description(oid,'pg_namespace')='${placeholder_comment}' AND pg_get_userbyid(nspowner)=current_user")
+        test "$(tr -d '\r\n' <<<"${placeholder_count}")" = 3
+        ;;
+    '3|0|0|6')
+        drop_retry_placeholders=0
+        old_absent_schemas=$("${psql_at[@]}" "WITH bases(nspname) AS (VALUES ('meta'),('raw'),('enriched'),('relations'),('vec'),('core')) SELECT string_agg(nspname,',' ORDER BY nspname) FROM bases WHERE to_regnamespace(nspname) IS NULL")
+        placeholder_count=$("${psql_at[@]}" "SELECT count(*) FROM pg_namespace WHERE nspname IN ('meta','raw','enriched','relations','vec','core') AND obj_description(oid,'pg_namespace')='${placeholder_comment}'")
+        test "$(tr -d '\r\n' <<<"${placeholder_count}")" = 0
+        ;;
+    *)
+        printf 'T105_RETRY_STATE_REFUSED: canonical=%s next=%s prev=%s failed=%s\n' \
+            "${canonical_count}" "${next_count}" "${prev_count}" "${failed_count}" >&2
+        exit 2
+        ;;
+esac
 old_absent_schemas=$(tr -d '\r\n' <<<"${old_absent_schemas}")
 [[ "${old_absent_schemas}" =~ ^(core|enriched|meta|raw|relations|vec)(,(core|enriched|meta|raw|relations|vec)){2}$ ]]
-placeholder_count=$("${psql_at[@]}" "SELECT count(*) FROM pg_namespace WHERE nspname IN ('meta','raw','enriched','relations','vec','core') AND obj_description(oid,'pg_namespace')='${placeholder_comment}' AND pg_get_userbyid(nspowner)=current_user")
-test "$(tr -d '\r\n' <<<"${placeholder_count}")" = 3
 
 ready=$("${psql_at[@]}" "SELECT count(*) FROM meta_failed.load_run WHERE status='passed' AND phase='cutover_ready' AND validation_result->>'cutover_ready'='true'")
 total_runs=$("${psql_at[@]}" "SELECT count(*) FROM meta_failed.load_run")
@@ -275,10 +290,12 @@ docker compose exec -T db pg_restore -U "${postgres_user}" -d "${scratch_db}" \
 rearm_database() {
     local target_db=$1
     docker compose exec -T db psql -v ON_ERROR_STOP=1 -v old_absent_schemas="${old_absent_schemas}" \
+        -v drop_retry_placeholders="${drop_retry_placeholders}" \
         -U "${postgres_user}" -d "${target_db}" <<'SQL'
 BEGIN;
 SET LOCAL lock_timeout='10s';
 SELECT set_config('mafest.old_absent_schemas', :'old_absent_schemas', true);
+SELECT set_config('mafest.drop_retry_placeholders', :'drop_retry_placeholders', true);
 DO $do$
 DECLARE
   base_name text;
@@ -287,12 +304,16 @@ DECLARE
 BEGIN
   FOREACH base_name IN ARRAY string_to_array(current_setting('mafest.old_absent_schemas'), ',') LOOP
     SELECT oid INTO schema_oid FROM pg_namespace WHERE nspname=base_name;
-    IF schema_oid IS NULL
-       OR obj_description(schema_oid,'pg_namespace') IS DISTINCT FROM 'empty rollback placeholder for a schema absent before V2 cutover'
-       OR pg_get_userbyid((SELECT nspowner FROM pg_namespace WHERE oid=schema_oid)) IS DISTINCT FROM current_user THEN
-      RAISE EXCEPTION 'unsafe retry placeholder: %', base_name;
+    IF current_setting('mafest.drop_retry_placeholders') = '1' THEN
+      IF schema_oid IS NULL
+         OR obj_description(schema_oid,'pg_namespace') IS DISTINCT FROM 'empty rollback placeholder for a schema absent before V2 cutover'
+         OR pg_get_userbyid((SELECT nspowner FROM pg_namespace WHERE oid=schema_oid)) IS DISTINCT FROM current_user THEN
+        RAISE EXCEPTION 'unsafe retry placeholder: %', base_name;
+      END IF;
+      EXECUTE format('DROP SCHEMA %I RESTRICT', base_name);
+    ELSIF schema_oid IS NOT NULL THEN
+      RAISE EXCEPTION 'retry expected schema to be absent: %', base_name;
     END IF;
-    EXECUTE format('DROP SCHEMA %I RESTRICT', base_name);
   END LOOP;
   FOREACH base_name IN ARRAY bases LOOP
     IF to_regnamespace(base_name || '_failed') IS NULL OR to_regnamespace(base_name || '_next') IS NOT NULL THEN

@@ -152,6 +152,18 @@ if (([regex]::Matches($cutoverContent, [regex]::Escape($cutoverApiStartAnchor)))
     throw 'Cutover API Graph-loopback patch anchor mismatch'
 }
 $cutoverContent = $cutoverContent.Replace($cutoverApiStartAnchor, $cutoverApiStartReplacement)
+$runtimeDirAnchor = 'mkdir -p artifacts/runtime'
+$cutoverRuntimeDirReplacement = @'
+runtime_uid=$(id -u)
+runtime_gid=$(id -g)
+docker run --rm -e "TARGET_UID=${runtime_uid}" -e "TARGET_GID=${runtime_gid}" \
+    -v "${release_dir}/artifacts:/artifacts" busybox:1.36 \
+    sh -c 'mkdir -p /artifacts/runtime && chown -R "$TARGET_UID:$TARGET_GID" /artifacts/runtime && chmod 700 /artifacts/runtime'
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($runtimeDirAnchor))).Count -ne 1) {
+    throw 'Cutover runtime-directory patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($runtimeDirAnchor, $cutoverRuntimeDirReplacement)
 [IO.File]::WriteAllText($cutoverPath, $cutoverContent, [Text.UTF8Encoding]::new($false))
 
 $rollbackPath = Join-Path $patchedT105ArtifactDir 'data_api_rollback.sh'
@@ -210,6 +222,17 @@ if (([regex]::Matches($rollbackContent, [regex]::Escape($rollbackApiStartAnchor)
     throw 'Rollback API Graph-loopback patch anchor mismatch'
 }
 $rollbackContent = $rollbackContent.Replace($rollbackApiStartAnchor, $rollbackApiStartReplacement)
+$rollbackRuntimeDirReplacement = @'
+runtime_uid=$(id -u)
+runtime_gid=$(id -g)
+docker run --rm -e "TARGET_UID=${runtime_uid}" -e "TARGET_GID=${runtime_gid}" \
+    -v "${RELEASE_DIR}/artifacts:/artifacts" busybox:1.36 \
+    sh -c 'mkdir -p /artifacts/runtime && chown -R "$TARGET_UID:$TARGET_GID" /artifacts/runtime && chmod 700 /artifacts/runtime'
+'@.TrimEnd()
+if (([regex]::Matches($rollbackContent, [regex]::Escape($runtimeDirAnchor))).Count -ne 1) {
+    throw 'Rollback runtime-directory patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($runtimeDirAnchor, $rollbackRuntimeDirReplacement)
 [IO.File]::WriteAllText($rollbackPath, $rollbackContent, [Text.UTF8Encoding]::new($false))
 
 $verifyPath = Join-Path $patchedT105ArtifactDir 'data_api_verify.sh'
