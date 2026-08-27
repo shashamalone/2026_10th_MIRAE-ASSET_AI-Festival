@@ -25,7 +25,7 @@ from kb.build_rdb import TABLES, rows  # noqa: E402
 BINDINGS = ROOT / "metadata/schema_bindings.json"
 RULES = ROOT / "metadata/business_rules.json"
 OUT = ARTIFACTS / "schema_catalog.json"
-TABLE_DEF = ROOT / "docs/docs_data_layer/table_definition_v1_0.csv"
+TABLE_DEF = ROOT / "data/table_definition_v1_0.csv"
 FP = "http://mafest.ai/product#"
 
 TABLE_META = {

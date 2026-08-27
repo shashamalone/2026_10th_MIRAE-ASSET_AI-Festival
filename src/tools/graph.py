@@ -57,15 +57,27 @@ PREFIX fp: <http://mafest.ai/product#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT ?etf ?etf_name ?child ?child_name ?security ?weight ?holding_as_of
-                ?holding_source ?relation_as_of ?relation_source WHERE {
+                ?holding_source ?relation_as_of ?relation_source
+                ?holding_document_title ?holding_document_publisher
+                ?holding_document_date ?holding_document_quote
+                ?relation_document_title ?relation_document_publisher
+                ?relation_document_date ?relation_document_quote WHERE {
   ?parent a fp:Company ; rdfs:label "에코프로" ; fp:hasSubsidiary ?relation .
   ?relation fp:subsidiaryCompany ?child ; fp:asOf ?relation_as_of ;
-            fp:sourceId ?relation_source .
+            fp:sourceId ?relation_source ; fp:supportedBy ?relation_document .
+  ?relation_document a fp:Document ; fp:documentTitle ?relation_document_title ;
+            fp:documentPublisher ?relation_document_publisher ;
+            fp:documentPublishedDate ?relation_document_date ;
+            fp:documentQuote ?relation_document_quote .
   FILTER (?relation_as_of <= "2026-07-11"^^xsd:date)
   ?child rdfs:label ?child_name .
   ?security fp:issuedByCompany ?child .
   ?holding fp:holdingSecurity ?security ; fp:asOf ?holding_as_of ;
-           fp:sourceId ?holding_source .
+           fp:sourceId ?holding_source ; fp:supportedBy ?holding_document .
+  ?holding_document a fp:Document ; fp:documentTitle ?holding_document_title ;
+           fp:documentPublisher ?holding_document_publisher ;
+           fp:documentPublishedDate ?holding_document_date ;
+           fp:documentQuote ?holding_document_quote .
   FILTER (?holding_as_of <= "2026-07-11"^^xsd:date)
   OPTIONAL { ?holding fp:weight ?weight }
   ?etf a fp:ETF ; fp:hasHolding ?holding ; rdfs:label ?etf_name .
@@ -76,3 +88,24 @@ ORDER BY ?etf_name ?child_name
 
 def ecopro_subsidiary_etfs() -> list[dict]:
     return sparql(ECOPRO_HOLDING_QUERY)
+
+
+def evidence_coverage() -> dict:
+    """Store 전체의 운영 대상 Graph 관계 evidence 계약을 집계한다."""
+    result = {}
+    for label, cls in (("holding", "Holding"), ("subsidiary_relation", "SubsidiaryRelation")):
+        total = sparql(f"""
+PREFIX fp: <http://mafest.ai/product#>
+SELECT (COUNT(DISTINCT ?relation) AS ?count) WHERE {{ ?relation a fp:{cls} . }}
+""")[0]["count"]
+        supported = sparql(f"""
+PREFIX fp: <http://mafest.ai/product#>
+SELECT (COUNT(DISTINCT ?relation) AS ?count) WHERE {{
+  ?relation a fp:{cls} ; fp:supportedBy ?document .
+  ?document a fp:Document .
+}}
+""")[0]["count"]
+        total, supported = int(total), int(supported)
+        result[label] = {"total": total, "supported": supported,
+                         "coverage": supported / total if total else 1.0}
+    return result
