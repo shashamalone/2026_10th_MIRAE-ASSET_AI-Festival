@@ -76,7 +76,7 @@ if [[ "${canonical_count}|${next_count}|${prev_count}|${failed_count}" == '3|6|0
     (cd "${ready_backup}" && sha256sum -c SHA256SUMS >/dev/null)
     test "$(docker inspect -f '{{.State.Running}}' "${next_container}")" = true
     test "$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "${next_container}")" = "${next_graph}"
-    test -z "$(docker port "${next_container}" 7878/tcp)"
+    test -z "$(docker port "${next_container}" 7878/tcp 2>/dev/null)"
     ready_graph_id=$(docker compose ps -q graph)
     test -n "${ready_graph_id}"
     ready_graph_ports=$(docker port "${ready_graph_id}" 7878/tcp)
@@ -212,14 +212,16 @@ scratch_volume_created=0
 
 # Oxigraph explicitly recommends optimizing bulk-loaded stores before read-heavy use.
 # The archive above is the recovery point if optimization fails.
+printf 'NEXT GRAPH OPTIMIZE START: volume=%s\n' "${next_graph}"
 docker run --rm -v "${next_graph}:/data" ghcr.io/oxigraph/oxigraph:latest \
     optimize -l /data >"${backup_dir}/next-graph-optimize.txt" 2>&1
+printf 'NEXT GRAPH OPTIMIZE PASS\n'
 
 docker network inspect "${project}_default" >/dev/null
 docker run -d --name "${next_container}" --restart unless-stopped \
     --network "${project}_default" -v "${next_graph}:/data" \
     ghcr.io/oxigraph/oxigraph:latest serve-read-only --location /data --bind 0.0.0.0:7878 >/dev/null
-test -z "$(docker port "${next_container}" 7878/tcp)"
+test -z "$(docker port "${next_container}" 7878/tcp 2>/dev/null)"
 next_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${next_container}")
 test -n "${next_ip}"
 for _ in $(seq 1 30); do
