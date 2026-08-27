@@ -253,6 +253,8 @@ class ApiRouteContractTest(unittest.TestCase):
         windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm.ps1").read_text(encoding="utf-8")
         full_windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm_full.ps1").read_text(encoding="utf-8")
         diagnose = (ROOT / "deploy" / "data_api_v1" / "diagnose_t105_failure.ps1").read_text(encoding="utf-8")
+        resume = (ROOT / "deploy" / "data_api_v1" / "resume_t105_partial.sh").read_text(encoding="utf-8")
+        resume_windows = (ROOT / "deploy" / "data_api_v1" / "resume_t105_partial.ps1").read_text(encoding="utf-8")
         seed = (ROOT / "deploy" / "data_api_v1" / "seed_demo_vectors.sh").read_text(encoding="utf-8")
         self.assertIn('API_PUBLIC_CURATED_ONLY: "1"', overlay)
         self.assertIn("127.0.0.1:${API_DEBUG_PORT:-8001}:8000", overlay)
@@ -279,6 +281,10 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("rebuilt-old-health.json", full_windows)
         self.assertIn("SAFE JOURNAL STATE", diagnose)
         self.assertNotIn("OLD_READER_VERIFIER)=", diagnose)
+        self.assertIn("empty rollback placeholder", resume)
+        self.assertIn("resume_cutover_complete", resume)
+        self.assertIn("CUTOVER_LOCK_HELD=1", resume)
+        self.assertIn("T-105 PARTIAL RECOVERY PASS", resume_windows)
         self.assertIn("APPLY_TWO_OFFICIAL_DOCUMENTS", seed)
 
 
