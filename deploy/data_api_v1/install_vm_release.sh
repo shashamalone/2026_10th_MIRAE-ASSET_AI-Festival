@@ -3,6 +3,8 @@ set -Eeuo pipefail
 
 release_sha=${1:-}
 public_expires_at=${2:-}
+access_mode=${3:-curated}
+team_db_ack=${4:-}
 base=/home/user1106/financial-agent-v2
 incoming=${base}/incoming
 release_dir=${base}/releases/${release_sha}
@@ -26,7 +28,19 @@ except ValueError as exc:
     raise SystemExit(f"REFUSE_EXPIRY: {exc}")
 if parsed.tzinfo is None or parsed.astimezone(timezone.utc) <= datetime.now(timezone.utc):
     raise SystemExit("REFUSE_EXPIRY: a future timezone-aware timestamp is required")
+if (parsed.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds() > 7 * 24 * 60 * 60:
+    raise SystemExit("REFUSE_EXPIRY: public test exposure cannot exceed 7 days")
 PY
+case "${access_mode}" in
+  curated) ;;
+  team-db)
+    test "${team_db_ack}" = I_ACCEPT_TEMPORARY_GUARDED_READ_ONLY_DB || {
+      echo "REFUSE_TEAM_DB_ACK: exact acknowledgement is required" >&2
+      exit 2
+    }
+    ;;
+  *) echo "REFUSE_ACCESS_MODE: ${access_mode}" >&2; exit 2 ;;
+esac
 test -s "${archive}"
 test -f "${source_release}/.env"
 test "$(stat -c '%a' "${source_release}/.env")" = 600
@@ -137,6 +151,13 @@ export POSTGRES_DB="${postgres_db}"
 export OXIGRAPH_ACTIVE_VOLUME="${active_graph}"
 export PUBLIC_TEST_EXPIRES_AT="${public_expires_at}"
 export V2_CUTOVER_CONFIRMED=V2_RELEASE_IS_ACTIVE
+if [[ "${access_mode}" == team-db ]]; then
+  export TEAM_DB_PUBLIC_MODE=1
+  export TEAM_DB_PUBLIC_ACK=I_ACCEPT_TEMPORARY_GUARDED_READ_ONLY_DB
+else
+  export TEAM_DB_PUBLIC_MODE=0
+  unset TEAM_DB_PUBLIC_ACK || true
+fi
 bash deploy/data_api_v1/deploy_public_test.sh
 
 version_file=$(mktemp)
@@ -151,7 +172,12 @@ with open(sys.argv[1], encoding="utf-8") as stream:
 assert value["release_id"] == os.environ["EXPECTED_RELEASE"], value
 PY
 rm -f -- "${version_file}"
-test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/db/version)" = 404
+raw_status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/db/version)
+if [[ "${access_mode}" == team-db ]]; then
+  test "${raw_status}" = 200
+else
+  test "${raw_status}" = 404
+fi
 printf '%s\n' "${release_dir}" >"${base}/shared/backups/latest-curated-data-api-release.txt"
-printf 'VM DATA API PASS: release=%s source=%s graph=%s public_expires_at=%s raw_db=blocked\n' \
-  "${expected_release}" "${release_sha}" "${active_graph}" "${public_expires_at}"
+printf 'VM DATA API PASS: release=%s source=%s graph=%s public_expires_at=%s raw_db=%s\n' \
+  "${expected_release}" "${release_sha}" "${active_graph}" "${public_expires_at}" "${access_mode}"

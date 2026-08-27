@@ -18,7 +18,7 @@ def request(url: str, path: str, payload: dict | None = None) -> tuple[int, dict
         method="GET" if payload is None else "POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         return exc.code, json.loads(exc.read().decode("utf-8"))
@@ -28,6 +28,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--health-only", action="store_true")
+    parser.add_argument("--team-db-public", action="store_true")
     args = parser.parse_args()
     status, health = request(args.url, "/health")
     if status != 200 or health.get("release_id") != EXPECTED_RELEASE or not health.get("readiness"):
@@ -49,14 +50,88 @@ def main() -> None:
         raise SystemExit("CAPABILITY FAIL")
     if (checks[3][1].get("data") or {}).get("code") != "ABSTAIN_INVALID_TAXONOMY":
         raise SystemExit("ONTOLOGY FAIL")
-    raw_status, raw_payload = request(
+    if not args.team_db_public:
+        raw_status, raw_payload = request(args.url, "/db/sql", {"sql": "SELECT 1"})
+        if raw_status != 404 or raw_payload.get("code") != "ROUTE_NOT_PUBLIC":
+            raise SystemExit(f"PUBLIC RAW ROUTE FAIL: status={raw_status} payload={raw_payload}")
+        print("DATA API V1 PASS: release/capabilities/search/ontology curated; raw query not public")
+        return
+
+    version_status, version = request(args.url, "/db/version")
+    tables_status, tables = request(args.url, "/db/tables")
+    columns_status, columns = request(
+        args.url, "/db/columns?table_schema=enriched&table_name=product_master"
+    )
+    catalog_status, catalog = request(
+        args.url, "/db/catalog?table_schema=enriched&table_name=product_master"
+    )
+    sql_status, sql = request(
         args.url,
         "/db/sql",
-        {"sql": "SELECT 1"},
+        {
+            "sql": (
+                "SELECT (SELECT count(*) FROM raw.bond_kr_master)+"
+                "(SELECT count(*) FROM raw.etf_kr_master)+"
+                "(SELECT count(*) FROM raw.etf_gl_master)+"
+                "(SELECT count(*) FROM raw.fund_pub_master) AS official,"
+                "(SELECT count(*) FROM relations.product_holding) AS holdings,"
+                "(SELECT count(*) FROM relations.company_subsidiary) AS subsidiaries"
+            )
+        },
     )
-    if raw_status != 404 or raw_payload.get("code") != "ROUTE_NOT_PUBLIC":
-        raise SystemExit(f"PUBLIC RAW ROUTE FAIL: status={raw_status} payload={raw_payload}")
-    print("DATA API V1 PASS: release/capabilities/search/ontology curated; raw query not public")
+    cap_status, capped = request(
+        args.url,
+        "/db/sql",
+        {"sql": "SELECT product_id FROM enriched.product_master ORDER BY product_id LIMIT 101"},
+    )
+    sparql_status, sparql = request(
+        args.url,
+        "/db/sparql",
+        {
+            "sparql": (
+                "SELECT (COUNT(*) AS ?triples) WHERE { "
+                "{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } } }"
+            )
+        },
+    )
+    sql_write_status, _ = request(
+        args.url, "/db/sql", {"sql": "DELETE FROM enriched.product_master"}
+    )
+    sparql_write_status, _ = request(
+        args.url, "/db/sparql", {"sparql": "INSERT DATA { <a> <b> <c> }"}
+    )
+    if any(status != 200 for status in (
+        version_status,
+        tables_status,
+        columns_status,
+        catalog_status,
+        sql_status,
+        cap_status,
+        sparql_status,
+    )):
+        raise SystemExit("TEAM DB READ FAIL")
+    if version["rows"][0].get("release_id") != EXPECTED_RELEASE:
+        raise SystemExit(f"TEAM DB VERSION FAIL: {version}")
+    table_names = {(row["table_schema"], row["table_name"]) for row in tables["rows"]}
+    if ("enriched", "product_master") not in table_names or ("relations", "product_holding") not in table_names:
+        raise SystemExit(f"TEAM DB TABLE FAIL: {tables}")
+    if not columns.get("rows") or not catalog.get("rows"):
+        raise SystemExit("TEAM DB CATALOG FAIL")
+    counts = sql["rows"][0]
+    if tuple(int(counts[key]) for key in ("official", "holdings", "subsidiaries")) != (53375, 46951, 8866):
+        raise SystemExit(f"TEAM DB COUNT FAIL: {counts}")
+    if capped.get("row_count") != 100 or capped.get("truncated") is not True:
+        raise SystemExit(f"TEAM DB CAP FAIL: {capped}")
+    if int(sparql["rows"][0]["triples"]) != 655388:
+        raise SystemExit(f"TEAM DB GRAPH FAIL: {sparql}")
+    if sql_write_status == 200 or sparql_write_status == 200:
+        raise SystemExit(
+            f"TEAM DB WRITE GUARD FAIL: sql={sql_write_status} sparql={sparql_write_status}"
+        )
+    print(
+        "TEAM DB API PASS: release/catalog/sql/sparql readonly; "
+        "official=53375 holdings=46951 subsidiaries=8866 graph=655388"
+    )
 
 
 if __name__ == "__main__":

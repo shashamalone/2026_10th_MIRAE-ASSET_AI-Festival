@@ -3,7 +3,8 @@ param(
     [string]$SshTarget = 'user1106@40.82.145.44',
     [string]$IncomingDir = '/home/user1106/financial-agent-v2/incoming',
     [string]$ConsumerBaseUrl = 'http://40.82.145.44:8000',
-    [DateTimeOffset]$PublicTestExpiresAt = [DateTimeOffset]::Now.AddDays(2)
+    [DateTimeOffset]$PublicTestExpiresAt = [DateTimeOffset]::Now.AddDays(2),
+    [switch]$KeepPublicReadOnlyDbForTeamTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,7 +43,9 @@ $manifestText = "$archiveHash  $archiveName`n$installerHash  install_vm_release.
 Write-Host "Uploading T-106 release $releaseSha; enter the SSH password only in this terminal."
 & scp $archive $manifest $installer "${SshTarget}:$IncomingDir/"
 if ($LASTEXITCODE -ne 0) { throw 'T-106 upload failed' }
-$remote = "cd '$IncomingDir' && sha256sum -c '$manifestName' && chmod 755 install_vm_release.sh && bash install_vm_release.sh '$releaseSha' '$expiry'"
+$accessMode = if ($KeepPublicReadOnlyDbForTeamTest) { 'team-db' } else { 'curated' }
+$teamDbAck = if ($KeepPublicReadOnlyDbForTeamTest) { 'I_ACCEPT_TEMPORARY_GUARDED_READ_ONLY_DB' } else { '-' }
+$remote = "cd '$IncomingDir' && sha256sum -c '$manifestName' && chmod 755 install_vm_release.sh && bash install_vm_release.sh '$releaseSha' '$expiry' '$accessMode' '$teamDbAck'"
 & ssh $SshTarget $remote
 if ($LASTEXITCODE -ne 0) {
     throw 'T-106 VM install failed; the preceding V2 API remains available or was restored by the deploy guard'
@@ -59,7 +62,9 @@ catch {
     if ($_.Exception.Response) { $rawStatus = [int]$_.Exception.Response.StatusCode }
 }
 $expected = 'financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38'
-if ($release.release_id -ne $expected -or $health.status -ne 'ok' -or $rawStatus -ne 404) {
+$expectedRawStatus = if ($KeepPublicReadOnlyDbForTeamTest) { 200 } else { 404 }
+if ($release.release_id -ne $expected -or $health.status -ne 'ok' -or $rawStatus -ne $expectedRawStatus) {
     throw "Consumer verification failed: release=$($release.release_id) health=$($health.status) raw_status=$rawStatus"
 }
-Write-Output "REMOTE VM DATA API PASS: $ConsumerBaseUrl release=$expected expires=$expiry raw_db=blocked"
+$rawMode = if ($KeepPublicReadOnlyDbForTeamTest) { 'guarded-readonly' } else { 'blocked' }
+Write-Output "REMOTE VM DATA API PASS: $ConsumerBaseUrl release=$expected expires=$expiry raw_db=$rawMode"

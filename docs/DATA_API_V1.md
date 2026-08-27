@@ -2,7 +2,7 @@
 
 ## 역할 경계와 현재 상태
 
-DB 담당자는 V2 PostgreSQL·Graph·문서 벡터를 읽는 `/v1` API와 Python 클라이언트를 제공한다. LangGraph의 질문 해석, `bge-m3` 질문 임베딩, HyperCLOVA X 답변 생성, 최종 `POST /query`는 Agent 담당이다. Agent에는 DB DSN이나 DB 비밀번호를 전달하지 않는다.
+DB 담당자는 V2 PostgreSQL·Graph·문서 벡터를 읽는 `/v1` API와 guarded read-only `/db` API, Python 클라이언트를 제공한다. LangGraph의 질문 해석, 맞춤 SQL/SPARQL 생성, `bge-m3` 질문 임베딩, HyperCLOVA X 답변 생성, 최종 `POST /query`는 Agent 담당이다. Agent에는 DB DSN이나 DB 비밀번호를 전달하지 않는다.
 
 이 문서가 작성된 시점에 V2 Stage는 `cutover_ready`이지만, T-105의 실제 cutover 완료 로그는 별도 확인 대상이다. `/health`가 다음 값을 모두 만족하기 전에는 V1 API를 배포하지 않는다.
 
@@ -28,6 +28,36 @@ DB 담당자는 V2 PostgreSQL·Graph·문서 벡터를 읽는 `/v1` API와 Pytho
 | `POST /v1/evidence/semantic-search` | Agent가 만든 1024차원 질문 벡터로 demo 문서 검색 |
 
 모든 V1 응답은 `release_id`, `snapshot_hash`, `data`, `coverage`, `evidence`, `elapsed_ms`, `truncated`, `meta`를 반환한다. 공개 프로필의 요청 본문은 1MB, 결과는 100행, DB statement는 2초, 관계 깊이는 3으로 제한한다.
+
+## 팀 테스트용 맞춤 쿼리 API
+
+팀 Agent가 정해진 `/v1` 기능으로 처리하기 어려운 질문에 맞춤 SQL/SPARQL을 생성할 때 `/db`를 사용한다. 이 경로는 임시 팀 테스트 모드에서만 `:8000`에 공개하며 제출 VM에서는 비공개로 전환한다.
+
+| 경로 | 용도 |
+|---|---|
+| `GET /db/version` | Agent 시작 시 exact release 고정 |
+| `GET /db/tables` | canonical RDB 테이블 목록 |
+| `GET /db/columns?table_schema=...&table_name=...` | 특정 테이블의 물리 컬럼 |
+| `GET /db/catalog?table_schema=...&table_name=...` | 설명·단위·기준일·NULL 규칙·PK/FK·grain을 포함한 LLM용 catalog |
+| `POST /db/sql` | 파라미터화된 읽기 전용 SQL 실행 |
+| `POST /db/sparql` | 읽기 전용 SPARQL 실행 |
+
+Agent는 전체 catalog를 한 번에 prompt에 넣지 않는다. 먼저 `/db/tables`로 후보를 고르고 `/db/catalog`에 schema/table 필터를 전달해 관련 컬럼만 context로 사용한다. SQL은 `SELECT`/`WITH`만 허용되고 다중 statement, DDL/DML, `COPY`, 2초 초과 실행은 거부된다. SPARQL도 조회만 허용되며 `INSERT`, `DELETE`, `LOAD`, `CLEAR`, `SERVICE`는 거부된다. 두 경로 모두 최대 100행이며 POST를 자동 재시도하지 않는다.
+
+```json
+POST /db/sql
+{
+  "sql": "SELECT product_id,name FROM enriched.product_master WHERE name=%(name)s LIMIT 20",
+  "params": {"name": "KODEX 200"}
+}
+```
+
+```json
+POST /db/sparql
+{
+  "sparql": "PREFIX fp: <http://mafest.ai/product#> SELECT ?product WHERE { ?product a fp:ETF } LIMIT 20"
+}
+```
 
 조건검색 허용 필드는 `AUM`, `RETURN_1Y`, `EXPENSE_RATIO`, `MATURITY_DATE`, `CREDIT_RATING_RANK`, `ASSUMED_PURCHASABLE`, `BUY_YIELD`다. AUM 필터·정렬에는 통화가 반드시 필요하다. `buyable_quantity`는 저장 전용이므로 구매가능 판정에 사용하지 않는다.
 
@@ -65,6 +95,11 @@ from tools.data_api import FinancialDataClient
 
 client = FinancialDataClient.from_env()
 product = client.search_products("KODEX 200", match="exact")
+catalog = client.catalog(table_schema="enriched", table_name="product_master")
+rows = client.sql(
+    "SELECT product_id,name FROM enriched.product_master WHERE name=%(name)s LIMIT 20",
+    {"name": "KODEX 200"},
+)
 query_vector = clova.embed("이 상품의 공식 위험요인은 무엇인가?")
 evidence = client.semantic_search(query_vector, top_k=2)
 ```
@@ -107,15 +142,18 @@ VM에서는 `DEMO_VECTOR_APPLY_ACK=APPLY_TWO_OFFICIAL_DOCUMENTS`를 명시한 �
 - `PUBLIC_TEST_EXPIRES_AT` — UTC ISO-8601, 기본 운영 기간 7일
 - 읽기전용 `DATABASE_URL`; PostgreSQL 5432와 Oxigraph 7878은 외부 미공개
 
-`deploy/data_api_v1/deploy_public_test.sh`는 먼저 기존 V2 health를 검증한 다음 public curated API를 `:8000`, SQL/SPARQL debug API를 `127.0.0.1:8001`에 띄운다. 공개 API는 분당 60요청으로 제한되고 `/db/sql`·`/db/sparql`은 404를 반환한다.
+`deploy/data_api_v1/deploy_public_test.sh`의 기본값은 public curated API를 `:8000`, SQL/SPARQL debug API를 `127.0.0.1:8001`에 띄우고 공개 `/db*`를 404로 차단한다. 명시적 팀 테스트 모드에서는 `:8000`의 동일 API가 `/v1`과 guarded read-only `/db`를 함께 제공하고 중복 debug 컨테이너를 제거한다. 두 모드 모두 분당 60요청, 1MB body, 최대 100행, 2초 SQL 제한과 만료시간을 적용한다.
 
-T-105 DB/Graph cutover부터 연속 수행하려면 Windows PowerShell에서 다음 명령을 실행한다. 이 테스트 VM은 이미 guarded read-only `/db`가 공개되어 있으므로 명시적인 위험 인자가 필요하다. T-106 검증이 끝나면 공개 `/db*`는 404로 닫힌다. SSH 비밀번호는 로컬 터미널 프롬프트에만 입력한다.
+T-105 DB/Graph cutover부터 팀 테스트 API 배포까지 연속 수행하려면 Windows PowerShell에서 다음 명령을 실행한다. 이 테스트 VM은 guarded read-only `/db`를 임시 공개하므로 명시적인 위험 인자와 만료시간이 필요하다. SSH 비밀번호는 로컬 터미널 프롬프트에만 입력한다.
 
 ```powershell
 .\deploy\data_api_v1\deploy_vm_full.ps1 `
   -AcceptExistingPublicReadOnlyDbRisk `
+  -KeepPublicReadOnlyDbForTeamTest `
   -PublicTestExpiresAt '2026-08-29T23:59:00+09:00'
 ```
+
+`-KeepPublicReadOnlyDbForTeamTest`를 생략하면 제출 준비용 curated-only 모드로 배포되어 공개 `/db*`가 404를 반환한다. 팀 테스트 모드는 최대 7일 이내의 timezone-aware 만료시간과 서버 측 exact 위험 승인 문자열 없이는 시작되지 않는다.
 
 T-105가 이미 완료된 경우 위 실행기는 cutover를 건너뛴다. T-106만 다시 설치하려면 `deploy_vm.ps1`을 직접 실행한다.
 

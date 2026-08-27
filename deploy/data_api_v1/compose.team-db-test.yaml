@@ -1,0 +1,5 @@
+services:
+  api:
+    environment:
+      API_PUBLIC_CURATED_ONLY: "0"
+      PUBLIC_TEST_MODE: "1"

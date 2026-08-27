@@ -29,6 +29,7 @@ class FinancialDataClient:
     timeout_seconds: float = 3.0
     expected_release_id: str | None = None
     _client: httpx.Client | None = None
+    _raw_release_verified: bool = False
 
     def __post_init__(self) -> None:
         self.base_url = self.base_url.rstrip("/")
@@ -60,6 +61,7 @@ class FinancialDataClient:
         if self._client is not None:
             self._client.close()
             self._client = None
+        self._raw_release_verified = False
 
     def __enter__(self) -> Self:
         return self
@@ -67,7 +69,14 @@ class FinancialDataClient:
     def __exit__(self, *_args: object) -> None:
         self.close()
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        verify_release: bool = True,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         try:
             response = self.client.request(method, path, **kwargs)
         except httpx.TimeoutException as exc:
@@ -90,7 +99,7 @@ class FinancialDataClient:
                 payload.get("details") if isinstance(payload.get("details"), dict) else {},
             )
         release_id = payload.get("release_id")
-        if self.expected_release_id and release_id != self.expected_release_id:
+        if verify_release and self.expected_release_id and release_id != self.expected_release_id:
             raise DataApiClientError(
                 409,
                 "RELEASE_MISMATCH",
@@ -98,6 +107,10 @@ class FinancialDataClient:
                 {"expected": self.expected_release_id, "actual": release_id},
             )
         return payload
+
+    def _ensure_raw_release(self) -> None:
+        if self.expected_release_id and not self._raw_release_verified:
+            self.db_version()
 
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
@@ -107,6 +120,65 @@ class FinancialDataClient:
 
     def capabilities(self) -> dict[str, Any]:
         return self._request("GET", "/v1/capabilities")
+
+    def db_version(self) -> dict[str, Any]:
+        payload = self._request("GET", "/db/version", verify_release=False)
+        rows = payload.get("rows") or []
+        actual = rows[0].get("release_id") if rows and isinstance(rows[0], dict) else None
+        if self.expected_release_id and actual != self.expected_release_id:
+            raise DataApiClientError(
+                409,
+                "RELEASE_MISMATCH",
+                "Agent와 raw Data API의 release_id가 다릅니다",
+                {"expected": self.expected_release_id, "actual": actual},
+            )
+        self._raw_release_verified = True
+        return payload
+
+    def tables(self) -> dict[str, Any]:
+        self._ensure_raw_release()
+        return self._request("GET", "/db/tables", verify_release=False)
+
+    def columns(self, table_schema: str, table_name: str) -> dict[str, Any]:
+        self._ensure_raw_release()
+        return self._request(
+            "GET",
+            "/db/columns",
+            verify_release=False,
+            params={"table_schema": table_schema, "table_name": table_name},
+        )
+
+    def catalog(
+        self,
+        *,
+        table_schema: str | None = None,
+        table_name: str | None = None,
+    ) -> dict[str, Any]:
+        self._ensure_raw_release()
+        params = {
+            key: value
+            for key, value in {"table_schema": table_schema, "table_name": table_name}.items()
+            if value is not None
+        }
+        return self._request("GET", "/db/catalog", verify_release=False, params=params)
+
+    def sql(self, statement: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._ensure_raw_release()
+        return self._request(
+            "POST",
+            "/db/sql",
+            verify_release=False,
+            json={"sql": statement, "params": params or {}},
+        )
+
+    def sparql(self, statement: str) -> dict[str, Any]:
+        self._ensure_raw_release()
+        return self._request(
+            "POST",
+            "/db/sparql",
+            verify_release=False,
+            json={"sparql": statement},
+        )
 
     def search_products(
         self,

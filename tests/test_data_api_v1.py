@@ -258,8 +258,10 @@ class ApiRouteContractTest(unittest.TestCase):
 
     def test_deployment_profile_separates_public_and_debug_routes(self):
         overlay = (ROOT / "deploy" / "data_api_v1" / "compose.public-test.yaml").read_text(encoding="utf-8")
+        team_overlay = (ROOT / "deploy" / "data_api_v1" / "compose.team-db-test.yaml").read_text(encoding="utf-8")
         deploy = (ROOT / "deploy" / "data_api_v1" / "deploy_public_test.sh").read_text(encoding="utf-8")
         install = (ROOT / "deploy" / "data_api_v1" / "install_vm_release.sh").read_text(encoding="utf-8")
+        verify = (ROOT / "deploy" / "data_api_v1" / "verify_public_api.py").read_text(encoding="utf-8")
         windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm.ps1").read_text(encoding="utf-8")
         full_windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm_full.ps1").read_text(encoding="utf-8")
         retry = (ROOT / "deploy" / "data_api_v1" / "prepare_t105_retry.sh").read_text(encoding="utf-8")
@@ -270,20 +272,31 @@ class ApiRouteContractTest(unittest.TestCase):
         resume_windows = (ROOT / "deploy" / "data_api_v1" / "resume_t105_partial.ps1").read_text(encoding="utf-8")
         seed = (ROOT / "deploy" / "data_api_v1" / "seed_demo_vectors.sh").read_text(encoding="utf-8")
         self.assertIn('API_PUBLIC_CURATED_ONLY: "1"', overlay)
+        self.assertIn('API_PUBLIC_CURATED_ONLY: "0"', team_overlay)
         self.assertIn("127.0.0.1:${API_DEBUG_PORT:-8001}:8000", overlay)
         self.assertIn("V2_CUTOVER_CONFIRMED", deploy)
         self.assertIn("PUBLIC_TEST_EXPIRES_AT", deploy)
         self.assertIn("deploy/compose.graph-pointer.yaml", deploy)
-        self.assertIn("up -d --no-deps api api-debug", deploy)
+        self.assertIn('up -d --no-deps "${services[@]}"', deploy)
+        self.assertIn("python3 deploy/data_api_v1/verify_public_api.py", deploy)
+        self.assertIn("I_ACCEPT_TEMPORARY_GUARDED_READ_ONLY_DB", deploy)
+        self.assertIn("TEAM_DB_PUBLIC_MODE", deploy)
         self.assertIn("financial-agent-prep_oxigraph-next-2026-08-24-57c4edc", install)
         self.assertIn("relations.product_holding", install)
         self.assertIn("relations.company_subsidiary", install)
-        self.assertIn("raw_db=blocked", install)
+        self.assertIn("raw_status=", install)
+        self.assertIn("access_mode", install)
+        self.assertIn("public test exposure cannot exceed 7 days", install)
+        self.assertIn("KeepPublicReadOnlyDbForTeamTest", windows)
+        self.assertIn("KeepPublicReadOnlyDbForTeamTest", full_windows)
+        self.assertIn('"sql": "DELETE FROM enriched.product_master"', verify)
+        self.assertIn('"sparql": "INSERT DATA { <a> <b> <c> }"', verify)
+        self.assertIn("TEAM DB API PASS", verify)
         self.assertIn("Get-FileHash", windows)
         self.assertIn("Refuse dirty tracked worktree", windows)
         self.assertIn("AcceptExistingPublicReadOnlyDbRisk", full_windows)
         self.assertIn("SELECT 1 AS probe", full_windows)
-        self.assertIn("raw_db=blocked", full_windows)
+        self.assertIn("guarded-readonly", full_windows)
         self.assertIn("t105-default-graph-fix", full_windows)
         self.assertIn("UNION { GRAPH ?g", full_windows)
         self.assertIn("data_api_rollback.sh", full_windows)
@@ -355,6 +368,45 @@ class DataApiClientContractTest(unittest.TestCase):
         with self.assertRaises(DataApiClientError) as caught:
             client.release()
         self.assertEqual(caught.exception.code, "RELEASE_MISMATCH")
+        client.close()
+
+    def test_client_pins_raw_release_then_uses_catalog_sql_and_sparql(self):
+        requests: list[tuple[str, str, dict | None]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            payload = json.loads(request.content) if request.content else None
+            requests.append((request.method, request.url.path, payload))
+            if request.url.path == "/db/version":
+                return httpx.Response(
+                    200,
+                    json={"rows": [{"release_id": RELEASE_ID}]},
+                    request=request,
+                )
+            if request.url.path == "/db/catalog":
+                return httpx.Response(200, json={"rows": [{"table_name": "product_master"}]}, request=request)
+            if request.url.path == "/db/sql":
+                return httpx.Response(200, json={"rows": [{"probe": 1}]}, request=request)
+            if request.url.path == "/db/sparql":
+                return httpx.Response(200, json={"rows": [{"triples": "655388"}]}, request=request)
+            raise AssertionError(request.url)
+
+        raw_client = httpx.Client(base_url="https://data-api.test", transport=httpx.MockTransport(handler))
+        client = FinancialDataClient(
+            "https://data-api.test",
+            expected_release_id=RELEASE_ID,
+            _client=raw_client,
+        )
+        self.assertEqual(client.catalog(table_schema="enriched")["rows"][0]["table_name"], "product_master")
+        self.assertEqual(client.sql("SELECT %(value)s AS probe", {"value": 1})["rows"][0]["probe"], 1)
+        self.assertEqual(client.sparql("SELECT (COUNT(*) AS ?triples) WHERE { ?s ?p ?o }")["rows"][0]["triples"], "655388")
+        self.assertEqual(sum(path == "/db/version" for _method, path, _payload in requests), 1)
+        sql_payload = next(payload for method, path, payload in requests if method == "POST" and path == "/db/sql")
+        sparql_payload = next(payload for method, path, payload in requests if method == "POST" and path == "/db/sparql")
+        self.assertEqual(sql_payload, {"sql": "SELECT %(value)s AS probe", "params": {"value": 1}})
+        self.assertEqual(
+            sparql_payload,
+            {"sparql": "SELECT (COUNT(*) AS ?triples) WHERE { ?s ?p ?o }"},
+        )
         client.close()
 
 

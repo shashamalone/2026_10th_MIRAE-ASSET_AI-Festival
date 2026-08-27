@@ -6,7 +6,8 @@ param(
     [string]$ConsumerBaseUrl = 'http://40.82.145.44:8000',
     [DateTimeOffset]$PublicTestExpiresAt = [DateTimeOffset]::Now.AddDays(2),
     [string]$T105ArtifactDir = '',
-    [switch]$PrepareCompatibilityPatchOnly
+    [switch]$PrepareCompatibilityPatchOnly,
+    [switch]$KeepPublicReadOnlyDbForTeamTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -319,7 +320,12 @@ if (-not $v2Active) {
     if ($probe.rows[0].probe -ne '1' -and $probe.rows[0].probe -ne 1) {
         throw 'Existing public read-only DB probe did not return 1; refusing risk-mode cutover'
     }
-    Write-Warning 'The current VM already exposes guarded read-only /db publicly. T-105 will retain that state only until T-106 replaces it and blocks /db*.'
+    if ($KeepPublicReadOnlyDbForTeamTest) {
+        Write-Warning 'The temporary team-test VM will keep guarded read-only /db public until the explicit expiry.'
+    }
+    else {
+        Write-Warning 'The current VM exposes guarded read-only /db publicly; curated T-106 will replace it and block /db*.'
+    }
     $retryPreparation = Join-Path $scriptDir 'prepare_t105_retry.ps1'
     & $retryPreparation -SshTarget $SshTarget -ConsumerBaseUrl $ConsumerBaseUrl
     if ($LASTEXITCODE -ne 0) { throw 'T-105 retry preparation failed' }
@@ -334,6 +340,13 @@ else {
     Write-Host 'T-105 V2 DB/Graph release is already active; skipping cutover.'
 }
 
-& $t106 -SshTarget $SshTarget -ConsumerBaseUrl $ConsumerBaseUrl -PublicTestExpiresAt $PublicTestExpiresAt
-if ($LASTEXITCODE -ne 0) { throw 'T-106 curated API deployment failed' }
-Write-Output "FULL VM DEPLOY PASS: release=$expected public=$ConsumerBaseUrl expires=$($PublicTestExpiresAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) raw_db=blocked"
+$t106Args = @{
+    SshTarget = $SshTarget
+    ConsumerBaseUrl = $ConsumerBaseUrl
+    PublicTestExpiresAt = $PublicTestExpiresAt
+    KeepPublicReadOnlyDbForTeamTest = [bool]$KeepPublicReadOnlyDbForTeamTest
+}
+& $t106 @t106Args
+if ($LASTEXITCODE -ne 0) { throw 'T-106 API deployment failed' }
+$rawMode = if ($KeepPublicReadOnlyDbForTeamTest) { 'guarded-readonly' } else { 'blocked' }
+Write-Output "FULL VM DEPLOY PASS: release=$expected public=$ConsumerBaseUrl expires=$($PublicTestExpiresAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')) raw_db=$rawMode"
