@@ -27,3 +27,6 @@ uvicorn
 
 # 시각화 (선택 — EDA/viz)
 pyvis
+
+# 콘텐츠 인덱스 PDF 텍스트 추출 (src/kb/build_content_index.py)
+pypdf

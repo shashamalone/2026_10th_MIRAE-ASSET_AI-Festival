@@ -88,15 +88,18 @@ def _append_unique(items: list, item: dict, keys=("binding", "operator", "value"
         items.append(item)
 
 
+# 08-24 배포분의 buyable_quantity는 무효고, 채권 마스터에 상장폐지 컬럼이 없어
+# 만기 도래가 유일한 이탈 사유다. 판매/매수/구매 가능 표현은 전부
+# '만기 미도래(remaining_days > 0)' 정의로 치환한다 (EDA_REPORT_0711 §2-1).
+_BOND_SELLABLE = ("매수가능", "매수할수있는", "구매가능", "판매가능", "판매할수있는")
+
+
 def _constraint(c: dict, domain: str) -> tuple[dict | None, str | None]:
     raw = c.get("raw") or ""
     if "최신" in raw and ("갱신" in raw or "기준" in raw):
         return None, None
-    # 08-24 배포분의 buyable_quantity는 무효다. 기존 평가 문항의 명시적
-    # '매수가능수량 > 0' 표현도 값을 조회하지 않고 만기 미도래 정의로 치환한다.
     compact = norm(raw)
-    if domain == "bond_kr" and any(
-            x in compact for x in ("매수가능", "매수할수있는", "구매가능")):
+    if domain == "bond_kr" and any(x in compact for x in _BOND_SELLABLE):
         return {"binding": "bond.remaining_days", "operator": ">", "value": 0,
                 "unit": "day", "raw": raw}, None
     binding_id = best_binding(c.get("field_text") or raw, domain, "filter")
@@ -172,7 +175,7 @@ def ground(question: str, frame: dict) -> dict:
         _append_unique(filters, dict(item))
     qn = norm(question)
     purchase_redefined = domain == "bond_kr" and any(
-        x in qn for x in ("매수가능", "매수할수있는", "구매가능"))
+        x in qn for x in _BOND_SELLABLE)
     if purchase_redefined:
         selected = [x for x in selected if x != "bond.buyable_quantity"]
         if frame.get("task") != "lookup":

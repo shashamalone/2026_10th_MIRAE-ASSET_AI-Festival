@@ -27,8 +27,8 @@ from tools import rdb  # noqa: E402
 from tools.schema_context import ground, metadata  # noqa: E402
 from tools.validate import validate_query  # noqa: E402
 
-QF = ROOT / "vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl"
-GOLD_DIR = ROOT / "vectordb_test/5_semantic_schema_nl2sql/gold"
+QF = ROOT / "test/vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl"
+GOLD_DIR = ROOT / "test/vectordb_test/5_semantic_schema_nl2sql/gold"
 IDS = ["q001", "q002", "q003", "q005", "q006", "q007", "q008", "q009",
        "q010", "q011", "q012", "q013", "q017", "q018"]
 

@@ -13,8 +13,8 @@ from tools.route import MAX_PLAN_STEPS, QUERY_TYPES, ROUTE_SCHEMA, select_route 
 from tools.schema_context import ground, metadata  # noqa: E402
 from tools.validate import validate_query  # noqa: E402
 
-FRAMES = ROOT / "vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl"
-QUESTIONS = ROOT / "vectordb_test/5_semantic_schema_nl2sql/gold/expected_queries_35.json"
+FRAMES = ROOT / "test/vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl"
+QUESTIONS = ROOT / "test/vectordb_test/5_semantic_schema_nl2sql/gold/expected_queries_35.json"
 RDB_IDS = {"q001", "q002", "q003", "q005", "q006", "q007", "q008", "q009",
            "q010", "q011", "q012", "q013", "q017", "q018"}
 UNSUPPORTED_IDS = {"q020", "q022", "q029"}
@@ -42,12 +42,16 @@ def main() -> None:
 
     metadata.cache_clear()
     safe = {"domain": "etf_gl", "unresolved": [], "as_of": {"value": "2026-06-14"}}
-    assert validate_query("2026-08-24 기준 Kimi 관련 상품", safe)["code"] \
+    # cutoff(2026-08-24) 이후의 명시적 날짜만 NOT_RELEASED — 08-24 당일은 허용된다
+    assert validate_query("2026-09-01 기준 Kimi 관련 상품", safe)["code"] \
         == "ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF"
+    assert validate_query("2026-08-24 기준 Kimi 관련 상품", safe) is None
     assert validate_query("2027년 확정 연간수익률", safe)["code"] \
         == "ABSTAIN_FUTURE_DATA"
-    late = {**safe, "as_of": {"value": "2026-08-21"}}
+    late = {**safe, "as_of": {"value": "2026-09-01"}}
     assert validate_query("VOO를 알려줘", late)["code"] == "ABSTAIN_CUTOFF_VIOLATION"
+    within = {**safe, "as_of": {"value": "2026-08-21"}}  # 실질 기준일 — cutoff 이내는 허용
+    assert validate_query("VOO를 알려줘", within) is None
     assert validate_query("VOO를 알려줘", safe) is None
     print("PASS route guard — RDB 14/14, unsupported 3/3, cutoff safety 4/4")
 
