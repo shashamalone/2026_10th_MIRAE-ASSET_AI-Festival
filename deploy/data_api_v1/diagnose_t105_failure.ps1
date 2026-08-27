@@ -101,7 +101,9 @@ docker volume ls --format '{{.Name}}' | grep -E '^financial-agent-prep_oxigraph-
 echo 'T105 DIAG PASS'
 '@
 
-& ssh $SshTarget $remoteCommand
+$encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remoteCommand))
+$launcher = "printf '%s' '$encoded' | base64 -d | bash"
+& ssh $SshTarget $launcher
 if ($LASTEXITCODE -ne 0) {
     throw 'T-105 remote diagnosis failed'
 }
