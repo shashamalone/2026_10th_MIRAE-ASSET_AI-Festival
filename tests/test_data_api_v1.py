@@ -310,6 +310,7 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("KeepPublicReadOnlyDbForTeamTest", full_windows)
         self.assertIn('"sql": "DELETE FROM enriched.product_master"', verify)
         self.assertIn('"sparql": "INSERT DATA { <a> <b> <c> }"', verify)
+        self.assertIn("http://mafest.ai/graph/abox/", verify)
         self.assertIn("TEAM DB API PASS", verify)
         self.assertIn("Get-FileHash", windows)
         self.assertIn("Refuse dirty tracked worktree", windows)

@@ -107,8 +107,8 @@ def main() -> None:
         "/db/sparql",
         {
             "sparql": (
-                "SELECT (COUNT(*) AS ?triples) WHERE { "
-                "{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } } }"
+                "SELECT (COUNT(*) AS ?triples) WHERE { GRAPH ?g { ?s ?p ?o } "
+                "FILTER(STRSTARTS(STR(?g), 'http://mafest.ai/graph/abox/')) }"
             )
         },
     )
@@ -141,14 +141,14 @@ def main() -> None:
     if capped.get("row_count") != 100 or capped.get("truncated") is not True:
         raise SystemExit(f"TEAM DB CAP FAIL: {capped}")
     if int(sparql["rows"][0]["triples"]) != 655388:
-        raise SystemExit(f"TEAM DB GRAPH FAIL: {sparql}")
+        raise SystemExit(f"TEAM DB ABOX FAIL: {sparql}")
     if sql_write_status == 200 or sparql_write_status == 200:
         raise SystemExit(
             f"TEAM DB WRITE GUARD FAIL: sql={sql_write_status} sparql={sparql_write_status}"
         )
     print(
         "TEAM DB API PASS: release/catalog/sql/sparql readonly; "
-        "official=53375 holdings=46951 subsidiaries=8866 graph=655388"
+        "official=53375 holdings=46951 subsidiaries=8866 abox=655388"
     )
 
 
