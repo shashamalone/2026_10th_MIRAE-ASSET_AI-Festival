@@ -1,6 +1,9 @@
 /TIL/
-/[참고]/
+/\[참고\]/
 /data/
+/data_raw/
+/wanggyu/
+/archive/
 
 lseg_static_metadata.json
 theme_list.json
@@ -11,3 +14,4 @@ ontology/instances_*.ttl
 ontology.zip
 
 artifacts/
+

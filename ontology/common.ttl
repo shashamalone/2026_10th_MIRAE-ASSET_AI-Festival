@@ -25,7 +25,8 @@
 #     신호가 되어 답변 근거 계약을 위반한다.
 #
 # 데이터 기준일: 도메인별로 다르다 (bond 2026-02-24 / etf_kr 2026-06-15 /
-#   etf_gl 2026-06-14 / fund_pub 미표기, 스냅샷 2026-07-11).
+#   bond_kr 2026-08-21 / etf_kr 2026-08-21~22 /
+#   etf_gl 2026-08-22 / fund_pub 미표기, 스냅샷 2026-08-24).
 #   도메인 간 수치 비교 시 fp:asOf를 각각 표기해야 한다.
 ################################################################################
 
@@ -33,7 +34,7 @@
     rdfs:label "금융상품 공통 온톨로지"@ko, "Financial Product Common Ontology"@en ;
     rdfs:comment "국내채권·국내ETF·해외ETF·공모펀드 4개 도메인이 공유하는 상위 클래스, 관계, 코드리스트(신용등급·위험등급·자산군·투자지역·통화·복제방식)를 정의한다. 도메인 4파일은 이 온톨로지를 owl:imports 한다."@ko ;
     dcterms:created "2026-08-13"^^xsd:date ;
-    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-07-11 스냅샷)" .
+    dcterms:source "PRBD01N001, PREF01N001, PREF02N001, PRFD01N001 (2026-08-24 배포본)" .
 
 ################################################################################
 # 0. 출처 추적 애노테이션
@@ -80,7 +81,7 @@ fp:PublicFund a owl:Class ;
     rdfs:subClassOf fp:Product ;
     owl:disjointWith fp:Bond, fp:ETF, fp:ETN ;
     rdfs:label "공모펀드"@ko, "Public Offering Fund"@en ;
-    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위, 11,139종). **공모 한정 클래스다** — 원본에는 사모 102행(prvo_pbff_desc='사모')이 혼재하므로 적재 시 공모만 이 클래스로 선언하고 사모는 제외한다. 원본은 (itm_no, prfd_attr_cd) 롱포맷이라 펀드 단위 집계는 itm_no dedup(8.58배 축소)이 선행되어야 한다."@ko .
+    rdfs:comment "국내 공모펀드 종목(PRFD01N001 itm_no 단위, 23,676종). 2026-08-24 배포본은 itm_no가 단독 유일키인 1행 1펀드 마스터이므로 별도 dedup 없이 적재한다. **공모 한정 클래스다** — prvo_pbff_desc가 사모인 상품은 적재에서 제외한다."@ko .
 
 fp:ShareClass a owl:Class ;
     rdfs:subClassOf fp:PublicFund ;
@@ -218,7 +219,7 @@ fp:ratingStatus a owl:ObjectProperty ;
     rdfs:range fp:RatingStatus ;
     rdfs:label "신용등급 상태"@ko, "rating status"@en ;
     rdfs:comment "등급이 없을 때 그 이유를 구분한다. **판정 규칙: STD_PD_MCLS_NM이 '국공채' 또는 '개인투자용국채'이면서 CRD_GRD가 결측이면 fp:UnratedByDesign(미평가가 정상), '회사채'·'특수채'이면서 결측이면 fp:RatingUnknown(데이터 없음), 등급이 있으면 fp:Rated.** 실측 근거: 국공채 2,137건·개인투자용국채 49건은 결측률 100%, 회사채 14,241건(45.3%)·특수채 1,214건(13.9%)이 결측. 판매 가능 채권 254건 중 등급 결측 204건은 **전부 국공채**이고 판매 가능한 회사채 42건·특수채 8건은 결측 0건이다. 답변 규칙: 'AA- 이상' 등 등급 조건 질의에서 fp:UnratedByDesign 종목은 등급 필터에서 제외하되 결과에 '미평가(국채)'로 표기하고, fp:RatingUnknown 종목만 '등급 정보 확인 불가'로 답한다. 이 상태값은 유효한 값이므로 존재하지 않는 등급 문자열(AAAA)에 대한 ABSTAIN_INVALID_TAXONOMY 판정과 혼동하지 않는다."@ko ;
-    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "CRD_GRD", "STD_PD_MCLS_NM" .
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "crd_grd", "std_pd_mcls_nm" .
 
 ################################################################################
 # 3. 코드리스트 개체 — 투자위험등급 (1=최고위험 … 6=최저위험)
@@ -285,7 +286,7 @@ fp:issuedBy a owl:ObjectProperty ;
     rdfs:range fp:Issuer ;
     rdfs:label "발행사"@ko, "issued by"@en ;
     rdfs:comment "채권 → 발행기관. **domain이 fp:Bond로만 한정된다.** 'VOO(ETF)가 직접 발행한 회사채' 같은 질의는 주어가 fp:ETF이고 fp:ETF는 fp:Bond와 owl:disjointWith이므로 도메인 위반이 확정되어 ABSTAIN(엔티티 유형이 관계의 도메인·레인지와 불일치)으로 판정한다. ETF의 발행 주체를 묻는 질의는 fp:managedBy로 유도한다."@ko ;
-    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "PD_PBCM" .
+    fp:sourceTable "PRBD01N001" ; fp:sourceColumn "pd_pbcm" .
 
 fp:managedBy a owl:ObjectProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:ETN fp:PublicFund ) ] ;
@@ -368,7 +369,7 @@ fp:sameVehicleAs a owl:ObjectProperty, owl:SymmetricProperty ;
     fp:sourceTable "PRFD01N001", "PREF01N001" ; fp:sourceColumn "ksd_itm_no", "pd_itm_no" .
 
 fp:supportedBy a owl:ObjectProperty ;
-    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot fp:Risk ) ] ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot fp:Risk fp:SubsidiaryRelation ) ] ;
     rdfs:range fp:Document ;
     rdfs:label "근거문서"@ko, "supported by"@en ;
     rdfs:comment "관계·주장 → 이를 지지하는 문서. 근거가 없는 관계는 답변에 포함하지 않는다. 문서에 함께 언급되었다는 사실만으로 편입·모자회사·테마 관계를 확정하지 않는다."@ko .
@@ -379,7 +380,7 @@ fp:hasCreditRating a owl:ObjectProperty ;
     rdfs:label "신용등급 보유"@ko, "has credit rating"@en ;
     rdfs:comment "채권·발행사 → 신용등급 개체. 'AA- 이상' 조건은 연결된 개체의 fp:ratingRank <= 4로 판정한다. 원본 CRD_GRD는 41.6% 결측이므로 등급 미부여(국채 등)와 결측을 구분해 답한다."@ko ;
     fp:sourceTable "PRBD01N001", "derived:bond_kr_enriched" ;
-    fp:sourceColumn "CRD_GRD", "derived:bond_kr_enriched.crd_grd_norm" .
+    fp:sourceColumn "crd_grd", "derived:bond_kr_enriched.crd_grd_norm" .
 
 fp:hasRiskGrade a owl:ObjectProperty ;
     rdfs:domain fp:Product ;
@@ -387,7 +388,7 @@ fp:hasRiskGrade a owl:ObjectProperty ;
     rdfs:label "투자위험등급"@ko, "has risk grade"@en ;
     rdfs:comment "상품 → 위험등급 개체(1~6). 채권·국내ETF·공모펀드 세 도메인이 같은 서열이라 교차 비교가 가능하다. 해외ETF에는 위험등급 컬럼이 없다."@ko ;
     fp:sourceTable "PRBD01N001", "PREF01N001", "PRFD01N001" ;
-    fp:sourceColumn "PD_RISK_GCD", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
+    fp:sourceColumn "pd_risk_gcd", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
 
 fp:hasAssetType a owl:ObjectProperty ;
     rdfs:domain fp:Product ;
@@ -419,7 +420,7 @@ fp:hasCurrency a owl:ObjectProperty ;
     rdfs:label "표시통화"@ko, "has currency"@en ;
     rdfs:comment "상품 → 통화 개체. 채권은 KRW 42,372/외화 22건, 펀드는 KRW/USD 2종, 해외ETF는 전량 USD다."@ko ;
     fp:sourceTable "PRBD01N001", "PRFD01N001", "PREF02N001" ;
-    fp:sourceColumn "CURR_CD", "curr_cd", "pd_trd_ccy" .
+    fp:sourceColumn "curr_cd", "pd_trd_ccy" .
 
 fp:hasMetricSnapshot a owl:ObjectProperty ;
     rdfs:domain fp:Product ;
@@ -437,7 +438,7 @@ fp:productCode a owl:DatatypeProperty, owl:InverseFunctionalProperty ;
     rdfs:label "상품번호"@ko, "product code"@en ;
     rdfs:comment "도메인별 정본 식별자. 채권 PD_NO(ISIN형 12자리, 중복 0), 국내ETF pd_itm_no(중복 0), 해외ETF pd_itm_no(로이터 RIC, 중복 0), 공모펀드 itm_no. 상품 URI의 소재다."@ko ;
     fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001", "PRFD01N001" ;
-    fp:sourceColumn "PD_NO", "pd_itm_no", "itm_no" .
+    fp:sourceColumn "pd_no", "pd_itm_no", "itm_no" .
 
 fp:productName a owl:DatatypeProperty ;
     rdfs:domain fp:Product ;
@@ -445,7 +446,7 @@ fp:productName a owl:DatatypeProperty ;
     rdfs:label "상품명"@ko, "product name"@en ;
     rdfs:comment "정식 명칭. 자연어 질의가 상품을 지목하는 주 통로이므로 **완전일치를 우선**하고 부분일치 유사명으로 대체하지 않는다('KODEX 200' 부분일치 14건, 'KODEX AI로봇' 유사명 18건이 오탐 원인)."@ko ;
     fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001", "PRFD01N001" ;
-    fp:sourceColumn "PD_NM", "pd_nm", "itm_nm" .
+    fp:sourceColumn "pd_nm", "itm_nm" .
 
 fp:productShortName a owl:DatatypeProperty ;
     rdfs:domain fp:Product ;
@@ -459,7 +460,7 @@ fp:netAssets a owl:DatatypeProperty ;
     rdfs:domain fp:Product ;
     rdfs:range xsd:decimal ;
     rdfs:label "순자산총액"@ko, "net assets"@en ;
-    rdfs:comment "규모 질의의 표준축. 국내ETF는 pd_net_tamt를 쓴다(du_last_aum은 결측 16.2%로 열등). 해외ETF는 du_last_aum이 유일축(USD). 공모펀드 fd_nast_suma는 **클래스마다 모펀드 값이 반복되므로 itm_no dedup 없이 합산하면 8.54배 과대계상**된다. 통화가 도메인마다 다르므로 합산 전 fp:hasCurrency 확인 필요."@ko ;
+    rdfs:comment "규모 질의의 표준축. 국내ETF는 pd_net_tamt를 쓰고 해외ETF는 du_last_aum을 쓴다. 공모펀드는 2026-08-24 배포본의 1행 1펀드 마스터에서 fd_nast_suma를 직접 사용한다. 통화가 도메인마다 다르므로 합산 전 fp:hasCurrency 확인이 필요하다."@ko ;
     fp:sourceTable "PREF01N001", "PREF02N001", "PRFD01N001" ;
     fp:sourceColumn "pd_net_tamt", "du_last_aum", "fd_nast_suma" .
 
@@ -555,7 +556,7 @@ fp:riskGradeLevel a owl:DatatypeProperty ;
     rdfs:label "위험등급 수준"@ko, "risk grade level"@en ;
     rdfs:comment "1=최고위험 … 6=최저위험. 채권·국내ETF·공모펀드 세 도메인의 서열 방향이 모두 같다."@ko ;
     fp:sourceTable "PRBD01N001", "PREF01N001", "PRFD01N001" ;
-    fp:sourceColumn "PD_RISK_GCD", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
+    fp:sourceColumn "pd_risk_gcd", "pd_risk_cd", "zrin_fd_ivst_risk_gcd" .
 
 fp:weight a owl:DatatypeProperty ;
     rdfs:domain fp:Holding ;
@@ -638,7 +639,7 @@ fp:documentQuote a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:string ;
     rdfs:label "근거 문장"@ko, "evidence quote"@en ;
-    rdfs:comment "관계·주장을 직접 지지하는 인용 문장."@ko ;
+    rdfs:comment "관계·주장을 직접 지지하는 원문 발췌. 원천이 표·API이면 필드와 값을 보존한 구조화 레코드를 허용한다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.quote" .
 
 fp:organizationName a owl:DatatypeProperty ;
@@ -647,7 +648,7 @@ fp:organizationName a owl:DatatypeProperty ;
     rdfs:label "기관명"@ko, "organization name"@en ;
     rdfs:comment "기관 정규 명칭. 원본 문자열은 법인격 표기가 흔들리므로(한국투자/한국투자증권(주), BlackRock Fund Advisors/LP) 정규화 후 값을 넣고 원표기는 skos:altLabel로 남긴다."@ko ;
     fp:sourceTable "PRBD01N001", "PREF01N001", "PREF02N001" ;
-    fp:sourceColumn "PD_PBCM", "cu_fund_mgmt_co" .
+    fp:sourceColumn "pd_pbcm", "cu_fund_mgmt_co" .
 
 fp:indexName a owl:DatatypeProperty ;
     rdfs:domain fp:Index ;
