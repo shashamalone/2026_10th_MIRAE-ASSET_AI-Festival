@@ -37,66 +37,185 @@ foreach ($name in ('data_api_cutover.sh', 'data_api_rollback.sh')) {
 }
 $cutoverPath = Join-Path $patchedT105ArtifactDir 'data_api_cutover.sh'
 $cutoverContent = [IO.File]::ReadAllText($cutoverPath)
+$backupContractAnchor = 'for required in postgres.dump oxigraph-volume.tgz oxigraph-volume-name.txt pg-restore-list.txt graph-tar-list.txt postgres-restore-drill.txt postgres-counts.txt; do test -s "${backup_dir}/${required}"; done'
+$backupContractReplacement = @'
+for required in postgres.dump oxigraph-volume.tgz oxigraph-volume-name.txt pg-restore-list.txt graph-tar-list.txt postgres-restore-drill.txt postgres-counts.txt old-api-image.tar old-api-image-id.txt old-api-image-ref.txt old-api-health.json old-api-stats.json old-api-probe.json old-graph-count.json next-graph-volume.tgz next-graph-tar-list.txt; do test -s "${backup_dir}/${required}"; done
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($backupContractAnchor))).Count -ne 1) {
+    throw 'Retry backup contract patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($backupContractAnchor, $backupContractReplacement)
 $oldImagePreserve = 'docker tag "${old_api_image}" "${old_api_tag}"'
 $safeImagePreserve = @'
-rebuilt_old_api=0
-if docker image inspect "${old_api_image}" >/dev/null 2>&1; then
-    docker tag "${old_api_image}" "${old_api_tag}"
-else
-    echo "OLD_API_IMAGE_MISSING: committing running container ${api_id} for rollback"
-    if ! docker commit --pause=true "${api_id}" "${old_api_tag}" >/dev/null; then
-        echo "OLD_API_COMMIT_UNAVAILABLE: rebuilding rollback image from ${current_dir}"
-        docker build -t "${old_api_tag}" "${current_dir}"
-        rebuilt_old_api=1
-    fi
+recorded_old_api_image=$(tr -d '\r\n' <"${backup_dir}/old-api-image-id.txt")
+test "${recorded_old_api_image}" = "${old_api_image}"
+if ! docker image inspect "${old_api_image}" >/dev/null 2>&1; then
+    echo "OLD_API_IMAGE_RELOAD: restoring exact image from verified backup"
+    docker load -i "${backup_dir}/old-api-image.tar" >/dev/null
 fi
-old_api_image=$(docker image inspect -f '{{.Id}}' "${old_api_tag}")
-if [[ "${rebuilt_old_api}" == 1 ]]; then
-    (
-        probe_container="${project}-old-api-probe-${timestamp,,}"
-        cleanup_probe() { docker rm -f "${probe_container}" >/dev/null 2>&1 || true; }
-        trap cleanup_probe EXIT
-        api_network=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{println}}{{end}}' "${api_id}" | head -n 1)
-        test -n "${api_network}"
-        docker run -d --name "${probe_container}" --network "${api_network}" \
-            --env-file "${current_env}" "${old_api_tag}" >/dev/null
-        probe_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${probe_container}")
-        test -n "${probe_ip}"
-        for _ in $(seq 1 30); do
-            if curl --fail --silent --show-error "http://${probe_ip}:8000/health" >"${journal_dir}/rebuilt-old-health.json" 2>/dev/null \
-              && curl --fail --silent --show-error "http://${probe_ip}:8000/db/stats" >"${journal_dir}/rebuilt-old-stats.json" 2>/dev/null; then
-                break
-            fi
-            sleep 2
-        done
-        python3 - "${journal_dir}/old-health.json" "${journal_dir}/rebuilt-old-health.json" "${journal_dir}/old-stats.json" "${journal_dir}/rebuilt-old-stats.json" <<'PY'
-import json, sys
-
-def scrub(value):
-    if isinstance(value, dict):
-        return {key: scrub(item) for key, item in value.items() if key != "elapsed_ms"}
-    if isinstance(value, list):
-        return [scrub(item) for item in value]
-    return value
-
-values = []
-for path in sys.argv[1:]:
-    with open(path, encoding="utf-8") as stream:
-        values.append(scrub(json.load(stream)))
-assert values[0] == values[1], (values[0], values[1])
-assert values[2] == values[3], (values[2], values[3])
-PY
-        echo "OLD_API_REBUILD_VERIFY_PASS: image=${old_api_tag}"
-    )
-fi
+test "$(docker image inspect -f '{{.Id}}' "${old_api_image}")" = "${recorded_old_api_image}"
+docker tag "${old_api_image}" "${old_api_tag}"
 '@.TrimEnd()
 $imageMatches = ([regex]::Matches($cutoverContent, [regex]::Escape($oldImagePreserve))).Count
 if ($imageMatches -ne 1) {
     throw "Expected exactly one legacy old-image tag command; actual=$imageMatches"
 }
 $cutoverContent = $cutoverContent.Replace($oldImagePreserve, $safeImagePreserve)
+$journalCreationAnchor = 'old_api_image=$(docker inspect -f ''{{.Image}}'' "${api_id}")'
+$journalCreationReplacement = @'
+old_absent_schemas=$("${psql_at[@]}" "WITH bases(name) AS (VALUES ('meta'),('raw'),('enriched'),('relations'),('vec'),('core')) SELECT string_agg(name,',' ORDER BY name) FROM bases WHERE to_regnamespace(name) IS NULL")
+test -n "${old_absent_schemas}"
+[[ "${old_absent_schemas}" =~ ^(core|enriched|meta|raw|relations|vec)(,(core|enriched|meta|raw|relations|vec))*$ ]]
+old_api_image=$(docker inspect -f '{{.Image}}' "${api_id}")
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($journalCreationAnchor))).Count -ne 1) {
+    throw 'Old absent-schema discovery patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($journalCreationAnchor, $journalCreationReplacement)
+$journalAnchor = 'OLD_GRAPH_QUADS=${old_graph_quads}'
+$journalReplacement = @'
+OLD_GRAPH_QUADS=${old_graph_quads}
+OLD_ABSENT_SCHEMAS=${old_absent_schemas}
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($journalAnchor))).Count -ne 1) {
+    throw 'Old absent-schema journal patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($journalAnchor, $journalReplacement)
+$databaseSwitchAnchor = @'
+{ printf "SET lock_timeout='10s';\n"; sed -n '1,$p' sql/v2/090_cutover.sql; } | \
+  docker compose exec -T db psql -U "${postgres_user}" -d "${postgres_db}"
+'@.TrimEnd()
+$atomicDatabaseSwitch = @'
+{
+  printf "SET lock_timeout='10s';\n"
+  sed '/^COMMIT;[[:space:]]*$/d' sql/v2/090_cutover.sql
+  cat <<'SQL'
+SELECT set_config('mafest.old_absent_schemas', :'old_absent_schemas', true);
+DO $do$
+DECLARE
+  base_name text;
+BEGIN
+  FOREACH base_name IN ARRAY string_to_array(current_setting('mafest.old_absent_schemas'), ',') LOOP
+    IF to_regnamespace(base_name || '_prev') IS NOT NULL THEN
+      RAISE EXCEPTION 'rollback placeholder already exists: %_prev', base_name;
+    END IF;
+    EXECUTE format('CREATE SCHEMA %I', base_name || '_prev');
+    EXECUTE format('COMMENT ON SCHEMA %I IS %L', base_name || '_prev', 'empty rollback placeholder for a schema absent before V2 cutover');
+  END LOOP;
+END
+$do$;
+COMMIT;
+SQL
+} | docker compose exec -T db psql -v ON_ERROR_STOP=1 -v old_absent_schemas="${old_absent_schemas}" -U "${postgres_user}" -d "${postgres_db}"
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($databaseSwitchAnchor))).Count -ne 1) {
+    throw 'Atomic database-switch patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($databaseSwitchAnchor, $atomicDatabaseSwitch)
+$oldPortProbe = 'current_graph_port=$(docker port "${graph_id}" 7878/tcp | awk ''/^127[.]0[.]0[.]1:/{print; exit}'')'
+$safePortProbe = 'current_graph_port=$(docker port "${graph_id}" 7878/tcp | awk -F: ''/^(127[.]0[.]0[.]1|0[.]0[.]0[.]0):/{print "127.0.0.1:" $NF; exit}'')'
+if (([regex]::Matches($cutoverContent, [regex]::Escape($oldPortProbe))).Count -ne 1) {
+    throw 'Cutover Graph-port patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($oldPortProbe, $safePortProbe)
+$cutoverGraphStartAnchor = 'OXIGRAPH_ACTIVE_VOLUME="${next_graph}" docker compose -f compose.yaml -f deploy/compose.graph-pointer.yaml up -d graph'
+$cutoverGraphStartReplacement = 'GRAPH_BIND=127.0.0.1 OXIGRAPH_ACTIVE_VOLUME="${next_graph}" docker compose -f compose.yaml -f deploy/compose.graph-pointer.yaml up -d graph'
+if (([regex]::Matches($cutoverContent, [regex]::Escape($cutoverGraphStartAnchor))).Count -ne 1) {
+    throw 'Cutover Graph loopback patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($cutoverGraphStartAnchor, $cutoverGraphStartReplacement)
+$cutoverApiStartAnchor = 'DATA_API_IMAGE="${v2_api_image}" OXIGRAPH_ACTIVE_VOLUME="${next_graph}" \'
+$cutoverApiStartReplacement = 'GRAPH_BIND=127.0.0.1 DATA_API_IMAGE="${v2_api_image}" OXIGRAPH_ACTIVE_VOLUME="${next_graph}" \'
+if (([regex]::Matches($cutoverContent, [regex]::Escape($cutoverApiStartAnchor))).Count -ne 1) {
+    throw 'Cutover API Graph-loopback patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($cutoverApiStartAnchor, $cutoverApiStartReplacement)
 [IO.File]::WriteAllText($cutoverPath, $cutoverContent, [Text.UTF8Encoding]::new($false))
-Write-Host 'T-105 compatibility patch prepared: full old Graph count and verified rollback API rebuild fallback.'
+
+$rollbackPath = Join-Path $patchedT105ArtifactDir 'data_api_rollback.sh'
+$rollbackContent = [IO.File]::ReadAllText($rollbackPath)
+$rollbackRequiredAnchor = 'OLD_API_IMAGE OLD_API_TAG V2_API_IMAGE LOCK_FILE OLD_GRAPH_QUADS ROLE_EXISTED'
+if (([regex]::Matches($rollbackContent, [regex]::Escape($rollbackRequiredAnchor))).Count -ne 1) {
+    throw 'Rollback journal contract patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($rollbackRequiredAnchor, 'OLD_API_IMAGE OLD_API_TAG V2_API_IMAGE LOCK_FILE OLD_GRAPH_QUADS OLD_ABSENT_SCHEMAS ROLE_EXISTED')
+$rollbackSwitchAnchor = 'docker compose exec -T db psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" < sql/v2/095_rollback.sql'
+$atomicRollbackSwitch = @'
+[[ "${OLD_ABSENT_SCHEMAS}" =~ ^(core|enriched|meta|raw|relations|vec)(,(core|enriched|meta|raw|relations|vec))*$ ]]
+{
+    sed '/^COMMIT;[[:space:]]*$/d' sql/v2/095_rollback.sql
+    cat <<'SQL'
+SELECT set_config('mafest.old_absent_schemas', :'old_absent_schemas', true);
+DO $do$
+DECLARE
+  base_name text;
+  schema_oid oid;
+BEGIN
+  FOREACH base_name IN ARRAY string_to_array(current_setting('mafest.old_absent_schemas'), ',') LOOP
+    SELECT oid INTO schema_oid FROM pg_namespace WHERE nspname=base_name;
+    IF schema_oid IS NULL
+       OR obj_description(schema_oid, 'pg_namespace') IS DISTINCT FROM 'empty rollback placeholder for a schema absent before V2 cutover'
+       OR pg_get_userbyid((SELECT nspowner FROM pg_namespace WHERE oid=schema_oid)) IS DISTINCT FROM current_user THEN
+      RAISE EXCEPTION 'unsafe rollback placeholder: %', base_name;
+    END IF;
+    EXECUTE format('DROP SCHEMA %I RESTRICT', base_name);
+  END LOOP;
+END
+$do$;
+COMMIT;
+SQL
+} | docker compose exec -T db psql -v ON_ERROR_STOP=1 -v old_absent_schemas="${OLD_ABSENT_SCHEMAS}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
+'@.TrimEnd()
+if (([regex]::Matches($rollbackContent, [regex]::Escape($rollbackSwitchAnchor))).Count -ne 1) {
+    throw 'Atomic rollback-switch patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($rollbackSwitchAnchor, $atomicRollbackSwitch)
+$oldRollbackPortProbe = 'graph_port=$(docker port "${graph_id}" 7878/tcp | awk ''/^127[.]0[.]0[.]1:/{print; exit}'')'
+$safeRollbackPortProbe = 'graph_port=$(docker port "${graph_id}" 7878/tcp | awk -F: ''/^(127[.]0[.]0[.]1|0[.]0[.]0[.]0):/{print "127.0.0.1:" $NF; exit}'')'
+if (([regex]::Matches($rollbackContent, [regex]::Escape($oldRollbackPortProbe))).Count -ne 1) {
+    throw 'Rollback Graph-port patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($oldRollbackPortProbe, $safeRollbackPortProbe)
+$rollbackGraphStartAnchor = 'COMPOSE_PROJECT_NAME="${PROJECT}" docker compose up -d graph'
+$rollbackGraphStartReplacement = 'GRAPH_BIND=127.0.0.1 COMPOSE_PROJECT_NAME="${PROJECT}" docker compose up -d graph'
+if (([regex]::Matches($rollbackContent, [regex]::Escape($rollbackGraphStartAnchor))).Count -ne 1) {
+    throw 'Rollback Graph loopback patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($rollbackGraphStartAnchor, $rollbackGraphStartReplacement)
+$rollbackApiStartAnchor = 'DATA_API_IMAGE="${OLD_API_TAG}" COMPOSE_PROJECT_NAME="${PROJECT}" \'
+$rollbackApiStartReplacement = 'GRAPH_BIND=127.0.0.1 DATA_API_IMAGE="${OLD_API_TAG}" COMPOSE_PROJECT_NAME="${PROJECT}" \'
+if (([regex]::Matches($rollbackContent, [regex]::Escape($rollbackApiStartAnchor))).Count -ne 1) {
+    throw 'Rollback API Graph-loopback patch anchor mismatch'
+}
+$rollbackContent = $rollbackContent.Replace($rollbackApiStartAnchor, $rollbackApiStartReplacement)
+[IO.File]::WriteAllText($rollbackPath, $rollbackContent, [Text.UTF8Encoding]::new($false))
+
+$verifyPath = Join-Path $patchedT105ArtifactDir 'data_api_verify.sh'
+$verifyContent = [IO.File]::ReadAllText($verifyPath)
+$oldEndpointLoop = @'
+for path in /db/version /db/stats /db/tables /db/catalog /db/coverage; do
+    curl --fail --silent --show-error "${api_url}${path}" >/dev/null
+done
+'@.TrimEnd()
+$diagnosticEndpointLoop = @'
+for path in /db/version /db/stats /db/tables /db/catalog /db/coverage; do
+    response_file=$(mktemp)
+    status=$(curl --silent --show-error --output "${response_file}" --write-out '%{http_code}' "${api_url}${path}")
+    printf 'VERIFY_HTTP: path=%s status=%s\n' "${path}" "${status}"
+    if [[ "${status}" != 200 ]]; then
+        cat "${response_file}" >&2
+        rm -f -- "${response_file}"
+        exit 1
+    fi
+    rm -f -- "${response_file}"
+done
+'@.TrimEnd()
+if (([regex]::Matches($verifyContent, [regex]::Escape($oldEndpointLoop))).Count -ne 1) {
+    throw 'V2 endpoint diagnostic patch anchor mismatch'
+}
+$verifyContent = $verifyContent.Replace($oldEndpointLoop, $diagnosticEndpointLoop)
+[IO.File]::WriteAllText($verifyPath, $verifyContent, [Text.UTF8Encoding]::new($false))
+Write-Host 'T-105 compatibility patch prepared: atomic schema restore, verified image archive, full Graph/port support, endpoint diagnostics.'
 
 $t105 = Join-Path $patchedT105ArtifactDir 'data_api_cutover.ps1'
 $t106 = Join-Path $scriptDir 'deploy_vm.ps1'
@@ -129,6 +248,9 @@ if (-not $v2Active) {
         throw 'Existing public read-only DB probe did not return 1; refusing risk-mode cutover'
     }
     Write-Warning 'The current VM already exposes guarded read-only /db publicly. T-105 will retain that state only until T-106 replaces it and blocks /db*.'
+    $retryPreparation = Join-Path $scriptDir 'prepare_t105_retry.ps1'
+    & $retryPreparation -SshTarget $SshTarget -ConsumerBaseUrl $ConsumerBaseUrl
+    if ($LASTEXITCODE -ne 0) { throw 'T-105 retry preparation failed' }
     & $t105 -Preflight -SshTarget $SshTarget -ConsumerBaseUrl $ConsumerBaseUrl
     if ($LASTEXITCODE -ne 0) { throw 'T-105 preflight failed' }
     # T-105 predates the explicit existing-public-risk mode. Its legacy switch is
