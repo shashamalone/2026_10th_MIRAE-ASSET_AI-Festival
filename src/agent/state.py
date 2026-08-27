@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LangGraph State.
-
-spec(agent-spec-0822.md §10)의 11필드를 다 넣지 않는다. 아직 아무도 쓰지 않는
-필드를 미리 만들면 규격이 확정될 때 두 번 고친다. 값을 쓰는 노드가 생길 때 붙인다.
-"""
+"""RDB vertical slice의 LangGraph State."""
 from typing import TypedDict
 
 
@@ -11,6 +7,11 @@ class State(TypedDict):
     question_id: str
     question: str
     intent: dict          # 1단계 Query Frame (agent/query_frame.py, 14필드)
-    schema_hits: list     # 2단계 bond_schema_search() 결과 Top-K
+    metadata_context: dict  # verified binding으로 grounding된 LogicalPlan 후보
+    plan: dict            # 물리 SQL 문자열이 없는 LogicalPlan
+    route: dict           # query_type enum + 최대 3단계 constrained execution plan
+    results: dict         # rows/columns/evidence/abstain
+    evidence: list        # 최종 응답에 노출할 source/as_of 근거
+    abstain: dict | None  # 결정적 validator의 실패 사유
     trace: list           # 노드가 남기는 관측 기록. 주최측 규격의 think_trace 로 나간다
     answer: str

@@ -1,67 +1,107 @@
 # -*- coding: utf-8 -*-
-"""LangGraph 노드 3종. 검색 로직은 tools/ 에 두고 노드는 배선만 한다."""
-import sys
-from pathlib import Path
+"""RDB vertical slice 노드. LLM은 Query Frame 1회에만 사용한다."""
+from __future__ import annotations
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import clova  # noqa: E402
-from agent import query_frame  # noqa: E402
-from agent.state import State  # noqa: E402
-from config import ANSWER_MODEL, BOND_TOP_K  # noqa: E402
-from tools.bond_schema import bond_schema_search  # noqa: E402
+import datetime as dt
+import decimal
 
-ANSWER_SYSTEM = """너는 금융상품 온톨로지를 근거로 답하는 애널리스트다.
-
-규칙:
-- **아래 RETRIEVED SCHEMA의 comment 안에 적힌 문장만** 근거로 삼는다.
-- 네가 알고 있는 금융 일반 지식은 쓰지 마라. comment에 없으면 없는 것이다.
-  예: comment에 "금리 민감도"만 있으면 "금리가 오르면 가격이 내린다"까지 말하지 마라.
-- 근거가 부족하면 부족하다고 말한다: "제공된 스키마에는 …까지만 정의돼 있습니다."
-- 수익률 전망이나 투자 추천을 하지 않는다.
-- 답변 끝에 근거로 쓴 term_uri를 나열한다.
-- 한국어로 3~5문장 이내."""
+from agent import query_frame
+from agent.state import State
+from tools import rdb, route, schema_context, validate
 
 
 def extract_query_frame(state: State) -> dict:
-    """1단계 — TBox도 물리 스키마도 보지 않고 질의를 의미 요소로 쪼갠다.
-
-    LLM 2회를 쓴다. 분해와 '검증이 필요한 지점' 감사를 한 프롬프트에 같이 시키면
-    서로 밀어내는 것이 실측으로 확인됐다 — 감사 트리거를 늘릴수록 다른 슬롯이
-    퇴행했고, 떼어내자 Validation Recall 이 1/5 → 5/5 로 올랐다.
-    감사 호출은 프롬프트가 짧아 p50 0.76s 로 싸다.
-    """
+    """1단계 — 자연어 의미 후보. 별도 audit LLM은 사용하지 않는다."""
     try:
-        frame = query_frame.extract(state["question"], use_audit=True)
+        frame = query_frame.extract(state["question"], use_audit=False)
     except Exception as e:
-        # 추출이 실패해도 파이프라인은 계속 간다. 검색은 질문 원문으로도 된다.
         frame = query_frame.empty_frame()
         frame["_error"] = f"{type(e).__name__}: {e}"
-    trace = [f"query_frame: task={frame['task']} domain={frame['domain_candidates']} "
-             f"constraints={len(frame['constraints'])} relations={len(frame['relations'])} "
-             f"validation={[v['type'] for v in frame['validation_targets']]}"]
+    trace = [f"intent: task={frame['task']} domain={frame['domain_candidates']} "
+             f"entities={len(frame['entities'])} constraints={len(frame['constraints'])}"]
     if frame.get("_error"):
-        trace.append(f"query_frame 실패 — 질문 원문으로 진행: {frame['_error']}")
+        trace.append(f"intent 추출 실패 — 안전 중단: {frame['_error']}")
     return {"intent": frame, "trace": trace}
 
 
-def search_bond_schema(state: State) -> dict:
-    """2단계 — 벡터 검색. LLM 호출 없음."""
-    return {"schema_hits": bond_schema_search(state["question"], k=BOND_TOP_K)}
+def ground_query(state: State) -> dict:
+    grounded = schema_context.ground(state["question"], state["intent"])
+    trace = list(state.get("trace") or [])
+    trace.append(f"grounding: domain={grounded.get('domain')} concepts={grounded.get('concepts')} "
+                 f"unresolved={len(grounded.get('unresolved') or [])}")
+    return {"metadata_context": grounded, "plan": grounded, "trace": trace}
 
 
-def _context(hits):
-    return "\n\n".join(
-        f"[{i}] term_uri: {h['term_uri']}\nlabel: {h['label']}\ncomment: {h['comment']}"
-        for i, h in enumerate(hits, 1))
+def validate_query(state: State) -> dict:
+    abstain = validate.validate_query(state["question"], state["metadata_context"])
+    trace = list(state.get("trace") or [])
+    trace.append("validation: PASS" if not abstain else f"validation: {abstain['code']}")
+    return {"abstain": abstain, "trace": trace}
 
 
-def answer(state: State) -> dict:
-    """3단계 — 검색된 주석만 근거로 자연어 답변."""
-    hits = state.get("schema_hits") or []
-    if not hits:
-        return {"answer": "제공된 채권 스키마에서 관련 항목을 찾지 못했습니다."}
-    user = f"QUESTION\n{state['question']}\n\nRETRIEVED SCHEMA\n{_context(hits)}"
+def select_route(state: State) -> dict:
+    selected = route.select_route(state["intent"], state["plan"])
+    query_type, reason = selected["query_type"], selected["reason"]
+    abstain = None
+    if query_type == "unsupported":
+        abstain = {"code": "ABSTAIN_UNSUPPORTED_ROUTE", "reason": reason}
+    trace = list(state.get("trace") or [])
+    trace.append(f"route: {query_type} steps={len(selected['execution_plan'])} — {reason}")
+    return {"route": selected, "abstain": abstain, "trace": trace}
+
+
+def execute_rdb(state: State) -> dict:
+    trace = list(state.get("trace") or [])
     try:
-        return {"answer": clova.chat(ANSWER_MODEL, ANSWER_SYSTEM, user, max_tokens=700, temperature=0.2)}
+        result = rdb.execute(state["plan"])
     except Exception as e:
-        return {"answer": f"[답변 생성 실패] {type(e).__name__}: {e}"}
+        result = {"rows": [], "columns": [], "evidence": [],
+                  "abstain": {"code": "ABSTAIN_EXECUTION_FAILED",
+                              "reason": f"RDB 실행 실패: {type(e).__name__}: {e}"}}
+    trace.append(f"rdb: rows={len(result.get('rows') or [])} "
+                 f"status={'ABSTAIN' if result.get('abstain') else 'PASS'}")
+    return {"results": result, "evidence": result.get("evidence") or [],
+            "abstain": result.get("abstain"), "trace": trace}
+
+
+def verify_results(state: State) -> dict:
+    if state.get("abstain"):
+        return {}
+    expected = [x["source_column"] for x in state.get("evidence") or []]
+    got = state.get("results", {}).get("columns") or []
+    abstain = None
+    if expected != got:
+        abstain = {"code": "ABSTAIN_EVIDENCE_MISMATCH",
+                   "reason": f"결과 컬럼과 evidence 계약 불일치: expected={expected}, got={got}"}
+    trace = list(state.get("trace") or [])
+    trace.append("verify: PASS" if not abstain else "verify: ABSTAIN_EVIDENCE_MISMATCH")
+    return {"abstain": abstain, "trace": trace}
+
+
+def _scalar(value):
+    if isinstance(value, decimal.Decimal):
+        return str(value.normalize()) if value else "0"
+    if isinstance(value, (dt.date, dt.datetime, dt.time)):
+        return value.isoformat()
+    return value
+
+
+def render_answer(state: State) -> dict:
+    abstain = state.get("abstain")
+    if abstain:
+        return {"answer": f"확인할 수 없음: {abstain['reason']}"}
+    rows = state.get("results", {}).get("rows") or []
+    if not rows:
+        return {"answer": "주어진 조건과 완전일치하는 상품을 확인할 수 없습니다."}
+    evidence = state.get("evidence") or []
+    by_col = {e["source_column"]: e for e in evidence}
+    sampled = len(rows) > 100
+    lines = [f"총 {len(rows):,}건 중 정렬 기준 상위 5건입니다."] if sampled else []
+    for row in rows[:5] if sampled else rows:
+        values = []
+        for column, raw in row.items():
+            e = by_col[column]
+            values.append(f"{e['label']}={_scalar(raw)} "
+                          f"[{e['source_table']}.{column}, 기준일 {e['as_of']}]")
+        lines.append("; ".join(values))
+    return {"answer": "\n".join(lines)}

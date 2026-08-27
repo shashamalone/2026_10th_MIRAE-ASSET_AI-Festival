@@ -6,13 +6,12 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 
 ################################################################################
-# fp-fund-pub — 국내 공모펀드 (PRFD01N001, 95,619행 / 실제 펀드 11,139종)
+# fp-fund-pub — 국내 공모펀드 (PRFD01N001, 23,676종)
 #
 # 그레인 주의
-#   원본 1행 = (itm_no × prfd_attr_cd) 롱포맷이며 행 수가 펀드 수의 평균 8.58배다.
-#   온톨로지 인스턴스는 **itm_no 단위(data/enriched/fund_pub_dedup.csv, 11,138종)**로
-#   생성한다. dedup 없이 fd_nast_suma를 합산하면 13,194조원(실제 1,546조원)으로
-#   8.54배 과대계상된다.
+#   2026-08-24 배포본은 원본 자체가 **itm_no 단독 유일키인 1행 1펀드**다.
+#   기존 롱포맷의 속성코드는 prfd_attr_cds 등 집약 컬럼으로 원천에 포함되어 있으므로
+#   별도 dedup 파생물 없이 마스터에서 직접 인스턴스를 생성한다.
 #
 # 공모 한정
 #   fp:PublicFund는 **공모 상품만**을 담는 클래스다. 원본에는 사모 102행
@@ -33,7 +32,7 @@
 #   owl:sameAs로 병합하면 모순이 되므로 별도 관계를 쓴다.
 #
 # 데이터 실태
-#   - **기준일 컬럼이 하나도 없다.** 수치 기준일은 스냅샷 2026-07-11을 evidence에
+#   - **기준일 컬럼이 하나도 없다.** 수치 기준일은 스냅샷 2026-08-24를 evidence에
 #     명시하는 응답 규칙으로 처리한다(외부 수집 대상이 아님).
 #   - CSV 파싱이 붕괴한 행 1개(itm_no == '"')가 5개 컬럼의 이상 enum을 동시에
 #     만든다. 컬럼별 예외 처리가 아니라 **행 단위로 배제**한다.
@@ -46,8 +45,8 @@
 <http://mafest.ai/ontology/fp-fund-pub> a owl:Ontology ;
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "국내 공모펀드 온톨로지"@ko, "Korean Public Fund Ontology"@en ;
-    rdfs:comment "국내 공모펀드 마스터(PRFD01N001)와 dedup 파생 테이블 기반 스키마. 클래스 계층(ShareClass), 모펀드 그룹핑 키, 벤치마크, 환헤지·투자자자격 축, 주최측 분류축 6종을 정의한다."@ko ;
-    dcterms:source "PRFD01N001_fund_pub_master_20260711.csv, data/enriched/fund_pub_dedup.csv" .
+    rdfs:comment "국내 공모펀드 마스터(PRFD01N001) 기반 스키마. 클래스 계층(ShareClass), 모펀드 그룹핑 키, 벤치마크, 환헤지·투자자자격 축, 주최측 분류축 6종을 정의한다."@ko ;
+    dcterms:source "PRFD01N001_fund_pub_master_20260824.csv" .
 
 ################################################################################
 # 1. 분류축 클래스 — 주최측 axis_* 라벨 6종
@@ -136,7 +135,7 @@ fp:hasClassDifferentiation a owl:ObjectProperty ;
     rdfs:domain fp:PublicFund ; rdfs:range fp:ClassDifferentiation ;
     rdfs:label "클래스 구분"@ko, "has class differentiation"@en ;
     rdfs:comment "펀드 → 단일/멀티클래스 개체. mtco_itm_no 그룹 크기에서 파생한다."@ko ;
-    fp:sourceTable "derived:fund_pub_dedup" ; fp:sourceColumn "mtco_itm_no" .
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "mtco_itm_no" .
 
 fp:hasInvestorEligibility a owl:ObjectProperty ;
     rdfs:domain fp:PublicFund ; rdfs:range fp:InvestorEligibility ;
@@ -190,8 +189,8 @@ fp:kofiaClassCode a owl:DatatypeProperty ;
 fp:fundAttributeCode a owl:DatatypeProperty ;
     rdfs:domain fp:PublicFund ; rdfs:range xsd:string ;
     rdfs:label "펀드별 속성코드"@ko, "fund attribute code"@en ;
-    rdfs:comment "원본 복합 PK의 2축(228종). 실체계는 2종 — 영문1+숫자3(210종)과 ISO 3166 3자리 국가코드(17종)다. '해외' 1종은 파싱 붕괴 행의 잔재이므로 체계로 취급하지 않는다. dedup 테이블에서는 prfd_attr_cds로 집약된다."@ko ;
-    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "prfd_attr_cd", "derived:fund_pub_dedup.prfd_attr_cds" .
+    rdfs:comment "펀드별 속성코드 집합. 2026-08-24 마스터가 itm_no별 코드를 prfd_attr_cds에 집약해 제공하며, 검색용 정규화 문자열은 prfd_attr_search_text에 별도로 보존된다."@ko ;
+    fp:sourceTable "PRFD01N001" ; fp:sourceColumn "prfd_attr_cds" .
 
 fp:currencyHedged a owl:DatatypeProperty ;
     rdfs:domain fp:PublicFund ; rdfs:range xsd:boolean ;

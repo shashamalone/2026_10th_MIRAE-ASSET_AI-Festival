@@ -1,6 +1,6 @@
 # 데이터 인벤토리
 
-이 파일은 `EDA/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**
+이 파일은 `script/build_data_inventory.py`가 생성한다. **직접 편집하지 말 것.**
 데이터 구조 변경 시 재실행 후 커밋하면 `git diff`가 그대로 변경 이력이 된다.
 (생성 시각을 넣지 않는 이유: 매번 바뀌면 diff가 노이즈로 덮여 변경 추적이 불가능해진다.)
 
@@ -8,426 +8,381 @@
 
 | 파일 | 계층 | 행수 | 컬럼수 | 생성 스크립트 |
 |---|---|---|---|---|
-| `data/csv/PRBD01N001_bond_kr_axis_sample_20260711.csv` | 원본 | 100 | 20 | — |
-| `data/csv/PRBD01N001_bond_kr_master_20260711.csv` | 원본 | 42,394 | 40 | — |
-| `data/csv/PRBD01N001_bond_kr_schema_20260711.csv` | 원본 | 40 | 5 | — |
-| `data/csv/PREF01N001_etf_kr_axis_sample_20260711.csv` | 원본 | 100 | 13 | — |
-| `data/csv/PREF01N001_etf_kr_master_20260711.csv` | 원본 | 1,734 | 73 | — |
-| `data/csv/PREF01N001_etf_kr_schema_20260711.csv` | 원본 | 73 | 5 | — |
-| `data/csv/PREF02N001_etf_gl_axis_sample_20260711.csv` | 원본 | 100 | 49 | — |
-| `data/csv/PREF02N001_etf_gl_master_20260711.csv` | 원본 | 5,646 | 49 | — |
-| `data/csv/PREF02N001_etf_gl_schema_20260711.csv` | 원본 | 49 | 5 | — |
-| `data/csv/PRFD01N001_fund_pub_axis_sample_20260711.csv` | 원본 | 100 | 11 | — |
-| `data/csv/PRFD01N001_fund_pub_master_20260711.csv` | 원본 | 95,619 | 45 | — |
-| `data/csv/PRFD01N001_fund_pub_schema_20260711.csv` | 원본 | 45 | 5 | — |
-| `data/enriched/bond_kr_enriched.csv` | 파생 | 42,394 | 12 | `EDA/build_bond_enrichment.py` |
-| `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `EDA/build_company_relations.py` |
-| `data/enriched/etf_kr_enriched.csv` | 파생 | 1,734 | 12 | `EDA/build_etf_enrichment.py` |
-| `data/enriched/fund_pub_dedup.csv` | 파생 | 11,138 | 45 | `EDA/build_fund_dedup.py` |
-| `data/enriched/holding_code_map.csv` | 파생 | 1,393 | 8 | — |
-| `data/relations/company_subsidiary.csv` | 관계 | 29,524 | 10 | `EDA/build_company_relations.py` |
-| `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `EDA/build_etf_holding.py` |
-| `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `EDA/build_etf_enrichment.py` |
+| `data/csv/PRBD01N001_bond_kr_master_20260824.csv` | 원본 | 21,882 | 58 | — |
+| `data/csv/PRBD01N001_bond_kr_schema_20260824.csv` | 원본 | 58 | 5 | — |
+| `data/csv/PREF01N001_etf_kr_master_20260824.csv` | 원본 | 1,780 | 98 | — |
+| `data/csv/PREF01N001_etf_kr_schema_20260824.csv` | 원본 | 98 | 5 | — |
+| `data/csv/PREF02N001_etf_gl_master_20260824.csv` | 원본 | 6,037 | 49 | — |
+| `data/csv/PREF02N001_etf_gl_schema_20260824.csv` | 원본 | 49 | 5 | — |
+| `data/csv/PRFD01N001_fund_pub_master_20260824.csv` | 원본 | 23,676 | 75 | — |
+| `data/csv/PRFD01N001_fund_pub_schema_20260824.csv` | 원본 | 75 | 5 | — |
+| `data/enriched/bond_kr_enriched.csv` | 파생 | 21,882 | 12 | `script/build_bond_enrichment.py` |
+| `data/enriched/company_master.csv` | 파생 | 118,709 | 5 | `script/build_company_relations.py` |
+| `data/enriched/etf_kr_enriched.csv` | 파생 | 1,780 | 12 | `script/build_etf_enrichment.py` |
+| `data/enriched/holding_code_map.csv` | 파생 | 1,393 | 8 | `script/build_holding_code_map.py` |
+| `data/relations/company_subsidiary.csv` | 관계 | 30,097 | 10 | `script/build_company_relations.py` |
+| `data/relations/etf_holding.csv` | 관계 | 47,016 | 7 | `script/build_etf_holding.py` |
+| `data/relations/etf_theme.csv` | 관계 | 5,646 | 4 | `script/build_etf_enrichment.py` |
 
 ## 파일별 컬럼
 
 결측률은 빈 문자열 기준. 값 예시는 문서 비대화를 막기 위해 싣지 않는다.
 
-### `data/csv/PRBD01N001_bond_kr_axis_sample_20260711.csv`
+### `data/csv/PRBD01N001_bond_kr_master_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `source_table` | 0.0% | 1 |
-| `pd_no` | 0.0% | 100 |
-| `pd_nm` | 0.0% | 100 |
-| `pd_abrv_nm` | 1.0% | 100 |
-| `isu_bal_amt` | 0.0% | 71 |
-| `std_pd_mcls_nm` | 0.0% | 6 |
-| `std_pd_scls_nm` | 4.0% | 12 |
-| `bd_knd` | 2.0% | 16 |
+| `after_tax_yield` | 97.1% | 475 |
+| `applied_yield` | 0.0% | 3,162 |
+| `avg_annual_tax_yield` | 97.1% | 2 |
+| `bdbns_abl_chnl_nm` | 97.1% | 2 |
+| `bdbns_abl_chnl_tcd` | 97.1% | 2 |
+| `bd_inrt_tcd` | 0.0% | 3 |
+| `bd_intp_tcd` | 0.0% | 4 |
+| `bd_knd` | 0.7% | 33 |
+| `bd_ofr_tcd` | 0.0% | 2 |
+| `bd_tisu_a` | 0.0% | 2,790 |
+| `buyable_quantity` | 97.1% | 298 |
+| `buy_yield` | 97.1% | 349 |
+| `corp_after_tax_yield` | 97.1% | 470 |
+| `corp_pretax_yield` | 97.1% | 448 |
+| `cov` | 0.1% | 15,802 |
+| `crd_grd` | 18.4% | 16 |
+| `crd_grd_dt` | 18.3% | 2,152 |
+| `curr_cd` | 0.0% | 2 |
+| `depo_equiv_yield_154` | 97.1% | 416 |
+| `depo_equiv_yield_495` | 97.1% | 446 |
+| `dirty` | 0.1% | 16,604 |
+| `dur` | 0.1% | 14,588 |
+| `eval_price` | 0.0% | 16,605 |
+| `exg_close_price` | 18.9% | 284 |
+| `exg_close_price_base_dt` | 94.2% | 100 |
+| `exg_close_yield` | 18.9% | 300 |
+| `exrt_grte_ern_r` | 0.0% | 19 |
+| `exrt_grte_ern_r_tcd` | 0.0% | 6 |
+| `exrt_rpy_r` | 0.0% | 101 |
+| `info_base_dt` | 0.0% | 1 |
+| `info_seq` | 0.0% | 3 |
+| `isu_bal_amt` | 0.0% | 2,947 |
+| `isu_dt` | 0.0% | 2,488 |
+| `mat_dt` | 0.0% | 3,799 |
+| `ndy_applied_yield` | 0.1% | 3,156 |
+| `ndy_cov` | 0.1% | 15,727 |
+| `ndy_dirty` | 0.1% | 16,509 |
+| `ndy_dur` | 0.1% | 14,477 |
+| `ndy_eval_price` | 0.1% | 16,504 |
+| `pd_abrv_eng_nm` | 0.1% | 20,482 |
+| `pd_abrv_nm` | 0.1% | 20,477 |
 | `pd_ctry_cd` | 0.0% | 2 |
-| `pd_pbcm` | 1.0% | 40 |
-| `axis_issuerType` | 0.0% | 4 |
-| `axis_maturityClass` | 0.0% | 3 |
-| `axis_couponType` | 0.0% | 4 |
-| `axis_creditRating` | 0.0% | 4 |
-| `axis_collateralType` | 0.0% | 4 |
-| `axis_currency` | 0.0% | 1 |
-| `axis_issuanceMarket` | 0.0% | 1 |
-| `axis_issuerCategory` | 0.0% | 6 |
-| `listingCountry` | 0.0% | 1 |
-| `issuerCountry` | 0.0% | 1 |
+| `pd_eng_nm` | 0.0% | 20,492 |
+| `pd_exg_mkt` | 0.0% | 2 |
+| `pd_nm` | 0.0% | 20,499 |
+| `pd_no` | 0.0% | 20,497 |
+| `pd_pbcm` | 0.7% | 1,819 |
+| `pd_pen_tr_yn` | 0.0% | 2 |
+| `pd_risk_gcd` | 0.0% | 7 |
+| `pd_risk_nm` | 0.0% | 7 |
+| `pd_std_info_update` | 0.0% | 1 |
+| `pref_tax_yield` | 97.1% | 470 |
+| `remaining_days` | 0.0% | 3,796 |
+| `sale_yield_base_dt` | 97.1% | 2 |
+| `srfc_irt` | 0.0% | 3,700 |
+| `std_pd_mcls_nm` | 0.0% | 3 |
+| `std_pd_scls_nm` | 0.0% | 13 |
+| `trade_price` | 97.1% | 392 |
 
-### `data/csv/PRBD01N001_bond_kr_master_20260711.csv`
-
-| 컬럼 | 결측률 | 고유값수 |
-|---|---|---|
-| `PD_NO` | 0.0% | 42,394 |
-| `PD_EXG_MKT` | 0.0% | 2 |
-| `PD_NM` | 0.0% | 42,284 |
-| `PD_ABRV_NM` | 0.9% | 42,011 |
-| `PD_ENG_NM` | 0.8% | 42,046 |
-| `PD_ABRV_ENG_NM` | 0.9% | 41,996 |
-| `PD_CTRY_CD` | 0.0% | 2 |
-| `PD_PBCM` | 2.2% | 8,019 |
-| `STD_PD_MCLS_NM` | 0.0% | 6 |
-| `STD_PD_SCLS_NM` | 0.0% | 17 |
-| `BD_KND` | 2.2% | 40 |
-| `CURR_CD` | 0.0% | 5 |
-| `ISU_BAL_AMT` | 0.0% | 4,452 |
-| `ISU_DT` | 0.0% | 3,147 |
-| `MAT_DT` | 0.0% | 5,352 |
-| `SRFC_IRT` | 0.0% | 5,677 |
-| `PD_EVCO_CRD_GRD` | 41.1% | 101 |
-| `PD_RISK_GCD` | 0.0% | 7 |
-| `PD_STD_INFO_UPDATE` | 24.9% | 911 |
-| `BUY_YIELD` | 97.9% | 540 |
-| `CORP_PRETAX_YIELD` | 97.9% | 830 |
-| `CORP_AFTER_TAX_YIELD` | 97.9% | 830 |
-| `AFTER_TAX_YIELD` | 97.9% | 829 |
-| `PREF_TAX_YIELD` | 97.9% | 837 |
-| `AVG_ANNUAL_TAX_YIELD` | 97.9% | 2 |
-| `DEPO_EQUIV_YIELD_154` | 97.9% | 829 |
-| `BUYABLE_QUANTITY` | 97.9% | 296 |
-| `REMAINING_DAYS` | 25.1% | 3,943 |
-| `DUR` | 31.6% | 14,851 |
-| `COV` | 31.6% | 16,188 |
-| `NDY_DUR` | 31.6% | 14,607 |
-| `NDY_COV` | 31.6% | 15,941 |
-| `EVAL_PRICE` | 24.9% | 20,310 |
-| `APPLIED_YIELD` | 24.9% | 3,852 |
-| `DIRTY` | 31.6% | 19,665 |
-| `NDY_EVAL_PRICE` | 31.6% | 16,427 |
-| `NDY_APPLIED_YIELD` | 31.6% | 2,945 |
-| `NDY_DIRTY` | 31.6% | 16,381 |
-| `CRD_GRD` | 41.6% | 21 |
-| `CRD_GRD_DT` | 35.0% | 2,319 |
-
-### `data/csv/PRBD01N001_bond_kr_schema_20260711.csv`
+### `data/csv/PRBD01N001_bond_kr_schema_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `column` | 0.0% | 40 |
-| `pk_fk` | 100.0% | 1 |
-| `dtype` | 0.0% | 3 |
-| `name_ko` | 100.0% | 1 |
-| `example` | 100.0% | 1 |
+| `seq` | 0.0% | 58 |
+| `column` | 0.0% | 58 |
+| `dtype` | 0.0% | 5 |
+| `nullable` | 0.0% | 2 |
+| `comment_ko` | 0.0% | 58 |
 
-### `data/csv/PREF01N001_etf_kr_axis_sample_20260711.csv`
-
-| 컬럼 | 결측률 | 고유값수 |
-|---|---|---|
-| `pd_itm_no` | 0.0% | 100 |
-| `pd_itm_no_ma` | 0.0% | 100 |
-| `pd_nm` | 0.0% | 100 |
-| `pd_abrv_nm` | 0.0% | 100 |
-| `pd_net_tamt` | 3.0% | 98 |
-| `legacy_leaf` | 0.0% | 23 |
-| `axis_assetType` | 0.0% | 7 |
-| `axis_region` | 0.0% | 2 |
-| `axis_strategy` | 0.0% | 2 |
-| `axis_replicationMethod` | 0.0% | 2 |
-| `axis_leverageType` | 0.0% | 4 |
-| `axis_underlyingScope` | 0.0% | 3 |
-| `axis_distributionType` | 0.0% | 2 |
-
-### `data/csv/PREF01N001_etf_kr_master_20260711.csv`
+### `data/csv/PREF01N001_etf_kr_master_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `cu_base_index` | 96.7% | 20 |
-| `cu_charge_etc_rt` | 10.4% | 2 |
-| `cu_charge_rt` | 87.5% | 18 |
-| `cu_fund_mgmt_co` | 0.0% | 97 |
-| `cu_lev_fector` | 10.6% | 10 |
-| `cu_strtegy` | 8.9% | 5 |
-| `cu_upt_dt` | 10.6% | 12 |
-| `du_bpr` | 0.3% | 1,404 |
-| `du_chas_errt` | 10.6% | 2 |
-| `du_clpr` | 0.3% | 1,416 |
-| `du_diff_rt` | 12.5% | 2 |
-| `du_er_1d` | 9.9% | 818 |
-| `du_er_1m` | 11.2% | 1,154 |
-| `du_er_1y` | 20.6% | 1,220 |
-| `du_er_3m` | 13.2% | 1,251 |
-| `du_er_6m` | 14.9% | 1,276 |
-| `du_er_ytd` | 14.8% | 1,282 |
-| `du_hpr` | 0.3% | 1,388 |
-| `du_last_aum` | 16.2% | 1,044 |
-| `du_last_nav` | 10.6% | 1,538 |
-| `du_lpr` | 0.3% | 1,389 |
-| `du_nav_rnf_amt` | 12.5% | 1,503 |
-| `du_nav_yday` | 12.5% | 1,505 |
-| `du_upt_dt` | 12.5% | 2 |
-| `du_val_1d` | 0.3% | 1,476 |
-| `du_val_1m` | 2.3% | 1,492 |
-| `du_val_5d` | 0.3% | 1,498 |
-| `du_vol_1d` | 0.3% | 1,366 |
-| `du_vol_avg_1m` | 2.2% | 1,490 |
-| `du_vol_avg_5d` | 0.3% | 1,470 |
-| `nru_mkt_diff_rt` | 100.0% | 1 |
-| `nru_mkt_inav` | 100.0% | 1 |
-| `pd_abrv_nm` | 0.0% | 1,727 |
-| `pd_circ_net_tamt` | 10.6% | 659 |
-| `pd_circ_stk_cnt` | 10.6% | 623 |
-| `pd_curr_cd` | 0.1% | 3 |
-| `pd_curr_nm` | 0.1% | 3 |
-| `pd_divd_amt_pshr` | 10.6% | 2 |
-| `pd_dvid_cycl` | 100.0% | 1 |
-| `pd_dvid_yield` | 10.6% | 2 |
-| `pd_exg_mkt_cd` | 0.1% | 2 |
-| `pd_exg_mkt_nm` | 0.1% | 2 |
+| `cu_base_index` | 96.9% | 20 |
+| `cu_charge_etc_rt` | 87.8% | 2 |
+| `cu_charge_rt` | 87.8% | 18 |
+| `cu_fund_mgmt_co` | 0.0% | 100 |
+| `cu_lev_fector` | 10.2% | 8 |
+| `cu_strtegy` | 8.7% | 5 |
+| `cu_upt_dt` | 10.2% | 23 |
+| `du_bpr` | 0.2% | 1,428 |
+| `du_chas_errt` | 10.2% | 498 |
+| `du_chas_errt_base_dt` | 10.2% | 23 |
+| `du_clpr` | 0.2% | 1,437 |
+| `du_diff_rt` | 10.2% | 304 |
+| `du_diff_rt_base_dt` | 10.2% | 23 |
+| `du_er_1d` | 11.0% | 693 |
+| `du_er_1m` | 11.0% | 1,094 |
+| `du_er_1y` | 20.4% | 1,206 |
+| `du_er_3m` | 12.8% | 1,182 |
+| `du_er_6m` | 16.5% | 1,221 |
+| `du_er_ytd` | 17.0% | 1,255 |
+| `du_hpr` | 0.2% | 1,387 |
+| `du_last_aum` | 10.2% | 1,172 |
+| `du_last_nav` | 10.2% | 1,584 |
+| `du_lpr` | 0.2% | 1,363 |
+| `du_nav_base_dt` | 10.2% | 23 |
+| `du_nav_rnf_amt` | 10.2% | 1,507 |
+| `du_nav_yday` | 10.2% | 1,585 |
+| `du_upt_dt` | 10.2% | 23 |
+| `du_val_1d` | 0.2% | 1,465 |
+| `du_val_1m` | 0.9% | 1,516 |
+| `du_val_5d` | 0.3% | 1,507 |
+| `du_vlty_1m` | 5.8% | 1,627 |
+| `du_vlty_1y` | 26.5% | 1,291 |
+| `du_vlty_3m` | 10.4% | 1,550 |
+| `du_vlty_6m` | 16.5% | 1,449 |
+| `du_vlty_base_dt` | 4.8% | 50 |
+| `du_vol_1d` | 0.2% | 1,313 |
+| `du_vol_avg_1m` | 0.8% | 1,506 |
+| `du_vol_avg_5d` | 0.3% | 1,458 |
+| `fn_average_coupon` | 88.8% | 197 |
+| `fn_average_maturity` | 100.0% | 1 |
+| `fn_average_quality` | 95.8% | 33 |
+| `fn_base_dt` | 35.1% | 2 |
+| `fn_effective_duration` | 100.0% | 1 |
+| `fn_effective_maturity` | 87.9% | 213 |
+| `fn_modified_duration` | 100.0% | 1 |
+| `fn_nominal_maturity` | 87.9% | 213 |
+| `fn_portfolio_dt` | 37.2% | 18 |
+| `pd_abrv_nm` | 0.0% | 1,773 |
+| `pd_circ_net_tamt` | 10.2% | 671 |
+| `pd_circ_stk_cnt` | 10.2% | 630 |
+| `pd_curr_cd` | 0.2% | 3 |
+| `pd_curr_nm` | 0.2% | 3 |
+| `pd_divd_amt_ann` | 53.4% | 590 |
+| `pd_divd_amt_pshr` | 32.1% | 969 |
+| `pd_dvid_base_dt` | 32.1% | 2 |
+| `pd_dvid_cycl` | 32.1% | 5 |
+| `pd_dvid_inc_dist` | 100.0% | 1 |
+| `pd_dvid_nav` | 32.1% | 1,209 |
+| `pd_dvid_pay_cnt` | 32.1% | 5 |
+| `pd_dvid_pay_months` | 32.1% | 16 |
+| `pd_dvid_prc_base_dt` | 32.1% | 32 |
+| `pd_dvid_tax_basis` | 32.1% | 2 |
+| `pd_dvid_yield` | 32.1% | 968 |
+| `pd_exg_mkt_cd` | 0.2% | 2 |
+| `pd_exg_mkt_nm` | 0.2% | 2 |
 | `pd_grp_no` | 0.0% | 2 |
-| `pd_itm_no` | 0.0% | 1,734 |
-| `pd_itm_no_ma` | 0.0% | 1,734 |
-| `pd_lst_price` | 0.0% | 1 |
-| `pd_lst_stk_cnt` | 0.0% | 678 |
-| `pd_lste_dt` | 0.1% | 81 |
-| `pd_lstg_dt` | 0.1% | 602 |
-| `pd_mkt_id` | 0.1% | 2 |
-| `pd_mkt_nm` | 0.1% | 2 |
-| `pd_nav_pshr` | 10.6% | 1,538 |
-| `pd_net_ast_pshr` | 10.6% | 2 |
-| `pd_net_prft_pshr` | 10.6% | 2 |
-| `pd_net_rt_ast_pshr` | 10.6% | 2 |
-| `pd_net_tamt` | 10.6% | 1,549 |
-| `pd_nm` | 0.0% | 1,734 |
+| `pd_isin_cd` | 32.1% | 1,209 |
+| `pd_itm_no` | 0.0% | 1,780 |
+| `pd_itm_no_ma` | 0.0% | 1,780 |
+| `pd_lst_stk_cnt` | 0.0% | 688 |
+| `pd_lste_dt` | 0.2% | 92 |
+| `pd_lstg_dt` | 0.2% | 613 |
+| `pd_mkt_id` | 0.2% | 2 |
+| `pd_mkt_nm` | 0.2% | 2 |
+| `pd_net_tamt` | 10.2% | 1,596 |
+| `pd_nm` | 0.0% | 1,780 |
 | `pd_pen_risk_nm` | 0.0% | 3 |
 | `pd_pen_tr_yn` | 0.0% | 2 |
+| `pd_ric` | 32.1% | 1,209 |
 | `pd_risk_cd` | 0.0% | 6 |
 | `pd_risk_nm` | 0.0% | 6 |
 | `pd_sale_yn` | 0.0% | 2 |
-| `pd_sect_cd` | 10.6% | 6 |
-| `pd_sect_nm` | 100.0% | 1 |
-| `pd_spac_yn` | 10.6% | 2 |
-| `pd_stk_cnt` | 10.6% | 647 |
-| `pd_tr_yn` | 0.1% | 3 |
-| `ru_mkt_price` | 100.0% | 1 |
-| `ru_mkt_volume` | 100.0% | 1 |
+| `pd_sect_cd` | 10.2% | 6 |
+| `pd_spac_yn` | 10.2% | 2 |
+| `pd_stk_cnt` | 10.2% | 662 |
+| `pd_ticker` | 32.1% | 1,209 |
+| `pd_tr_yn` | 0.2% | 3 |
+| `ref_ast_type` | 32.1% | 8 |
+| `ref_base_dt` | 32.1% | 2 |
+| `ref_base_index` | 32.1% | 906 |
+| `ref_fund_mgmt_co` | 32.1% | 30 |
+| `ref_geo_focus` | 32.1% | 24 |
+| `ru_mkt_price` | 0.2% | 1,439 |
+| `ru_mkt_volume` | 0.2% | 1,313 |
 | `wu_core_yn` | 0.0% | 2 |
-| `wu_inv_ast_type` | 0.0% | 8 |
+| `wu_inv_ast_type` | 0.0% | 9 |
 | `wu_inv_rgn` | 0.0% | 11 |
-| `wu_upt_dt` | 0.3% | 2 |
+| `wu_upt_dt` | 0.2% | 2 |
 
-### `data/csv/PREF01N001_etf_kr_schema_20260711.csv`
-
-| 컬럼 | 결측률 | 고유값수 |
-|---|---|---|
-| `column` | 0.0% | 73 |
-| `pk_fk` | 95.9% | 2 |
-| `dtype` | 0.0% | 3 |
-| `name_ko` | 0.0% | 72 |
-| `example` | 17.8% | 48 |
-
-### `data/csv/PREF02N001_etf_gl_axis_sample_20260711.csv`
+### `data/csv/PREF01N001_etf_kr_schema_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `cu_base_index` | 3.0% | 84 |
-| `cu_charge_rt` | 0.0% | 26 |
-| `cu_etn_yn` | 100.0% | 1 |
-| `cu_fund_mgmt_co` | 3.0% | 18 |
-| `cu_index_repl_mthd` | 14.0% | 4 |
-| `cu_index_tracking_yn` | 14.0% | 2 |
-| `cu_inverse_short_yn` | 100.0% | 1 |
-| `cu_lev_fector` | 100.0% | 1 |
-| `cu_strtegy` | 3.0% | 97 |
-| `cu_upt_dt` | 0.0% | 1 |
-| `du_base_dt_match_yn` | 4.0% | 2 |
-| `du_bpr` | 4.0% | 96 |
-| `du_clpr` | 4.0% | 96 |
-| `du_clpr_base_dt` | 4.0% | 2 |
-| `du_clpr_src` | 4.0% | 2 |
-| `du_diff_rt` | 100.0% | 1 |
-| `du_er_1d` | 5.0% | 2 |
-| `du_hpr` | 4.0% | 96 |
-| `du_last_aum` | 0.0% | 98 |
-| `du_last_nav` | 100.0% | 1 |
-| `du_lpr` | 4.0% | 96 |
-| `du_nav_base_dt` | 0.0% | 1 |
-| `du_opr` | 4.0% | 96 |
-| `du_upt_dt` | 0.0% | 3 |
-| `du_val_1d` | 4.0% | 96 |
-| `du_vol_1d` | 4.0% | 96 |
-| `pd_abrv_nm` | 0.0% | 100 |
-| `pd_curr_cd` | 3.0% | 3 |
-| `pd_exg_mkt_cd` | 0.0% | 3 |
-| `pd_grp_no` | 0.0% | 1 |
-| `pd_isin_cd` | 3.0% | 97 |
-| `pd_itm_no` | 0.0% | 100 |
-| `pd_itm_no_ma` | 0.0% | 100 |
-| `pd_lipper_id` | 3.0% | 97 |
-| `pd_lstg_dt` | 0.0% | 69 |
-| `pd_lst_price` | 4.0% | 2 |
-| `pd_lst_stk_cnt` | 0.0% | 97 |
-| `pd_mkt_id` | 0.0% | 1 |
-| `pd_nm` | 0.0% | 100 |
-| `pd_sale_yn` | 4.0% | 2 |
-| `pd_trd_ccy` | 0.0% | 1 |
-| `pd_tr_yn` | 4.0% | 2 |
-| `pd_us_cik` | 4.0% | 35 |
-| `ru_mkt_price` | 4.0% | 96 |
-| `ru_mkt_volume` | 4.0% | 96 |
-| `wu_core_yn` | 100.0% | 1 |
-| `wu_inv_ast_type` | 3.0% | 7 |
-| `wu_inv_rgn` | 3.0% | 7 |
-| `wu_upt_dt` | 0.0% | 1 |
+| `seq` | 0.0% | 98 |
+| `column` | 0.0% | 98 |
+| `dtype` | 0.0% | 4 |
+| `nullable` | 0.0% | 2 |
+| `comment_ko` | 0.0% | 98 |
 
-### `data/csv/PREF02N001_etf_gl_master_20260711.csv`
+### `data/csv/PREF02N001_etf_gl_master_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `cu_base_index` | 0.1% | 1,734 |
-| `cu_charge_rt` | 0.0% | 127 |
-| `cu_etn_yn` | 99.0% | 2 |
-| `cu_fund_mgmt_co` | 0.1% | 373 |
-| `cu_index_repl_mthd` | 58.2% | 5 |
-| `cu_index_tracking_yn` | 58.2% | 2 |
+| `cu_base_index` | 0.2% | 1,851 |
+| `cu_charge_rt` | 0.0% | 130 |
+| `cu_etn_yn` | 98.9% | 2 |
+| `cu_fund_mgmt_co` | 0.2% | 383 |
+| `cu_index_repl_mthd` | 60.1% | 5 |
+| `cu_index_tracking_yn` | 60.1% | 2 |
 | `cu_inverse_short_yn` | 97.0% | 2 |
-| `cu_lev_fector` | 100.0% | 1 |
-| `cu_strtegy` | 0.1% | 5,567 |
+| `cu_lev_fector` | 85.1% | 12 |
+| `cu_strtegy` | 0.2% | 5,944 |
 | `cu_upt_dt` | 0.0% | 1 |
 | `du_base_dt_match_yn` | 0.2% | 2 |
-| `du_bpr` | 0.2% | 5,182 |
-| `du_clpr` | 0.2% | 5,106 |
-| `du_clpr_base_dt` | 0.2% | 87 |
+| `du_bpr` | 0.2% | 5,437 |
+| `du_clpr` | 0.2% | 5,400 |
+| `du_clpr_base_dt` | 0.2% | 110 |
 | `du_clpr_src` | 0.2% | 2 |
-| `du_diff_rt` | 99.9% | 4 |
-| `du_er_1d` | 4.6% | 2 |
-| `du_hpr` | 0.2% | 4,622 |
-| `du_last_aum` | 3.3% | 4,744 |
-| `du_last_nav` | 87.9% | 528 |
-| `du_lpr` | 0.2% | 4,736 |
+| `du_diff_rt` | 100.0% | 4 |
+| `du_er_1d` | 0.2% | 960 |
+| `du_hpr` | 0.2% | 5,031 |
+| `du_last_aum` | 3.4% | 4,900 |
+| `du_last_nav` | 87.4% | 530 |
+| `du_lpr` | 0.2% | 5,035 |
 | `du_nav_base_dt` | 0.0% | 1 |
-| `du_opr` | 0.2% | 4,232 |
-| `du_upt_dt` | 0.0% | 88 |
-| `du_val_1d` | 0.2% | 5,353 |
-| `du_vol_1d` | 0.2% | 4,853 |
-| `pd_abrv_nm` | 0.0% | 5,641 |
-| `pd_curr_cd` | 0.1% | 3 |
+| `du_opr` | 0.2% | 4,685 |
+| `du_upt_dt` | 0.0% | 108 |
+| `du_val_1d` | 0.2% | 5,753 |
+| `du_vol_1d` | 0.2% | 4,950 |
+| `pd_abrv_nm` | 0.0% | 6,031 |
+| `pd_curr_cd` | 0.2% | 3 |
 | `pd_exg_mkt_cd` | 0.0% | 5 |
 | `pd_grp_no` | 0.0% | 2 |
-| `pd_isin_cd` | 0.2% | 5,588 |
-| `pd_itm_no` | 0.0% | 5,646 |
-| `pd_itm_no_ma` | 0.0% | 5,646 |
-| `pd_lipper_id` | 0.1% | 5,589 |
-| `pd_lstg_dt` | 0.0% | 1,956 |
+| `pd_isin_cd` | 0.2% | 5,963 |
+| `pd_itm_no` | 0.0% | 6,037 |
+| `pd_itm_no_ma` | 0.0% | 6,037 |
+| `pd_lipper_id` | 0.2% | 5,964 |
+| `pd_lstg_dt` | 0.0% | 2,006 |
 | `pd_lst_price` | 0.2% | 3 |
-| `pd_lst_stk_cnt` | 0.0% | 3,105 |
+| `pd_lst_stk_cnt` | 0.0% | 3,213 |
 | `pd_mkt_id` | 0.0% | 1 |
-| `pd_nm` | 0.0% | 5,630 |
+| `pd_nm` | 0.0% | 6,009 |
 | `pd_sale_yn` | 0.2% | 2 |
 | `pd_trd_ccy` | 0.0% | 1 |
 | `pd_tr_yn` | 0.2% | 2 |
-| `pd_us_cik` | 0.2% | 375 |
-| `ru_mkt_price` | 0.2% | 5,102 |
-| `ru_mkt_volume` | 0.2% | 4,853 |
+| `pd_us_cik` | 0.3% | 390 |
+| `ru_mkt_price` | 0.2% | 5,400 |
+| `ru_mkt_volume` | 0.2% | 4,950 |
 | `wu_core_yn` | 98.2% | 2 |
-| `wu_inv_ast_type` | 0.1% | 7 |
-| `wu_inv_rgn` | 0.1% | 60 |
+| `wu_inv_ast_type` | 0.2% | 7 |
+| `wu_inv_rgn` | 0.2% | 60 |
 | `wu_upt_dt` | 0.0% | 1 |
 
-### `data/csv/PREF02N001_etf_gl_schema_20260711.csv`
+### `data/csv/PREF02N001_etf_gl_schema_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
+| `seq` | 0.0% | 49 |
 | `column` | 0.0% | 49 |
-| `pk_fk` | 98.0% | 2 |
-| `dtype` | 0.0% | 3 |
-| `name_ko` | 100.0% | 1 |
-| `example` | 100.0% | 1 |
+| `dtype` | 0.0% | 5 |
+| `nullable` | 0.0% | 2 |
+| `comment_ko` | 0.0% | 49 |
 
-### `data/csv/PRFD01N001_fund_pub_axis_sample_20260711.csv`
-
-| 컬럼 | 결측률 | 고유값수 |
-|---|---|---|
-| `itm_no` | 0.0% | 100 |
-| `itm_nm` | 0.0% | 100 |
-| `itm_abrv_nm` | 0.0% | 100 |
-| `fd_nast_suma` | 2.0% | 36 |
-| `or_attr_desc` | 4.0% | 12 |
-| `axis_fundType` | 0.0% | 5 |
-| `axis_redemptionType` | 0.0% | 2 |
-| `axis_issuanceType` | 0.0% | 2 |
-| `axis_listingType` | 0.0% | 2 |
-| `axis_classDifferentiation` | 0.0% | 2 |
-| `axis_investorEligibility` | 0.0% | 2 |
-
-### `data/csv/PRFD01N001_fund_pub_master_20260711.csv`
+### `data/csv/PRFD01N001_fund_pub_master_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `bmrk_eng_nm` | 0.0% | 388 |
-| `bmrk_nm` | 0.0% | 391 |
-| `curr_cd` | 0.0% | 3 |
-| `exchdg_yn` | 31.1% | 4 |
-| `fd_estb_ctry_cd` | 0.1% | 3 |
-| `fd_ivst_rgn_desc` | 0.1% | 8 |
-| `fd_mm18_ern_r` | 33.9% | 4,910 |
-| `fd_mm1_ern_r` | 27.6% | 1,551 |
-| `fd_mm3_ern_r` | 28.3% | 3,506 |
-| `fd_mm6_ern_r` | 29.8% | 4,178 |
-| `fd_nast_suma` | 13.1% | 2,683 |
-| `fd_set_pcd` | 0.0% | 4 |
-| `fd_wk1_ern_r` | 27.4% | 1,208 |
-| `fd_yr1_ern_r` | 32.6% | 4,827 |
-| `fd_yr2_ern_r` | 39.2% | 4,778 |
-| `fd_yr3_ern_r` | 41.6% | 4,926 |
-| `fd_yr5_ern_r` | 46.8% | 4,700 |
-| `frc_bpr_itm_yn` | 0.0% | 3 |
-| `fss_itm_no` | 0.0% | 8,087 |
-| `hdge_fd_yn` | 0.1% | 2 |
-| `int_dvd_desc` | 0.1% | 3 |
-| `itm_abrv_nm` | 0.0% | 11,119 |
-| `itm_eabrv_nm` | 99.8% | 15 |
-| `itm_eng_nm` | 0.0% | 10,971 |
-| `itm_nm` | 0.0% | 11,139 |
-| `itm_no` | 0.0% | 11,139 |
-| `kofia_fd_ccd` | 0.1% | 4,783 |
-| `ksd_itm_no` | 0.3% | 11,093 |
-| `mtco_itm_no` | 0.0% | 4,661 |
+| `bmrk_eng_nm` | 52.4% | 387 |
+| `bmrk_nm` | 52.4% | 390 |
+| `bns_bpr` | 60.2% | 9,075 |
+| `curr_cd` | 0.0% | 7 |
+| `exchdg_yn` | 70.5% | 3 |
+| `fd_daily_bas_dt` | 60.2% | 906 |
+| `fd_estb_ctry_cd` | 0.0% | 7 |
+| `fd_ivst_rgn_desc` | 0.0% | 9 |
+| `fd_last_dstb_actg_bss_dt` | 54.1% | 2,020 |
+| `fd_last_dstb_actg_eot_dt` | 54.1% | 1,786 |
+| `fd_last_dstb_r` | 54.1% | 4,244 |
+| `fd_mm18_ern_r` | 70.9% | 4,646 |
+| `fd_mm1_ern_r` | 68.8% | 1,443 |
+| `fd_mm3_ern_r` | 69.1% | 2,124 |
+| `fd_mm6_ern_r` | 69.5% | 3,164 |
+| `fd_nast_suma` | 60.2% | 9,410 |
+| `fd_price_bas_dt` | 60.2% | 906 |
+| `fd_prsv_r` | 0.0% | 790 |
+| `fd_sbpr` | 0.0% | 1,978 |
+| `fd_set_pcd` | 0.0% | 3 |
+| `fd_wk1_ern_r` | 100.0% | 1 |
+| `fd_yr1_ern_r` | 70.3% | 4,470 |
+| `fd_yr2_ern_r` | 71.5% | 4,953 |
+| `fd_yr3_ern_r` | 72.6% | 5,111 |
+| `fd_yr5_ern_r` | 74.7% | 4,883 |
+| `frc_bpr_itm_yn` | 0.0% | 2 |
+| `fss_itm_no` | 0.2% | 11,971 |
+| `han_clas_fee_type` | 59.3% | 4 |
+| `han_clas_nm` | 59.3% | 196 |
+| `han_clas_policies` | 73.5% | 34 |
+| `han_clas_sales_channel` | 59.4% | 4 |
+| `hdge_fd_yn` | 0.0% | 2 |
+| `int_dvd_desc` | 0.0% | 3 |
+| `itm_abrv_nm` | 0.0% | 23,588 |
+| `itm_eabrv_nm` | 99.4% | 144 |
+| `itm_eng_nm` | 0.0% | 23,403 |
+| `itm_nm` | 0.0% | 23,624 |
+| `itm_no` | 0.0% | 23,676 |
+| `kofia_fd_ccd` | 0.2% | 6,766 |
+| `ksd_itm_no` | 10.0% | 21,291 |
+| `mtco_itm_no` | 0.5% | 14,059 |
 | `ofsfd_yn` | 0.0% | 2 |
-| `or_attr_desc` | 0.1% | 12 |
-| `or_co_xtn_itt_cd` | 0.1% | 68 |
-| `ovrs_fd_desc` | 0.1% | 4 |
-| `pers_corp_desc` | 0.1% | 4 |
-| `pfiv_sale_cntl_tcd` | 0.1% | 4 |
-| `prfd_attr_cd` | 0.0% | 228 |
-| `prvo_fd_desc` | 0.1% | 3 |
-| `prvo_pbff_desc` | 0.1% | 3 |
-| `rptt_ksd_itm_no` | 0.1% | 2,629 |
-| `sale_yn` | 0.0% | 3 |
-| `std_itm_no` | 0.1% | 11,128 |
-| `thco_sale_yn` | 4.2% | 3 |
-| `trusc_xtn_itt_cd` | 0.1% | 19 |
-| `zrin_fd_ivst_risk_gcd` | 19.3% | 8 |
-| `zrin_fd_ivst_risk_grd_nm` | 19.3% | 10 |
+| `ofwk_trus_rwrd_r` | 0.0% | 70 |
+| `or_attr_desc` | 0.0% | 14 |
+| `or_co_rwrd_r` | 0.0% | 754 |
+| `or_co_xtn_itt_cd` | 0.0% | 275 |
+| `ovrs_fd_desc` | 0.0% | 4 |
+| `pers_corp_desc` | 0.0% | 3 |
+| `pfiv_sale_cntl_tcd` | 0.0% | 4 |
+| `prfd_attr_cds` | 52.4% | 8,927 |
+| `prfd_attr_cnt` | 0.0% | 14 |
+| `prfd_attr_search_text` | 52.4% | 10,574 |
+| `prvo_fd_desc` | 0.0% | 4 |
+| `prvo_pbff_desc` | 0.0% | 2 |
+| `rptt_ksd_itm_no` | 0.5% | 6,886 |
+| `sale_co_rwrd_r` | 0.0% | 769 |
+| `sale_yn` | 0.0% | 2 |
+| `std_itm_no` | 18.4% | 18,948 |
+| `thco_sale_yn` | 55.2% | 2 |
+| `trusc_rwrd_r` | 0.0% | 96 |
+| `trusc_xtn_itt_cd` | 0.2% | 51 |
+| `zrin_attr_nms` | 52.4% | 10,578 |
+| `zrin_btyp_cd` | 52.4% | 19 |
+| `zrin_btyp_nm` | 52.4% | 19 |
+| `zrin_dmst_bd_cmst_rt` | 60.2% | 284 |
+| `zrin_dmst_stk_cmst_rt` | 60.2% | 337 |
+| `zrin_etc_ast_cmst_rt` | 60.2% | 918 |
+| `zrin_fd_cmst_rt` | 60.2% | 1,137 |
+| `zrin_fd_ivst_risk_gcd` | 63.3% | 7 |
+| `zrin_fd_ivst_risk_grd_nm` | 63.3% | 9 |
+| `zrin_liqt_cmst_rt` | 60.2% | 974 |
+| `zrin_ovrs_bd_cmst_rt` | 60.2% | 16 |
+| `zrin_ovrs_stk_cmst_rt` | 60.2% | 107 |
+| `zrin_pcd` | 52.4% | 105 |
+| `zrin_ptn_nm` | 52.4% | 103 |
 
-### `data/csv/PRFD01N001_fund_pub_schema_20260711.csv`
+### `data/csv/PRFD01N001_fund_pub_schema_20260824.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `column` | 0.0% | 45 |
-| `pk_fk` | 93.3% | 2 |
-| `dtype` | 0.0% | 2 |
-| `name_ko` | 0.0% | 45 |
-| `example` | 0.0% | 39 |
+| `seq` | 0.0% | 75 |
+| `column` | 0.0% | 75 |
+| `dtype` | 0.0% | 7 |
+| `nullable` | 0.0% | 2 |
+| `comment_ko` | 0.0% | 75 |
 
 ### `data/enriched/bond_kr_enriched.csv`
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `PD_NO` | 0.0% | 42,394 |
-| `evco_grd_count` | 0.0% | 4 |
-| `evco_grd_agree` | 46.7% | 3 |
-| `crd_grd_norm` | 37.8% | 20 |
-| `crd_grd_rank` | 37.8% | 20 |
-| `crd_grd_source` | 37.8% | 3 |
-| `remaining_days` | 0.8% | 5,351 |
+| `pd_no` | 0.0% | 20,497 |
+| `pd_exg_mkt` | 0.0% | 2 |
+| `info_seq` | 0.0% | 3 |
+| `crd_grd_norm` | 18.4% | 16 |
+| `crd_grd_rank` | 18.4% | 16 |
+| `crd_grd_source` | 18.4% | 2 |
+| `remaining_days` | 0.0% | 3,798 |
 | `maturity_bucket` | 0.0% | 7 |
 | `is_krw` | 0.0% | 2 |
 | `has_sale_info` | 0.0% | 2 |
-| `is_sellable` | 0.0% | 2 |
+| `is_sellable` | 0.0% | 3 |
 | `source` | 0.0% | 1 |
 
 ### `data/enriched/company_master.csv`
@@ -444,68 +399,18 @@
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `pd_itm_no` | 0.0% | 1,734 |
-| `pd_itm_no_ma` | 0.0% | 1,734 |
+| `pd_itm_no` | 0.0% | 1,780 |
+| `pd_itm_no_ma` | 0.0% | 1,780 |
 | `pd_grp_no` | 0.0% | 2 |
-| `pd_abrv_nm` | 0.0% | 1,727 |
-| `lseg_key` | 0.0% | 1,734 |
-| `ter` | 36.6% | 105 |
-| `replication` | 36.6% | 5 |
-| `base_market` | 36.6% | 4 |
-| `base_asset` | 36.6% | 8 |
-| `hedge_type` | 36.6% | 4 |
-| `charge_rt_final` | 36.6% | 106 |
-| `charge_rt_source` | 36.6% | 3 |
-
-### `data/enriched/fund_pub_dedup.csv`
-
-| 컬럼 | 결측률 | 고유값수 |
-|---|---|---|
-| `bmrk_eng_nm` | 0.0% | 387 |
-| `bmrk_nm` | 0.0% | 390 |
-| `curr_cd` | 0.0% | 2 |
-| `exchdg_yn` | 37.9% | 3 |
-| `fd_estb_ctry_cd` | 0.1% | 3 |
-| `fd_ivst_rgn_desc` | 0.1% | 8 |
-| `fd_mm18_ern_r` | 38.2% | 4,910 |
-| `fd_mm1_ern_r` | 32.0% | 1,551 |
-| `fd_mm3_ern_r` | 32.7% | 3,506 |
-| `fd_mm6_ern_r` | 34.1% | 4,178 |
-| `fd_nast_suma` | 16.6% | 2,683 |
-| `fd_set_pcd` | 0.0% | 3 |
-| `fd_wk1_ern_r` | 31.8% | 1,208 |
-| `fd_yr1_ern_r` | 37.0% | 4,827 |
-| `fd_yr2_ern_r` | 42.9% | 4,778 |
-| `fd_yr3_ern_r` | 45.2% | 4,926 |
-| `fd_yr5_ern_r` | 49.9% | 4,700 |
-| `frc_bpr_itm_yn` | 0.0% | 2 |
-| `fss_itm_no` | 0.0% | 8,086 |
-| `hdge_fd_yn` | 0.1% | 2 |
-| `int_dvd_desc` | 0.1% | 3 |
-| `itm_abrv_nm` | 0.0% | 11,118 |
-| `itm_eabrv_nm` | 99.8% | 14 |
-| `itm_eng_nm` | 0.0% | 10,970 |
-| `itm_nm` | 0.0% | 11,138 |
-| `itm_no` | 0.0% | 11,138 |
-| `kofia_fd_ccd` | 0.1% | 4,783 |
-| `ksd_itm_no` | 0.4% | 11,093 |
-| `mtco_itm_no` | 0.0% | 4,660 |
-| `ofsfd_yn` | 0.0% | 1 |
-| `or_attr_desc` | 0.1% | 12 |
-| `or_co_xtn_itt_cd` | 0.1% | 68 |
-| `ovrs_fd_desc` | 0.1% | 4 |
-| `pers_corp_desc` | 0.1% | 4 |
-| `pfiv_sale_cntl_tcd` | 0.1% | 4 |
-| `prvo_fd_desc` | 0.1% | 3 |
-| `prvo_pbff_desc` | 0.1% | 3 |
-| `rptt_ksd_itm_no` | 0.1% | 2,629 |
-| `sale_yn` | 0.0% | 2 |
-| `std_itm_no` | 0.1% | 11,128 |
-| `thco_sale_yn` | 6.2% | 2 |
-| `trusc_xtn_itt_cd` | 0.1% | 19 |
-| `zrin_fd_ivst_risk_gcd` | 23.1% | 7 |
-| `zrin_fd_ivst_risk_grd_nm` | 23.1% | 9 |
-| `prfd_attr_cds` | 0.0% | 10,621 |
+| `pd_abrv_nm` | 0.0% | 1,773 |
+| `lseg_key` | 0.0% | 1,780 |
+| `ter` | 38.3% | 105 |
+| `replication` | 38.3% | 5 |
+| `base_market` | 38.3% | 4 |
+| `base_asset` | 38.3% | 8 |
+| `hedge_type` | 38.3% | 4 |
+| `charge_rt_final` | 38.3% | 106 |
+| `charge_rt_source` | 38.3% | 3 |
 
 ### `data/enriched/holding_code_map.csv`
 
@@ -524,16 +429,16 @@
 
 | 컬럼 | 결측률 | 고유값수 |
 |---|---|---|
-| `parent_corp_code` | 0.0% | 2,266 |
-| `parent_name` | 0.0% | 2,266 |
-| `child_name` | 0.0% | 26,899 |
-| `child_name_norm` | 0.0% | 24,818 |
-| `child_corp_code` | 69.7% | 6,191 |
+| `parent_corp_code` | 0.0% | 2,325 |
+| `parent_name` | 0.0% | 2,325 |
+| `child_name` | 0.0% | 27,406 |
+| `child_name_norm` | 0.0% | 25,266 |
+| `child_corp_code` | 69.7% | 6,289 |
 | `child_match_rule` | 69.7% | 5 |
-| `ownership_pct` | 8.1% | 4,185 |
-| `invest_purpose` | 0.0% | 1,294 |
+| `ownership_pct` | 8.1% | 4,235 |
+| `invest_purpose` | 0.0% | 1,324 |
 | `source` | 0.0% | 1 |
-| `as_of` | 0.0% | 119 |
+| `as_of` | 0.0% | 138 |
 
 ### `data/relations/etf_holding.csv`
 

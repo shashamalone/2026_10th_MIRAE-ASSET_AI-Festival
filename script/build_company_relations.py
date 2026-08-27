@@ -16,11 +16,11 @@ ROOT = Path(__file__).resolve().parent.parent
 CORPCODE = ROOT / "data/external/company_master/dart_corpcode_20260711.xml"
 KIND = ROOT / "data/external/company_master/kind_listed_corp_20260711.csv"
 GOV = ROOT / "data/external/company_governance"
-BOND = ROOT / "data/csv/PRBD01N001_bond_kr_master_20260711.csv"
+BOND = ROOT / "data/csv/PRBD01N001_bond_kr_master_20260824.csv"
 HOLDING = ROOT / "data/relations/etf_holding.csv"
 OUT_MASTER = ROOT / "data/enriched/company_master.csv"
 OUT_SUB = ROOT / "data/relations/company_subsidiary.csv"
-CUTOFF = "2026-07-11"
+CUTOFF = "2026-08-24"
 
 # 한글 음차 → 영문 약칭. 실제 조인에서 확인된 것만 둔다(오탐 방지). 긴 것부터 치환한다.
 ALIAS = {"에스케이": "SK", "엘지": "LG", "케이티": "KT", "지에스": "GS", "씨제이": "CJ",
@@ -130,13 +130,13 @@ def rate(keys, pool):
     return f"{sum(k in pool for k in keys):,} / {len(keys):,} = {sum(k in pool for k in keys) / len(keys):.1%}"
 
 
-pbcm = {norm(x) for x in pd.read_csv(BOND, dtype=str, keep_default_na=False).PD_PBCM.unique() if x.strip()}
+pbcm = {norm(x) for x in pd.read_csv(BOND, dtype=str, keep_default_na=False, encoding="utf-8-sig").pd_pbcm.unique() if x.strip()}
 h = pd.read_csv(HOLDING, dtype=str, keep_default_na=False)
 t6 = set(h.loc[h.holding_code_type == "ticker6", "holding_code_raw"])
 isin = {x[3:9] for x in h.loc[h.holding_code_type == "isin", "holding_code_raw"].unique() if x.startswith("KR7")}
 
 print("\n조인률 (KIND 상장사 → DART 마스터)")
-for label, keys, a, b in [("채권 발행사 PD_PBCM(명칭)", pbcm, kind_norm, dart_norm),
+for label, keys, a, b in [("채권 발행사 pd_pbcm(명칭)", pbcm, kind_norm, dart_norm),
                           ("편입종목 ticker6", t6, kind_stock, dart_stock),
                           ("편입종목 ISIN→ticker6", isin, kind_stock, dart_stock)]:
     print(f"  {label:24s} {rate(keys, a):>22s}  →  {rate(keys, b):>22s}")

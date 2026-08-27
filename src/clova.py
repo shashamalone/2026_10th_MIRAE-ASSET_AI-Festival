@@ -13,7 +13,7 @@ import sys
 
 import requests
 
-from config import CLOVA_HOST, EMBEDDING_MODEL, ROOT
+from config import CHAT_TIMEOUT_SECONDS, CLOVA_HOST, EMBEDDING_MODEL, ROOT
 
 REASONING_MODELS = {"HCX-007"}
 
@@ -67,7 +67,7 @@ def chat(model, system, user, max_tokens=1024, response_format=None, temperature
                       headers={"Authorization": key(),
                                "Content-Type": "application/json; charset=utf-8",
                                "Accept": "application/json"},
-                      json=body, timeout=120)
+                      json=body, timeout=CHAT_TIMEOUT_SECONDS)
     if r.status_code != 200:
         # 본문을 삼키면 원인을 못 찾는다. 40001 메시지에 어느 파라미터인지 들어 있다.
         raise RuntimeError(f"HTTP {r.status_code} — {r.text[:220]}")

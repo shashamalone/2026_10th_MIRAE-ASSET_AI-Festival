@@ -48,7 +48,7 @@
     owl:imports <http://mafest.ai/ontology/fp-common> ;
     rdfs:label "해외 ETF 온톨로지"@ko, "Global ETF Ontology"@en ;
     rdfs:comment "해외(미국 상장) ETF·ETN 마스터(PREF02N001) 기반 스키마. 외부 조인키(ISIN·CIK·Lipper), 복제방식, 서술형 투자전략 텍스트, 거래소 축을 정의한다."@ko ;
-    dcterms:source "PREF02N001_etf_gl_master_20260711.csv" .
+    dcterms:source "PREF02N001_etf_gl_master_20260824.csv" .
 
 ################################################################################
 # 1. 외부 조인키 — 편입종목·기업관계 확보의 열쇠

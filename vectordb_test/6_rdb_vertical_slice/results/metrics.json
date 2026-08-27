@@ -1,0 +1,2636 @@
+{
+  "experiment": "rdb_vertical_slice_v1",
+  "measured_at": "2026-08-24T21:17:20+09:00",
+  "data_cutoff": "2026-07-11",
+  "question_ids": [
+    "q001",
+    "q002",
+    "q003",
+    "q005",
+    "q006",
+    "q007",
+    "q008",
+    "q009",
+    "q010",
+    "q011",
+    "q012",
+    "q013",
+    "q017",
+    "q018"
+  ],
+  "environment": {
+    "frame_model": "HCX-007",
+    "http_timeout_seconds": 13,
+    "query_frame_target_seconds": 5.0,
+    "statement_timeout_ms": 2000,
+    "max_rows": 10000,
+    "worktree_dirty": true
+  },
+  "inputs": {
+    "query_frames": {
+      "path": "vectordb_test/4_query_frame_v1/results/frames_HCX-007_audit.jsonl",
+      "sha256": "e57dd4f918caf72467bcaacd7b2b6f4bd1ce1fbf084219d520560c12ed307268"
+    },
+    "gold_nl2sql": {
+      "path": "vectordb_test/5_semantic_schema_nl2sql/gold/gold_nl2sql.json",
+      "sha256": "671c7298ce4caa241543ac66b4eadbba9e09d49dece32b8de7f0187f291be9ba"
+    },
+    "schema_bindings": {
+      "path": "metadata/schema_bindings.json",
+      "sha256": "6a8ae73605fa0919f5b7ad3dd895ad794a1dadbd5268fa5f0c7cbd6eb30f6303"
+    },
+    "business_rules": {
+      "path": "metadata/business_rules.json",
+      "sha256": "7a80c5c25fc06bbba5fe6bef3558518f442de3e1636e61ed2cd0b2f68c7899d6"
+    },
+    "paraphrases": {
+      "path": "vectordb_test/6_rdb_vertical_slice/paraphrases.jsonl",
+      "sha256": "f6c3eb556a47a05fcc084694f66b2d3bd4401b944de9fde3174f92aee2d9457a"
+    }
+  },
+  "offline": {
+    "static_plans": {
+      "passed": 14,
+      "total": 14
+    },
+    "required_schema_contract": {
+      "passed": 14,
+      "total": 14
+    },
+    "schema_hallucinations": 0,
+    "evidence_complete": {
+      "passed": 14,
+      "total": 14
+    },
+    "langgraph_contract": "pass",
+    "db_execution_exact": {
+      "passed": 14,
+      "total": 14,
+      "source": "preserved_result"
+    }
+  },
+  "live": {
+    "query_frame_target_seconds": 5.0,
+    "question_types": {
+      "single_product_lookup": [
+        "q001",
+        "q002",
+        "q003",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q009"
+      ],
+      "same_vehicle_comparison": [
+        "q010"
+      ],
+      "filtered_ranking": [
+        "q011",
+        "q012",
+        "q013",
+        "q017",
+        "q018"
+      ]
+    },
+    "definitions": {
+      "functional_success": "non-ABSTAIN + DB gold exact + evidence complete + response 5 fields",
+      "query_frame_sla_pass": "Query Frame latency <= 5.0 seconds",
+      "strict_success": "functional_success + query_frame_sla_pass"
+    },
+    "smoke": {
+      "attempts": [
+        {
+          "case_id": "q001",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.077,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.081,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q002",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.071,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.075,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q003",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.067,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.071,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q005",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.053,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.055,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.064,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.066,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q007",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.051,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.054,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 5.584,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 5.623,
+          "functional_success": true,
+          "strict_success": false,
+          "status": "functional_success",
+          "failure_codes": [
+            "query_frame_over_5s"
+          ],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "fund_pub"
+          ]
+        },
+        {
+          "case_id": "q009",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.055,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.059,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q010",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.096,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.1,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q011",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.062,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.051,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.054,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.09,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.095,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.054,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.056,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.059,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.066,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        }
+      ],
+      "summary": {
+        "attempted": 14,
+        "functional_success": 1,
+        "functional_success_rate": 0.0714,
+        "query_frame_sla_pass": 0,
+        "query_frame_sla_rate": 0.0,
+        "strict_success": 0,
+        "strict_success_rate": 0.0,
+        "timeout_rate": 0.9286,
+        "failure_codes": {
+          "pipeline_abstain": 13,
+          "query_frame_over_5s": 1,
+          "query_frame_timeout": 13
+        },
+        "query_frame_latency_seconds": {
+          "p50": 13.058499999999999,
+          "p95": 13.096
+        },
+        "e2e_latency_seconds": {
+          "p50": 13.064,
+          "p95": 13.1
+        }
+      },
+      "failed_question_types": {
+        "single_product_lookup": {
+          "question_ids": [
+            "q001",
+            "q002",
+            "q003",
+            "q005",
+            "q006",
+            "q007",
+            "q008",
+            "q009"
+          ],
+          "failure_codes": {
+            "pipeline_abstain": 7,
+            "query_frame_over_5s": 1,
+            "query_frame_timeout": 7
+          }
+        },
+        "same_vehicle_comparison": {
+          "question_ids": [
+            "q010"
+          ],
+          "failure_codes": {
+            "pipeline_abstain": 1,
+            "query_frame_timeout": 1
+          }
+        },
+        "filtered_ranking": {
+          "question_ids": [
+            "q011",
+            "q012",
+            "q013",
+            "q017",
+            "q018"
+          ],
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        }
+      }
+    },
+    "stability": {
+      "attempts": [
+        {
+          "case_id": "q001_r1",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.104,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.109,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q001_r2",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.128,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.132,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q001_r3",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 4.312,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 4.574,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "bond_kr"
+          ]
+        },
+        {
+          "case_id": "q001_r4",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.061,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.064,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q001_r5",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.076,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.08,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q002_r1",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 3.99,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 4.023,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "bond_kr"
+          ]
+        },
+        {
+          "case_id": "q002_r2",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.053,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.055,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q002_r3",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.05,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.054,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q002_r4",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.065,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.067,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q002_r5",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 3.945,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 3.964,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "bond_kr"
+          ]
+        },
+        {
+          "case_id": "q003_r1",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.052,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.057,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q003_r2",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.065,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.069,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q003_r3",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.068,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.072,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q003_r4",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 2.687,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 2.715,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "bond_kr"
+          ]
+        },
+        {
+          "case_id": "q003_r5",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.307,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.31,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q005_r1",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.072,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.077,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q005_r2",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.11,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.112,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q005_r3",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 3.063,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 3.081,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "etf_kr"
+          ]
+        },
+        {
+          "case_id": "q005_r4",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.059,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.063,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q005_r5",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.08,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.082,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006_r1",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.057,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.06,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006_r2",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.063,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.065,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006_r3",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.235,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.238,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006_r4",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.07,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.074,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q006_r5",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.059,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q007_r1",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.04,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.042,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q007_r2",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 3.054,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 3.087,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "etf_kr"
+          ]
+        },
+        {
+          "case_id": "q007_r3",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.048,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.051,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q007_r4",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.046,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.049,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q007_r5",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.059,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008_r1",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.061,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008_r2",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.047,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.05,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008_r3",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.052,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.056,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008_r4",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.042,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.044,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q008_r5",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.047,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.05,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q009_r1",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.059,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q009_r2",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.054,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.056,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q009_r3",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.059,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.062,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q009_r4",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.071,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.074,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q009_r5",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.058,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q010_r1",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.052,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.055,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q010_r2",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 4.742,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 4.782,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 2,
+          "frame_task": "comparison",
+          "frame_domains": [
+            "fund_pub"
+          ]
+        },
+        {
+          "case_id": "q010_r3",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.068,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.069,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q010_r4",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.045,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.047,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q010_r5",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.047,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.049,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q011_r1",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 7.119,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 7.162,
+          "functional_success": true,
+          "strict_success": false,
+          "status": "functional_success",
+          "failure_codes": [
+            "query_frame_over_5s"
+          ],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 68,
+          "frame_task": "filter_rank",
+          "frame_domains": [
+            "bond_kr"
+          ]
+        },
+        {
+          "case_id": "q011_r2",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.055,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.06,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q011_r3",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.078,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.081,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q011_r4",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.049,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.051,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q011_r5",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.076,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.08,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012_r1",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.05,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.052,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012_r2",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.06,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012_r3",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.066,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.069,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012_r4",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.05,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.052,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q012_r5",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.053,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.057,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013_r1",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.069,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.071,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013_r2",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.07,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.074,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013_r3",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.046,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.05,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013_r4",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.055,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.058,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q013_r5",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.072,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.075,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017_r1",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.049,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.052,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017_r2",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.074,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.076,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017_r3",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.066,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.068,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017_r4",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.043,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.047,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q017_r5",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.061,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018_r1",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.052,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.056,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018_r2",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.067,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.071,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018_r3",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.045,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.048,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018_r4",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.061,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        },
+        {
+          "case_id": "q018_r5",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.056,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.06,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": []
+        }
+      ],
+      "summary": {
+        "attempted": 70,
+        "functional_success": 8,
+        "functional_success_rate": 0.1143,
+        "query_frame_sla_pass": 7,
+        "query_frame_sla_rate": 0.1,
+        "strict_success": 7,
+        "strict_success_rate": 0.1,
+        "timeout_rate": 0.8857,
+        "failure_codes": {
+          "pipeline_abstain": 62,
+          "query_frame_over_5s": 1,
+          "query_frame_timeout": 62
+        },
+        "query_frame_latency_seconds": {
+          "p50": 13.056,
+          "p95": 13.11
+        },
+        "e2e_latency_seconds": {
+          "p50": 13.059,
+          "p95": 13.112
+        }
+      },
+      "per_question": {
+        "q001": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 1,
+          "strict_success": 1,
+          "query_frame_latency_seconds": {
+            "min": 4.312,
+            "median": 13.076,
+            "max": 13.128
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_timeout": 4
+          }
+        },
+        "q002": {
+          "attempts": 5,
+          "functional_success": 2,
+          "query_frame_sla_pass": 2,
+          "strict_success": 2,
+          "query_frame_latency_seconds": {
+            "min": 3.945,
+            "median": 13.05,
+            "max": 13.065
+          },
+          "failure_codes": {
+            "pipeline_abstain": 3,
+            "query_frame_timeout": 3
+          }
+        },
+        "q003": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 1,
+          "strict_success": 1,
+          "query_frame_latency_seconds": {
+            "min": 2.687,
+            "median": 13.065,
+            "max": 13.307
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_timeout": 4
+          }
+        },
+        "q005": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 1,
+          "strict_success": 1,
+          "query_frame_latency_seconds": {
+            "min": 3.063,
+            "median": 13.072,
+            "max": 13.11
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_timeout": 4
+          }
+        },
+        "q006": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.056,
+            "median": 13.063,
+            "max": 13.235
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q007": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 1,
+          "strict_success": 1,
+          "query_frame_latency_seconds": {
+            "min": 3.054,
+            "median": 13.046,
+            "max": 13.056
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_timeout": 4
+          }
+        },
+        "q008": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.042,
+            "median": 13.047,
+            "max": 13.058
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q009": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.054,
+            "median": 13.056,
+            "max": 13.071
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q010": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 1,
+          "strict_success": 1,
+          "query_frame_latency_seconds": {
+            "min": 4.742,
+            "median": 13.047,
+            "max": 13.068
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_timeout": 4
+          }
+        },
+        "q011": {
+          "attempts": 5,
+          "functional_success": 1,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 7.119,
+            "median": 13.055,
+            "max": 13.078
+          },
+          "failure_codes": {
+            "pipeline_abstain": 4,
+            "query_frame_over_5s": 1,
+            "query_frame_timeout": 4
+          }
+        },
+        "q012": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.05,
+            "median": 13.053,
+            "max": 13.066
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q013": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.046,
+            "median": 13.069,
+            "max": 13.072
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q017": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.043,
+            "median": 13.058,
+            "max": 13.074
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        },
+        "q018": {
+          "attempts": 5,
+          "functional_success": 0,
+          "query_frame_sla_pass": 0,
+          "strict_success": 0,
+          "query_frame_latency_seconds": {
+            "min": 13.045,
+            "median": 13.056,
+            "max": 13.067
+          },
+          "failure_codes": {
+            "pipeline_abstain": 5,
+            "query_frame_timeout": 5
+          }
+        }
+      },
+      "redesign_recommended": true
+    },
+    "generalization": {
+      "attempts": [
+        {
+          "case_id": "q001_p1",
+          "question_id": "q001",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 4.658,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 4.694,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "bond_kr"
+          ],
+          "plan_equivalent": true
+        },
+        {
+          "case_id": "q002_p1",
+          "question_id": "q002",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.079,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.082,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q003_p1",
+          "question_id": "q003",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.079,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.082,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q005_p1",
+          "question_id": "q005",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.051,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.054,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q006_p1",
+          "question_id": "q006",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.049,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.052,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q007_p1",
+          "question_id": "q007",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 3.143,
+          "query_frame_sla_pass": true,
+          "e2e_latency_seconds": 3.16,
+          "functional_success": true,
+          "strict_success": true,
+          "status": "strict_success",
+          "failure_codes": [],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 1,
+          "frame_task": "lookup",
+          "frame_domains": [
+            "etf_kr"
+          ],
+          "plan_equivalent": true
+        },
+        {
+          "case_id": "q008_p1",
+          "question_id": "q008",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.052,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.055,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q009_p1",
+          "question_id": "q009",
+          "question_type": "single_product_lookup",
+          "query_frame_latency_seconds": 13.054,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.057,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q010_p1",
+          "question_id": "q010",
+          "question_type": "same_vehicle_comparison",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.061,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q011_p1",
+          "question_id": "q011",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 6.276,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 6.304,
+          "functional_success": true,
+          "strict_success": false,
+          "status": "functional_success",
+          "failure_codes": [
+            "query_frame_over_5s"
+          ],
+          "abstain_code": null,
+          "db_exact": true,
+          "evidence_complete": true,
+          "response_contract": true,
+          "result_row_count": 68,
+          "frame_task": "filter_rank",
+          "frame_domains": [
+            "bond_kr"
+          ],
+          "plan_equivalent": true
+        },
+        {
+          "case_id": "q012_p1",
+          "question_id": "q012",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.063,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.067,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q013_p1",
+          "question_id": "q013",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 8.32,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 8.323,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_over_5s",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "filter_rank",
+          "frame_domains": [
+            "bond_kr"
+          ],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q017_p1",
+          "question_id": "q017",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.059,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.062,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        },
+        {
+          "case_id": "q018_p1",
+          "question_id": "q018",
+          "question_type": "filtered_ranking",
+          "query_frame_latency_seconds": 13.058,
+          "query_frame_sla_pass": false,
+          "e2e_latency_seconds": 13.062,
+          "functional_success": false,
+          "strict_success": false,
+          "status": "safe_abstain",
+          "failure_codes": [
+            "query_frame_timeout",
+            "pipeline_abstain"
+          ],
+          "abstain_code": "ABSTAIN_UNRESOLVED_QUERY",
+          "db_exact": false,
+          "evidence_complete": false,
+          "response_contract": true,
+          "result_row_count": 0,
+          "frame_task": "lookup",
+          "frame_domains": [],
+          "plan_equivalent": false
+        }
+      ],
+      "summary": {
+        "attempted": 14,
+        "functional_success": 3,
+        "functional_success_rate": 0.2143,
+        "query_frame_sla_pass": 2,
+        "query_frame_sla_rate": 0.1429,
+        "strict_success": 2,
+        "strict_success_rate": 0.1429,
+        "timeout_rate": 0.7143,
+        "failure_codes": {
+          "pipeline_abstain": 11,
+          "query_frame_over_5s": 2,
+          "query_frame_timeout": 10
+        },
+        "query_frame_latency_seconds": {
+          "p50": 13.053,
+          "p95": 13.079
+        },
+        "e2e_latency_seconds": {
+          "p50": 13.056000000000001,
+          "p95": 13.082
+        },
+        "plan_equivalent": 3,
+        "plan_equivalent_rate": 0.2143
+      },
+      "paraphrase_sha256": "f6c3eb556a47a05fcc084694f66b2d3bd4401b944de9fde3174f92aee2d9457a"
+    },
+    "legacy_q018_observation": {
+      "question_id": "q018",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "abstain_timeout",
+          "latency_seconds": 12.093,
+          "timeout_seconds": 12,
+          "response_fields": 5,
+          "evidence_count": 0
+        },
+        {
+          "attempt": 2,
+          "status": "abstain_timeout",
+          "latency_seconds": 12.232,
+          "timeout_seconds": 12,
+          "response_fields": 5,
+          "evidence_count": 0
+        },
+        {
+          "attempt": 3,
+          "status": "success",
+          "latency_seconds": 6.56,
+          "timeout_seconds": 13,
+          "response_fields": 5,
+          "evidence_count": 10
+        }
+      ]
+    }
+  }
+}

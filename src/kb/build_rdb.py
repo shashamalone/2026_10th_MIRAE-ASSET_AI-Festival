@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""12개 CSV를 Action 3용 PostgreSQL RDB로 적재한다.
+"""11개 CSV를 Action 3용 PostgreSQL RDB로 적재한다.
 
     python3 src/kb/build_rdb.py          # 재적재 후 검증
     python3 src/kb/build_rdb.py --check  # 원천과 기존 DB를 읽기 전용 검증
@@ -29,7 +29,7 @@ class Table:
     path: Path
     types: dict[str, str]
     primary_key: tuple[str, ...]
-    foreign_keys: tuple[tuple[str, str, str], ...] = ()
+    foreign_keys: tuple[tuple[str | tuple[str, ...], str, str | tuple[str, ...]], ...] = ()
     identity: str | None = None
     skip: dict[str, frozenset[str]] = field(default_factory=dict)
 
@@ -44,7 +44,7 @@ def read_header(path: Path) -> list[str]:
 
 
 def raw_types(code: str) -> dict[str, str]:
-    path = next((ROOT / "data/csv").glob(f"{code}_*_schema_20260711.csv"))
+    path = next((ROOT / "data/csv").glob(f"{code}_*_schema_20260824.csv"))
     with path.open(encoding="utf-8-sig", newline="") as f:
         return {r["column"].lower(): r["dtype"] for r in csv.DictReader(f)}
 
@@ -62,13 +62,12 @@ CSV = ROOT / "data/csv"
 ENRICHED = ROOT / "data/enriched"
 RELATIONS = ROOT / "data/relations"
 
-BOND = CSV / "PRBD01N001_bond_kr_master_20260711.csv"
-ETF_KR = CSV / "PREF01N001_etf_kr_master_20260711.csv"
-ETF_GL = CSV / "PREF02N001_etf_gl_master_20260711.csv"
-FUND = CSV / "PRFD01N001_fund_pub_master_20260711.csv"
+BOND = CSV / "PRBD01N001_bond_kr_master_20260824.csv"
+ETF_KR = CSV / "PREF01N001_etf_kr_master_20260824.csv"
+ETF_GL = CSV / "PREF02N001_etf_gl_master_20260824.csv"
+FUND = CSV / "PRFD01N001_fund_pub_master_20260824.csv"
 BOND_E = ENRICHED / "bond_kr_enriched.csv"
 ETF_KR_E = ENRICHED / "etf_kr_enriched.csv"
-FUND_D = ENRICHED / "fund_pub_dedup.csv"
 COMPANY = ENRICHED / "company_master.csv"
 CODE_MAP = ENRICHED / "holding_code_map.csv"
 HOLDING = RELATIONS / "etf_holding.csv"
@@ -76,25 +75,24 @@ THEME = RELATIONS / "etf_theme.csv"
 SUBSIDIARY = RELATIONS / "company_subsidiary.csv"
 
 TABLES = (
-    Table("raw", "bond_kr_master", BOND, raw_types("PRBD01N001"), ("pd_no",)),
+    # pd_no는 08-24 배포본에서 2,463행 중복(장내/장외·정보차수) → 복합키만 유일하다
+    Table("raw", "bond_kr_master", BOND, raw_types("PRBD01N001"),
+          ("pd_no", "pd_exg_mkt", "info_seq")),
     Table("raw", "etf_kr_master", ETF_KR, raw_types("PREF01N001"), ("pd_itm_no",),
           skip={"pd_itm_no": frozenset({"KR"})}),
     Table("raw", "etf_gl_master", ETF_GL, raw_types("PREF02N001"), ("pd_itm_no",)),
-    Table("raw", "fund_pub_master", FUND, raw_types("PRFD01N001"),
-          ("itm_no", "prfd_attr_cd"), skip={"itm_no": frozenset({'"'})}),
+    # 08-24 배포본은 itm_no 단독 유일(속성코드는 prfd_attr_cds로 집약), 깨진 행 0건
+    Table("raw", "fund_pub_master", FUND, raw_types("PRFD01N001"), ("itm_no",)),
     Table("enriched", "bond_kr_enriched", BOND_E, text_with(
-        BOND_E, evco_grd_count="integer", crd_grd_rank="integer",
+        BOND_E, info_seq="bigint", crd_grd_rank="integer",
         remaining_days="integer", is_krw="boolean", has_sale_info="boolean",
-        is_sellable="boolean"), ("pd_no",),
-        (("pd_no", "raw.bond_kr_master", "pd_no"),)),
+        is_sellable="boolean"), ("pd_no", "pd_exg_mkt", "info_seq"),
+        ((("pd_no", "pd_exg_mkt", "info_seq"), "raw.bond_kr_master",
+          ("pd_no", "pd_exg_mkt", "info_seq")),)),
     Table("enriched", "etf_kr_enriched", ETF_KR_E, text_with(
         ETF_KR_E, ter="numeric", charge_rt_final="numeric"), ("pd_itm_no",),
         (("pd_itm_no", "raw.etf_kr_master", "pd_itm_no"),),
         skip={"pd_itm_no": frozenset({"KR"})}),
-    Table("enriched", "fund_pub_dedup", FUND_D, text_with(
-        FUND_D, **{c: "numeric" for c in read_header(FUND_D)
-                   if c.startswith("fd_") and ("ern_r" in c or c == "fd_nast_suma")}),
-        ("itm_no",)),
     Table("enriched", "company_master", COMPANY, text_with(COMPANY), ("corp_code",)),
     Table("enriched", "holding_code_map", CODE_MAP, text_with(CODE_MAP),
           ("holding_code_raw",),
@@ -111,6 +109,7 @@ TABLES = (
         (("parent_corp_code", "enriched.company_master", "corp_code"),
          ("child_corp_code", "enriched.company_master", "corp_code")), "relation_id"),
 )
+LEGACY_TABLES = ("enriched.fund_pub_dedup",)
 
 
 def qname(fq: str) -> sql.Composed:
@@ -170,9 +169,12 @@ def create_table(conn: psycopg.Connection, table: Table) -> None:
              for c, t in table.types.items()]
     defs.append(sql.SQL("PRIMARY KEY ({})").format(
         sql.SQL(", ").join(map(sql.Identifier, table.primary_key))))
-    for col, ref_table, ref_col in table.foreign_keys:
+    for cols, ref_table, ref_cols in table.foreign_keys:
+        cols = (cols,) if isinstance(cols, str) else cols
+        ref_cols = (ref_cols,) if isinstance(ref_cols, str) else ref_cols
         defs.append(sql.SQL("FOREIGN KEY ({}) REFERENCES {} ({})").format(
-            sql.Identifier(col), qname(ref_table), sql.Identifier(ref_col)))
+            sql.SQL(", ").join(map(sql.Identifier, cols)), qname(ref_table),
+            sql.SQL(", ").join(map(sql.Identifier, ref_cols))))
     conn.execute(sql.SQL("CREATE TABLE {} ({})").format(
         qname(table.fq), sql.SQL(", ").join(defs)))
 
@@ -196,6 +198,8 @@ def rebuild(expected: dict[str, tuple[int, int]]) -> None:
             conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
         for table in reversed(TABLES):
             conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(qname(table.fq)))
+        for table in LEGACY_TABLES:
+            conn.execute(sql.SQL("DROP TABLE IF EXISTS {}").format(qname(table)))
         for table in TABLES:
             create_table(conn, table)
             actual = load(conn, table)
@@ -206,6 +210,14 @@ def rebuild(expected: dict[str, tuple[int, int]]) -> None:
 
 def validate_db(expected: dict[str, tuple[int, int]]) -> None:
     with psycopg.connect(BOND_DSN) as conn:
+        actual_tables = {".".join(row) for row in conn.execute("""
+            SELECT table_schema, table_name FROM information_schema.tables
+            WHERE table_schema IN ('raw','enriched','relations')
+              AND table_type = 'BASE TABLE'
+        """).fetchall()}
+        expected_tables = {table.fq for table in TABLES}
+        if actual_tables != expected_tables:
+            raise RuntimeError(f"DB table 집합 불일치: {sorted(actual_tables ^ expected_tables)}")
         for table in TABLES:
             n = conn.execute(sql.SQL("SELECT count(*) FROM {}").format(qname(table.fq))).fetchone()[0]
             if n != expected[table.fq][0]:
@@ -215,7 +227,7 @@ def validate_db(expected: dict[str, tuple[int, int]]) -> None:
               SELECT as_of FROM relations.etf_theme
               UNION ALL SELECT as_of FROM relations.etf_holding
               UNION ALL SELECT as_of FROM relations.company_subsidiary
-            ) x WHERE as_of > DATE '2026-07-11'
+            ) x WHERE as_of > DATE '2026-08-24'
         """).fetchone()[0]
         if cutoff_bad:
             raise RuntimeError(f"as_of cutoff 초과 {cutoff_bad}행")
@@ -224,9 +236,10 @@ def validate_db(expected: dict[str, tuple[int, int]]) -> None:
             WHERE table_schema IN ('raw','enriched','relations')
               AND constraint_type IN ('PRIMARY KEY','FOREIGN KEY')
         """).fetchone()[0]
-        if constraints < 20:
-            raise RuntimeError(f"PK/FK 제약 부족: {constraints}")
-    print(f"PASS DB 검증 — 12 tables, PK/FK {constraints}, cutoff 위반 0")
+        want = len(TABLES) + sum(len(t.foreign_keys) for t in TABLES)
+        if constraints < want:
+            raise RuntimeError(f"PK/FK 제약 부족: {constraints} < {want}")
+    print(f"PASS DB 검증 — {len(TABLES)} tables, PK/FK {constraints}, cutoff 위반 0")
 
 
 def main() -> None:
