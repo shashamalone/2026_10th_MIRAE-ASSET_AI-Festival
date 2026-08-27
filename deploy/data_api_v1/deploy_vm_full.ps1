@@ -62,7 +62,7 @@ if ($imageMatches -ne 1) {
 }
 $cutoverContent = $cutoverContent.Replace($oldImagePreserve, $safeImagePreserve)
 $v2ImageNameAnchor = 'v2_api_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007'
-$v2ImageNameReplacement = 'v2_api_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007-g10'
+$v2ImageNameReplacement = 'v2_api_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007-g10cov'
 if (([regex]::Matches($cutoverContent, [regex]::Escape($v2ImageNameAnchor))).Count -ne 1) {
     throw 'V2 Graph-timeout image-name patch anchor mismatch'
 }
@@ -74,9 +74,9 @@ if ! docker image inspect "${v2_api_base_image}" >/dev/null 2>&1; then
     docker build --label "mafest.runtime-base=${release_sha}" --label "mafest.validator-fix=${validator_commit}" -t "${v2_api_base_image}" .
 fi
 docker build --build-arg "BASE_IMAGE=${v2_api_base_image}" -t "${v2_api_image}" - <<'DOCKERFILE'
-ARG BASE_IMAGE
+ARG BASE_IMAGE=financial-agent-v2-api:57c4edc-dbapi-c007-base
 FROM ${BASE_IMAGE}
-RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new="async with httpx.AsyncClient(timeout=10.0) as client:"; assert s.count(old)==1; p.write_text(s.replace(old,new),encoding="utf-8")'
+RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old1="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new1="async with httpx.AsyncClient(timeout=10.0) as client:"; old2="\"ORDER BY p.product_type,p.name\","; new2="\"ORDER BY p.product_id LIMIT 101\","; assert s.count(old1)==s.count(old2)==1; p.write_text(s.replace(old1,new1).replace(old2,new2),encoding="utf-8")'
 DOCKERFILE
 '@.TrimEnd()
 if (([regex]::Matches($cutoverContent, [regex]::Escape($v2ImageBuildAnchor))).Count -ne 1) {

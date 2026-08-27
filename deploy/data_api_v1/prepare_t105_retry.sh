@@ -15,7 +15,7 @@ current_graph=financial-agent-prep_oxigraph-data
 next_graph=financial-agent-prep_oxigraph-next-2026-08-24-57c4edc
 next_container=financial-product-graph-next
 v2_api_base_image=financial-agent-v2-api:57c4edc-dbapi-c007-base
-v2_api_image=financial-agent-v2-api:57c4edc-dbapi-c007-g10
+v2_api_image=financial-agent-v2-api:57c4edc-dbapi-c007-g10cov
 placeholder_comment='empty rollback placeholder for a schema absent before V2 cutover'
 
 exec 9>"${lock_file}"
@@ -252,9 +252,9 @@ if ! docker image inspect "${v2_api_base_image}" >/dev/null 2>&1; then
 fi
 if ! docker image inspect "${v2_api_image}" >/dev/null 2>&1; then
     docker build --build-arg "BASE_IMAGE=${v2_api_base_image}" -t "${v2_api_image}" - <<'DOCKERFILE'
-ARG BASE_IMAGE
+ARG BASE_IMAGE=financial-agent-v2-api:57c4edc-dbapi-c007-base
 FROM ${BASE_IMAGE}
-RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new="async with httpx.AsyncClient(timeout=10.0) as client:"; assert s.count(old)==1; p.write_text(s.replace(old,new),encoding="utf-8")'
+RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old1="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new1="async with httpx.AsyncClient(timeout=10.0) as client:"; old2="\"ORDER BY p.product_type,p.name\","; new2="\"ORDER BY p.product_id LIMIT 101\","; assert s.count(old1)==s.count(old2)==1; p.write_text(s.replace(old1,new1).replace(old2,new2),encoding="utf-8")'
 DOCKERFILE
 fi
 

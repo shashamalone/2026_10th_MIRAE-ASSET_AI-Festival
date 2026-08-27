@@ -225,6 +225,7 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("PUBLIC_TEST_EXPIRES_AT", source)
         self.assertEqual(api.STATEMENT_TIMEOUT_MS, 2000)
         self.assertEqual(api.GRAPH_QUERY_TIMEOUT_SECONDS, 10.0)
+        self.assertIn("ORDER BY p.product_id LIMIT %(fetch_limit)s", source)
         paths = set(api.app.openapi()["paths"])
         self.assertTrue(
             {
@@ -247,6 +248,13 @@ class ApiRouteContractTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["code"], "INVALID_REQUEST")
+
+    def test_legacy_coverage_query_is_index_ordered_and_capped(self):
+        with patch.object(api, "run_sql", return_value={"rows": []}) as run_sql:
+            api.db_coverage()
+        statement, params = run_sql.call_args.args
+        self.assertIn("ORDER BY p.product_id LIMIT %(fetch_limit)s", statement)
+        self.assertEqual(params["fetch_limit"], api.MAX_ROWS + 1)
 
     def test_deployment_profile_separates_public_and_debug_routes(self):
         overlay = (ROOT / "deploy" / "data_api_v1" / "compose.public-test.yaml").read_text(encoding="utf-8")
@@ -284,15 +292,16 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("OLD_ABSENT_SCHEMAS", full_windows)
         self.assertIn("DROP SCHEMA %I RESTRICT", full_windows)
         self.assertIn("GRAPH_BIND=127.0.0.1", full_windows)
-        self.assertIn("dbapi-c007-g10", full_windows)
+        self.assertIn("dbapi-c007-g10cov", full_windows)
         self.assertIn("timeout=10.0", full_windows)
+        self.assertIn("LIMIT 101", full_windows)
         self.assertIn("prepare_t105_retry.ps1", full_windows)
         self.assertIn("bash deploy/backup_v2.sh", retry)
         self.assertIn("scratch-schema-roundtrip", retry)
         self.assertIn("SCRATCH_VERIFY_HTTP", retry)
         self.assertIn("optimize -l /data", retry)
         self.assertIn("health_queries_under_2s=passed", retry)
-        self.assertIn("dbapi-c007-g10", retry)
+        self.assertIn("dbapi-c007-g10cov", retry)
         self.assertIn("T105 RETRY READY PASS", retry)
         self.assertIn("Get-FileHash", retry_windows)
         self.assertIn("SAFE JOURNAL STATE", diagnose)

@@ -985,8 +985,8 @@ def db_coverage(
         "WHERE (%(product_id)s::text IS NULL OR p.product_id=%(product_id)s::text) "
         "AND (%(status)s::text IS NULL OR c.holdings_status=%(status)s::text "
         "OR c.document_status=%(status)s::text OR c.performance_status=%(status)s::text) "
-        "ORDER BY p.product_type,p.name",
-        {"product_id": product_id, "status": status},
+        "ORDER BY p.product_id LIMIT %(fetch_limit)s",
+        {"product_id": product_id, "status": status, "fetch_limit": MAX_ROWS + 1},
     )
 
 
