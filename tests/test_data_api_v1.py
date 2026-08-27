@@ -308,6 +308,7 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("public test exposure cannot exceed 7 days", install)
         self.assertIn("KeepPublicReadOnlyDbForTeamTest", windows)
         self.assertIn("KeepPublicReadOnlyDbForTeamTest", full_windows)
+        self.assertIn("Invoke-WebRequest -UseBasicParsing", windows)
         self.assertIn('"sql": "DELETE FROM enriched.product_master"', verify)
         self.assertIn('"sparql": "INSERT DATA { <a> <b> <c> }"', verify)
         self.assertIn("http://mafest.ai/graph/abox/", verify)

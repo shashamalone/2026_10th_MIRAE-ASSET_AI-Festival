@@ -4,7 +4,7 @@
 
 DB 담당자는 V2 PostgreSQL·Graph·문서 벡터를 읽는 `/v1` API와 guarded read-only `/db` API, Python 클라이언트를 제공한다. LangGraph의 질문 해석, 맞춤 SQL/SPARQL 생성, `bge-m3` 질문 임베딩, HyperCLOVA X 답변 생성, 최종 `POST /query`는 Agent 담당이다. Agent에는 DB DSN이나 DB 비밀번호를 전달하지 않는다.
 
-이 문서가 작성된 시점에 V2 Stage는 `cutover_ready`이지만, T-105의 실제 cutover 완료 로그는 별도 확인 대상이다. `/health`가 다음 값을 모두 만족하기 전에는 V1 API를 배포하지 않는다.
+2026-08-27 기준 T-105 V2 cutover와 T-106 팀 테스트 API 배포가 완료됐다. `http://40.82.145.44:8000`의 외부 경로에서 `/health`, `/v1/release`, guarded read-only `/db`와 아래 계약을 재검증했다. 실제 데이터 위치·행 수·출처는 [데이터 플랫폼 인수 문서](../deploy/data_api_v1/TEAM_DATA_HANDOFF.md), Agent용 grain·PK/FK·조인 규칙은 [DB/테이블 정의서](../deploy/data_api_v1/AGENT_DB_SCHEMA_HANDOFF.md)를 사용한다.
 
 - `readiness=true`
 - `release_id=financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38`

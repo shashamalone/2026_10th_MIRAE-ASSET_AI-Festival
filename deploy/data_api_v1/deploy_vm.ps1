@@ -55,7 +55,7 @@ $release = Invoke-RestMethod -Uri "$ConsumerBaseUrl/v1/release" -TimeoutSec 20
 $health = Invoke-RestMethod -Uri "$ConsumerBaseUrl/health" -TimeoutSec 20
 $rawStatus = 0
 try {
-    Invoke-WebRequest -Uri "$ConsumerBaseUrl/db/version" -TimeoutSec 20 -ErrorAction Stop | Out-Null
+    Invoke-WebRequest -UseBasicParsing -Uri "$ConsumerBaseUrl/db/version" -TimeoutSec 20 -ErrorAction Stop | Out-Null
     $rawStatus = 200
 }
 catch {
