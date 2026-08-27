@@ -298,6 +298,8 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("LIMIT 101", full_windows)
         self.assertIn("/artifacts/runtime", full_windows)
         self.assertIn('chown -R "$TARGET_UID:$TARGET_GID"', full_windows)
+        self.assertIn('2>&1 </dev/null 9>&- &', full_windows)
+        self.assertIn('exec 9>&- 2>/dev/null || true', full_windows)
         self.assertIn("prepare_t105_retry.ps1", full_windows)
         self.assertIn("bash deploy/backup_v2.sh", retry)
         self.assertIn("scratch-schema-roundtrip", retry)
@@ -319,6 +321,7 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("empty rollback placeholder", resume)
         self.assertIn("resume_cutover_complete", resume)
         self.assertIn("CUTOVER_LOCK_HELD=1", resume)
+        self.assertIn('2>&1 </dev/null 9>&- &', resume)
         self.assertIn("T-105 PARTIAL RECOVERY PASS", resume_windows)
         self.assertIn("APPLY_TWO_OFFICIAL_DOCUMENTS", seed)
 

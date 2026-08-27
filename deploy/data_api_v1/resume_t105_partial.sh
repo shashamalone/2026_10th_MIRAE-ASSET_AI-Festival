@@ -127,7 +127,7 @@ printf 'STATUS=passed\nFINISHED_AT=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"${j
 ack_file=$(dirname "${journal}")/consumer-ack
 armed_file=$(dirname "${journal}")/watchdog-armed
 nohup env WATCHDOG_DELAY_SECONDS=300 bash "${incoming}/data_api_watchdog.sh" "${journal}" \
-  >"$(dirname "${journal}")/watchdog.log" 2>&1 </dev/null &
+  >"$(dirname "${journal}")/watchdog.log" 2>&1 </dev/null 9>&- &
 watchdog_pid=$!
 for _ in $(seq 1 50); do
   [[ -f ${armed_file} ]] && break

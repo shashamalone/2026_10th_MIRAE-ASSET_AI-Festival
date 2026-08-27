@@ -164,6 +164,18 @@ if (([regex]::Matches($cutoverContent, [regex]::Escape($runtimeDirAnchor))).Coun
     throw 'Cutover runtime-directory patch anchor mismatch'
 }
 $cutoverContent = $cutoverContent.Replace($runtimeDirAnchor, $cutoverRuntimeDirReplacement)
+$watchdogLaunchAnchor = @'
+nohup env WATCHDOG_DELAY_SECONDS=300 bash "${watchdog_script}" "${journal}" \
+  >"${journal_dir}/watchdog.log" 2>&1 </dev/null &
+'@.TrimEnd()
+$watchdogLaunchReplacement = @'
+nohup env WATCHDOG_DELAY_SECONDS=300 bash "${watchdog_script}" "${journal}" \
+  >"${journal_dir}/watchdog.log" 2>&1 </dev/null 9>&- &
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($watchdogLaunchAnchor))).Count -ne 1) {
+    throw 'Cutover watchdog lock-FD patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($watchdogLaunchAnchor, $watchdogLaunchReplacement)
 [IO.File]::WriteAllText($cutoverPath, $cutoverContent, [Text.UTF8Encoding]::new($false))
 
 $rollbackPath = Join-Path $patchedT105ArtifactDir 'data_api_rollback.sh'
@@ -234,6 +246,21 @@ if (([regex]::Matches($rollbackContent, [regex]::Escape($runtimeDirAnchor))).Cou
 }
 $rollbackContent = $rollbackContent.Replace($runtimeDirAnchor, $rollbackRuntimeDirReplacement)
 [IO.File]::WriteAllText($rollbackPath, $rollbackContent, [Text.UTF8Encoding]::new($false))
+
+$watchdogPath = Join-Path $patchedT105ArtifactDir 'data_api_watchdog.sh'
+$watchdogContent = [IO.File]::ReadAllText($watchdogPath)
+$watchdogFdAnchor = "set -Eeuo pipefail`n"
+$watchdogFdReplacement = @'
+set -Eeuo pipefail
+
+# A background watchdog must not keep the parent cutover's flock alive.
+exec 9>&- 2>/dev/null || true
+'@.TrimEnd() + "`n"
+if (([regex]::Matches($watchdogContent, [regex]::Escape($watchdogFdAnchor))).Count -ne 1) {
+    throw 'Watchdog defensive lock-FD patch anchor mismatch'
+}
+$watchdogContent = $watchdogContent.Replace($watchdogFdAnchor, $watchdogFdReplacement)
+[IO.File]::WriteAllText($watchdogPath, $watchdogContent, [Text.UTF8Encoding]::new($false))
 
 $verifyPath = Join-Path $patchedT105ArtifactDir 'data_api_verify.sh'
 $verifyContent = [IO.File]::ReadAllText($verifyPath)
