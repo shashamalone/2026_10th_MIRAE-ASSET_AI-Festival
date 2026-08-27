@@ -61,6 +61,28 @@ if ($imageMatches -ne 1) {
     throw "Expected exactly one legacy old-image tag command; actual=$imageMatches"
 }
 $cutoverContent = $cutoverContent.Replace($oldImagePreserve, $safeImagePreserve)
+$v2ImageNameAnchor = 'v2_api_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007'
+$v2ImageNameReplacement = 'v2_api_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007-g10'
+if (([regex]::Matches($cutoverContent, [regex]::Escape($v2ImageNameAnchor))).Count -ne 1) {
+    throw 'V2 Graph-timeout image-name patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($v2ImageNameAnchor, $v2ImageNameReplacement)
+$v2ImageBuildAnchor = 'docker build --label "mafest.runtime-base=${release_sha}" --label "mafest.validator-fix=${validator_commit}" -t "${v2_api_image}" .'
+$v2ImageBuildReplacement = @'
+v2_api_base_image=financial-agent-v2-api:${release_sha:0:7}-dbapi-c007-base
+if ! docker image inspect "${v2_api_base_image}" >/dev/null 2>&1; then
+    docker build --label "mafest.runtime-base=${release_sha}" --label "mafest.validator-fix=${validator_commit}" -t "${v2_api_base_image}" .
+fi
+docker build --build-arg "BASE_IMAGE=${v2_api_base_image}" -t "${v2_api_image}" - <<'DOCKERFILE'
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new="async with httpx.AsyncClient(timeout=10.0) as client:"; assert s.count(old)==1; p.write_text(s.replace(old,new),encoding="utf-8")'
+DOCKERFILE
+'@.TrimEnd()
+if (([regex]::Matches($cutoverContent, [regex]::Escape($v2ImageBuildAnchor))).Count -ne 1) {
+    throw 'V2 Graph-timeout image-build patch anchor mismatch'
+}
+$cutoverContent = $cutoverContent.Replace($v2ImageBuildAnchor, $v2ImageBuildReplacement)
 $journalCreationAnchor = 'old_api_image=$(docker inspect -f ''{{.Image}}'' "${api_id}")'
 $journalCreationReplacement = @'
 old_absent_schemas=$("${psql_at[@]}" "WITH bases(name) AS (VALUES ('meta'),('raw'),('enriched'),('relations'),('vec'),('core')) SELECT string_agg(name,',' ORDER BY name) FROM bases WHERE to_regnamespace(name) IS NULL")

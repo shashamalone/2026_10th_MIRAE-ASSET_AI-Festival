@@ -14,7 +14,8 @@ expected_release=financial-products-2026-08-24@${expected_snapshot}
 current_graph=financial-agent-prep_oxigraph-data
 next_graph=financial-agent-prep_oxigraph-next-2026-08-24-57c4edc
 next_container=financial-product-graph-next
-v2_api_image=financial-agent-v2-api:57c4edc-dbapi-c007
+v2_api_base_image=financial-agent-v2-api:57c4edc-dbapi-c007-base
+v2_api_image=financial-agent-v2-api:57c4edc-dbapi-c007-g10
 placeholder_comment='empty rollback placeholder for a schema absent before V2 cutover'
 
 exec 9>"${lock_file}"
@@ -244,10 +245,17 @@ curl --fail --silent --show-error --max-time 2 --get -H 'Accept: application/spa
     --data-urlencode "query=${health_graphs_query}" "http://${next_ip}:7878/query" >/dev/null
 printf 'optimize=passed health_queries_under_2s=passed\n' >>"${backup_dir}/next-graph-optimize.txt"
 
-if ! docker image inspect "${v2_api_image}" >/dev/null 2>&1; then
+if ! docker image inspect "${v2_api_base_image}" >/dev/null 2>&1; then
     docker build --label "mafest.runtime-base=${release_sha}" \
         --label "mafest.validator-fix=c007cf77457a2f443b67cca15743ea18ab49a6e4" \
-        -t "${v2_api_image}" .
+        -t "${v2_api_base_image}" .
+fi
+if ! docker image inspect "${v2_api_image}" >/dev/null 2>&1; then
+    docker build --build-arg "BASE_IMAGE=${v2_api_base_image}" -t "${v2_api_image}" - <<'DOCKERFILE'
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+RUN python -c 'from pathlib import Path; p=Path("/app/src/api.py"); s=p.read_text(encoding="utf-8"); old="async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:"; new="async with httpx.AsyncClient(timeout=10.0) as client:"; assert s.count(old)==1; p.write_text(s.replace(old,new),encoding="utf-8")'
+DOCKERFILE
 fi
 
 docker compose exec -T db createdb -U "${postgres_user}" "${scratch_db}"

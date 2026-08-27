@@ -51,6 +51,9 @@ APP_VERSION = "3.0.0"
 MAX_ROWS = int(os.environ.get("API_MAX_ROWS", "100"))
 # 운영 계약의 2초 상한은 환경변수로 완화할 수 없다. 필요하면 더 짧게만 조정한다.
 STATEMENT_TIMEOUT_MS = min(2000, max(1, int(os.environ.get("DB_STATEMENT_TIMEOUT_MS", "2000"))))
+GRAPH_QUERY_TIMEOUT_SECONDS = min(
+    10.0, max(2.0, float(os.environ.get("GRAPH_QUERY_TIMEOUT_SECONDS", "10")))
+)
 OXIGRAPH_URL = os.environ.get("OXIGRAPH_URL", "http://graph:7878").rstrip("/")
 PUBLIC_CURATED_ONLY = os.environ.get("API_PUBLIC_CURATED_ONLY", "0").lower() in {"1", "true", "yes"}
 PUBLIC_TEST_MODE = os.environ.get("PUBLIC_TEST_MODE", "0").lower() in {"1", "true", "yes"}
@@ -278,7 +281,7 @@ async def run_sparql(query: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        async with httpx.AsyncClient(timeout=STATEMENT_TIMEOUT_MS / 1000) as client:
+        async with httpx.AsyncClient(timeout=GRAPH_QUERY_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 f"{OXIGRAPH_URL}/query",
                 content=statement.encode("utf-8"),
