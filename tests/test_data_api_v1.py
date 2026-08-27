@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import api  # noqa: E402
+from deploy.data_api_v1 import verify_public_api  # noqa: E402
 from data_api.contracts import (  # noqa: E402
     EvidenceSearchRequest,
     OntologyValidateRequest,
@@ -176,6 +177,24 @@ class DemoVectorContractTest(unittest.TestCase):
 
 
 class ApiRouteContractTest(unittest.TestCase):
+    def test_vm_verifier_retries_transient_container_start_reset(self):
+        health = {
+            "release_id": RELEASE_ID,
+            "readiness": True,
+        }
+        with (
+            patch.object(
+                verify_public_api,
+                "request",
+                side_effect=[ConnectionResetError("starting"), (200, health)],
+            ) as request,
+            patch.object(verify_public_api.time, "sleep") as sleep,
+        ):
+            result = verify_public_api.wait_for_health("http://127.0.0.1:8000")
+        self.assertEqual(result, health)
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(2)
+
     def test_search_route_has_release_evidence_and_coverage(self):
         fake = {
             "rows": [

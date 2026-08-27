@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -24,15 +25,32 @@ def request(url: str, path: str, payload: dict | None = None) -> tuple[int, dict
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
+def wait_for_health(url: str, attempts: int = 30, interval_seconds: float = 2) -> dict:
+    last_error = "no response"
+    for attempt in range(attempts):
+        try:
+            status, health = request(url, "/health")
+            if (
+                status == 200
+                and health.get("release_id") == EXPECTED_RELEASE
+                and health.get("readiness") is True
+            ):
+                return health
+            last_error = f"status={status} payload={health}"
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+        if attempt + 1 < attempts:
+            time.sleep(interval_seconds)
+    raise SystemExit(f"HEALTH FAIL after {attempts} attempts: {last_error}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--health-only", action="store_true")
     parser.add_argument("--team-db-public", action="store_true")
     args = parser.parse_args()
-    status, health = request(args.url, "/health")
-    if status != 200 or health.get("release_id") != EXPECTED_RELEASE or not health.get("readiness"):
-        raise SystemExit(f"HEALTH FAIL: status={status} payload={health}")
+    wait_for_health(args.url)
     if args.health_only:
         print("V2 HEALTH PASS")
         return
