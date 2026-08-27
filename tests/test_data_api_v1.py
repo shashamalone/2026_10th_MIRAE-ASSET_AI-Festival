@@ -249,11 +249,21 @@ class ApiRouteContractTest(unittest.TestCase):
     def test_deployment_profile_separates_public_and_debug_routes(self):
         overlay = (ROOT / "deploy" / "data_api_v1" / "compose.public-test.yaml").read_text(encoding="utf-8")
         deploy = (ROOT / "deploy" / "data_api_v1" / "deploy_public_test.sh").read_text(encoding="utf-8")
+        install = (ROOT / "deploy" / "data_api_v1" / "install_vm_release.sh").read_text(encoding="utf-8")
+        windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm.ps1").read_text(encoding="utf-8")
         seed = (ROOT / "deploy" / "data_api_v1" / "seed_demo_vectors.sh").read_text(encoding="utf-8")
         self.assertIn('API_PUBLIC_CURATED_ONLY: "1"', overlay)
         self.assertIn("127.0.0.1:${API_DEBUG_PORT:-8001}:8000", overlay)
         self.assertIn("V2_CUTOVER_CONFIRMED", deploy)
         self.assertIn("PUBLIC_TEST_EXPIRES_AT", deploy)
+        self.assertIn("deploy/compose.graph-pointer.yaml", deploy)
+        self.assertIn("up -d --no-deps api api-debug", deploy)
+        self.assertIn("financial-agent-prep_oxigraph-next-2026-08-24-57c4edc", install)
+        self.assertIn("relations.product_holding", install)
+        self.assertIn("relations.company_subsidiary", install)
+        self.assertIn("raw_db=blocked", install)
+        self.assertIn("Get-FileHash", windows)
+        self.assertIn("Refuse dirty tracked worktree", windows)
         self.assertIn("APPLY_TWO_OFFICIAL_DOCUMENTS", seed)
 
 
