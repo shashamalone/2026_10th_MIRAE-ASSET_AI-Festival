@@ -251,6 +251,7 @@ class ApiRouteContractTest(unittest.TestCase):
         deploy = (ROOT / "deploy" / "data_api_v1" / "deploy_public_test.sh").read_text(encoding="utf-8")
         install = (ROOT / "deploy" / "data_api_v1" / "install_vm_release.sh").read_text(encoding="utf-8")
         windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm.ps1").read_text(encoding="utf-8")
+        full_windows = (ROOT / "deploy" / "data_api_v1" / "deploy_vm_full.ps1").read_text(encoding="utf-8")
         seed = (ROOT / "deploy" / "data_api_v1" / "seed_demo_vectors.sh").read_text(encoding="utf-8")
         self.assertIn('API_PUBLIC_CURATED_ONLY: "1"', overlay)
         self.assertIn("127.0.0.1:${API_DEBUG_PORT:-8001}:8000", overlay)
@@ -264,6 +265,9 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("raw_db=blocked", install)
         self.assertIn("Get-FileHash", windows)
         self.assertIn("Refuse dirty tracked worktree", windows)
+        self.assertIn("AcceptExistingPublicReadOnlyDbRisk", full_windows)
+        self.assertIn("SELECT 1 AS probe", full_windows)
+        self.assertIn("raw_db=blocked", full_windows)
         self.assertIn("APPLY_TWO_OFFICIAL_DOCUMENTS", seed)
 
 

@@ -109,11 +109,15 @@ VM에서는 `DEMO_VECTOR_APPLY_ACK=APPLY_TWO_OFFICIAL_DOCUMENTS`를 명시한 �
 
 `deploy/data_api_v1/deploy_public_test.sh`는 먼저 기존 V2 health를 검증한 다음 public curated API를 `:8000`, SQL/SPARQL debug API를 `127.0.0.1:8001`에 띄운다. 공개 API는 분당 60요청으로 제한되고 `/db/sql`·`/db/sparql`은 404를 반환한다.
 
-T-105 DB/Graph cutover가 완료된 VM에는 Windows PowerShell에서 다음 명령으로 현재 커밋을 versioned release로 패키징·업로드·검증한다. SSH 비밀번호는 로컬 터미널 프롬프트에만 입력한다.
+T-105 DB/Graph cutover부터 연속 수행하려면 Windows PowerShell에서 다음 명령을 실행한다. 이 테스트 VM은 이미 guarded read-only `/db`가 공개되어 있으므로 명시적인 위험 인자가 필요하다. T-106 검증이 끝나면 공개 `/db*`는 404로 닫힌다. SSH 비밀번호는 로컬 터미널 프롬프트에만 입력한다.
 
 ```powershell
-.\deploy\data_api_v1\deploy_vm.ps1 -PublicTestExpiresAt '2026-08-29T23:59:00+09:00'
+.\deploy\data_api_v1\deploy_vm_full.ps1 `
+  -AcceptExistingPublicReadOnlyDbRisk `
+  -PublicTestExpiresAt '2026-08-29T23:59:00+09:00'
 ```
+
+T-105가 이미 완료된 경우 위 실행기는 cutover를 건너뛴다. T-106만 다시 설치하려면 `deploy_vm.ps1`을 직접 실행한다.
 
 설치기는 활성 Graph volume이 `financial-agent-prep_oxigraph-next-2026-08-24-57c4edc`인지 확인하고 Graph 서비스를 재생성하지 않은 채 API 컨테이너만 교체한다. T-105가 아직 완료되지 않았거나 정본 행 수가 다르면 배포를 거부한다.
 
