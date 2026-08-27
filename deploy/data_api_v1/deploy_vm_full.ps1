@@ -5,7 +5,8 @@ param(
     [string]$SshTarget = 'user1106@40.82.145.44',
     [string]$ConsumerBaseUrl = 'http://40.82.145.44:8000',
     [DateTimeOffset]$PublicTestExpiresAt = [DateTimeOffset]::Now.AddDays(2),
-    [string]$T105ArtifactDir = ''
+    [string]$T105ArtifactDir = '',
+    [switch]$PrepareCompatibilityPatchOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,13 +39,56 @@ $cutoverPath = Join-Path $patchedT105ArtifactDir 'data_api_cutover.sh'
 $cutoverContent = [IO.File]::ReadAllText($cutoverPath)
 $oldImagePreserve = 'docker tag "${old_api_image}" "${old_api_tag}"'
 $safeImagePreserve = @'
+rebuilt_old_api=0
 if docker image inspect "${old_api_image}" >/dev/null 2>&1; then
     docker tag "${old_api_image}" "${old_api_tag}"
 else
     echo "OLD_API_IMAGE_MISSING: committing running container ${api_id} for rollback"
-    docker commit --pause=true "${api_id}" "${old_api_tag}" >/dev/null
+    if ! docker commit --pause=true "${api_id}" "${old_api_tag}" >/dev/null; then
+        echo "OLD_API_COMMIT_UNAVAILABLE: rebuilding rollback image from ${current_dir}"
+        docker build -t "${old_api_tag}" "${current_dir}"
+        rebuilt_old_api=1
+    fi
 fi
 old_api_image=$(docker image inspect -f '{{.Id}}' "${old_api_tag}")
+if [[ "${rebuilt_old_api}" == 1 ]]; then
+    (
+        probe_container="${project}-old-api-probe-${timestamp,,}"
+        cleanup_probe() { docker rm -f "${probe_container}" >/dev/null 2>&1 || true; }
+        trap cleanup_probe EXIT
+        api_network=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{println}}{{end}}' "${api_id}" | head -n 1)
+        test -n "${api_network}"
+        docker run -d --name "${probe_container}" --network "${api_network}" \
+            --env-file "${current_env}" "${old_api_tag}" >/dev/null
+        probe_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${probe_container}")
+        test -n "${probe_ip}"
+        for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error "http://${probe_ip}:8000/health" >"${journal_dir}/rebuilt-old-health.json" 2>/dev/null \
+              && curl --fail --silent --show-error "http://${probe_ip}:8000/db/stats" >"${journal_dir}/rebuilt-old-stats.json" 2>/dev/null; then
+                break
+            fi
+            sleep 2
+        done
+        python3 - "${journal_dir}/old-health.json" "${journal_dir}/rebuilt-old-health.json" "${journal_dir}/old-stats.json" "${journal_dir}/rebuilt-old-stats.json" <<'PY'
+import json, sys
+
+def scrub(value):
+    if isinstance(value, dict):
+        return {key: scrub(item) for key, item in value.items() if key != "elapsed_ms"}
+    if isinstance(value, list):
+        return [scrub(item) for item in value]
+    return value
+
+values = []
+for path in sys.argv[1:]:
+    with open(path, encoding="utf-8") as stream:
+        values.append(scrub(json.load(stream)))
+assert values[0] == values[1], (values[0], values[1])
+assert values[2] == values[3], (values[2], values[3])
+PY
+        echo "OLD_API_REBUILD_VERIFY_PASS: image=${old_api_tag}"
+    )
+fi
 '@.TrimEnd()
 $imageMatches = ([regex]::Matches($cutoverContent, [regex]::Escape($oldImagePreserve))).Count
 if ($imageMatches -ne 1) {
@@ -52,12 +96,16 @@ if ($imageMatches -ne 1) {
 }
 $cutoverContent = $cutoverContent.Replace($oldImagePreserve, $safeImagePreserve)
 [IO.File]::WriteAllText($cutoverPath, $cutoverContent, [Text.UTF8Encoding]::new($false))
-Write-Host 'T-105 compatibility patch prepared: full old Graph count and recoverable running API image.'
+Write-Host 'T-105 compatibility patch prepared: full old Graph count and verified rollback API rebuild fallback.'
 
 $t105 = Join-Path $patchedT105ArtifactDir 'data_api_cutover.ps1'
 $t106 = Join-Path $scriptDir 'deploy_vm.ps1'
 foreach ($file in ($t105, $t106)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing deployment script: $file" }
+}
+if ($PrepareCompatibilityPatchOnly) {
+    Write-Output "T-105 PATCH PREP PASS: $patchedT105ArtifactDir"
+    return
 }
 
 $expected = 'financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38'

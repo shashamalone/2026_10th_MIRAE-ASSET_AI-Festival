@@ -123,6 +123,8 @@ T-105가 이미 완료된 경우 위 실행기는 cutover를 건너뛴다. T-106
 
 기존 API 컨테이너의 원본 image가 Docker 정리로 사라졌지만 컨테이너가 계속 실행 중이면, 전환 전에 해당 컨테이너를 일시 정지해 exact rollback image로 commit한 뒤 그 image ID를 journal에 기록한다.
 
+원본 layer까지 유실되어 container commit도 실패하면 기존 서비스 소스로 rollback image를 재빌드한다. 이 image는 현재 Compose network의 임시 컨테이너에서 `/health`와 `/db/stats`가 기존 응답과 일치해야 하며, 불일치하면 DB·Graph 전환 전에 중단한다.
+
 설치기는 활성 Graph volume이 `financial-agent-prep_oxigraph-next-2026-08-24-57c4edc`인지 확인하고 Graph 서비스를 재생성하지 않은 채 API 컨테이너만 교체한다. T-105가 아직 완료되지 않았거나 정본 행 수가 다르면 배포를 거부한다.
 
 제출 VM에서는 public-test overlay와 host port를 사용하지 않는다. Data API는 Compose 내부 DNS로만 Agent에 제공하고 외부에는 HTTPS Agent `POST /query`만 공개한다.
