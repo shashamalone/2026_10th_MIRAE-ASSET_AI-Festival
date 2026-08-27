@@ -302,6 +302,8 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("optimize -l /data", retry)
         self.assertIn("health_queries_under_2s=passed", retry)
         self.assertIn("dbapi-c007-g10cov", retry)
+        self.assertIn("secure_backup_files", retry)
+        self.assertIn('chown "$TARGET_UID:$TARGET_GID" "$path"', retry)
         self.assertIn("T105 RETRY READY PASS", retry)
         self.assertIn("Get-FileHash", retry_windows)
         self.assertIn("SAFE JOURNAL STATE", diagnose)

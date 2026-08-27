@@ -64,6 +64,14 @@ psql_at=(docker compose exec -T db psql -v ON_ERROR_STOP=1 -U "${postgres_user}"
 schema_count() {
     "${psql_at[@]}" "SELECT count(*) FROM pg_namespace WHERE nspname IN ($1)" | tr -d '\r\n'
 }
+secure_backup_files() {
+    local target_dir=$1
+    docker run --rm \
+        -e "TARGET_UID=$(id -u)" -e "TARGET_GID=$(id -g)" \
+        -v "${target_dir}:/backup" busybox:1.36 \
+        sh -c 'for path in /backup/*; do [ -f "$path" ] || continue; chown "$TARGET_UID:$TARGET_GID" "$path" && chmod 600 "$path"; done'
+    test -z "$(find "${target_dir}" -mindepth 1 -maxdepth 1 -type f ! -user "$(id -u)" -print -quit)"
+}
 canonical_count=$(schema_count "'meta','raw','enriched','relations','vec','core'")
 next_count=$(schema_count "'meta_next','raw_next','enriched_next','relations_next','vec_next','core_next'")
 prev_count=$(schema_count "'meta_prev','raw_prev','enriched_prev','relations_prev','vec_prev','core_prev'")
@@ -75,6 +83,7 @@ if [[ "${canonical_count}|${next_count}|${prev_count}|${failed_count}" == '3|6|0
         test -s "${ready_backup}/${required}"
     done
     (cd "${ready_backup}" && sha256sum -c SHA256SUMS >/dev/null)
+    secure_backup_files "${ready_backup}"
     test "$(docker inspect -f '{{.State.Running}}' "${next_container}")" = true
     test "$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' "${next_container}")" = "${next_graph}"
     test -z "$(docker port "${next_container}" 7878/tcp 2>/dev/null)"
@@ -530,7 +539,7 @@ files=(
     sha256sum "${files[@]}" >SHA256SUMS
     sha256sum -c SHA256SUMS >/dev/null
 )
-chmod 600 "${backup_dir}"/*
+secure_backup_files "${backup_dir}"
 
 trap - EXIT
 printf 'T105 RETRY READY PASS: backup=%s schemas=3|6|0|0 official=%s holdings=%s subsidiaries=%s next_graph=%s old_api=unchanged graph_host=loopback\n' \

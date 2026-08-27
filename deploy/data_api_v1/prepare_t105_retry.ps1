@@ -27,7 +27,7 @@ $remoteOutput = [Collections.Generic.List[string]]::new()
     Write-Host $line
 }
 if ($LASTEXITCODE -ne 0) {
-    throw 'T-105 retry preparation failed; live cutover was not started'
+    throw 'T-105 retry preparation failed; production cutover was not started and prepared *_next may be preserved'
 }
 if (-not ($remoteOutput | Where-Object { $_ -match '^T105 RETRY READY PASS:' })) {
     throw 'T-105 retry preparation returned without the exact success marker'
