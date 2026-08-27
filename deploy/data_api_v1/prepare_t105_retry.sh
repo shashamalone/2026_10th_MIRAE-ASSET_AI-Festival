@@ -70,7 +70,7 @@ failed_count=$(schema_count "'meta_failed','raw_failed','enriched_failed','relat
 if [[ "${canonical_count}|${next_count}|${prev_count}|${failed_count}" == '3|6|0|0' ]]; then
     ready_backup=$(find "${backup_root}" -mindepth 1 -maxdepth 1 -type d -name 'data-platform-v2-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
     test -n "${ready_backup}" && test -d "${ready_backup}"
-    for required in old-api-image.tar old-api-image-id.txt old-api-health.json old-api-stats.json old-api-probe.json next-graph-volume.tgz next-graph-restore-drill.txt scratch-schema-roundtrip.txt live-rdb-validation.json next-graph-validation.json; do
+    for required in old-api-image.tar old-api-image-id.txt old-api-health.json old-api-stats.json old-api-probe.json next-graph-volume.tgz next-graph-restore-drill.txt next-graph-optimize.txt scratch-schema-roundtrip.txt live-rdb-validation.json next-graph-validation.json; do
         test -s "${ready_backup}/${required}"
     done
     (cd "${ready_backup}" && sha256sum -c SHA256SUMS >/dev/null)
@@ -210,6 +210,11 @@ printf 'restore=passed\n' >"${backup_dir}/next-graph-restore-drill.txt"
 docker volume rm "${scratch_volume}" >/dev/null
 scratch_volume_created=0
 
+# Oxigraph explicitly recommends optimizing bulk-loaded stores before read-heavy use.
+# The archive above is the recovery point if optimization fails.
+docker run --rm -v "${next_graph}:/data" ghcr.io/oxigraph/oxigraph:latest \
+    optimize -l /data >"${backup_dir}/next-graph-optimize.txt" 2>&1
+
 docker network inspect "${project}_default" >/dev/null
 docker run -d --name "${next_container}" --restart unless-stopped \
     --network "${project}_default" -v "${next_graph}:/data" \
@@ -222,6 +227,20 @@ for _ in $(seq 1 30); do
     sleep 2
 done
 curl --fail --silent --show-error --get --data-urlencode 'query=ASK { ?s ?p ?o }' "http://${next_ip}:7878/query" >/dev/null
+
+# Warm the two queries used by API /health, then enforce the API's immutable
+# two-second Graph timeout before starting the scratch API container.
+health_count_query="SELECT (COUNT(*) AS ?triples) WHERE { GRAPH ?g { ?s ?p ?o } FILTER(STRSTARTS(STR(?g), 'http://mafest.ai/graph/abox/')) }"
+health_graphs_query="SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } FILTER(STRSTARTS(STR(?g), 'http://mafest.ai/graph/abox/')) }"
+curl --fail --silent --show-error --get -H 'Accept: application/sparql-results+json' \
+    --data-urlencode "query=${health_count_query}" "http://${next_ip}:7878/query" >/dev/null
+curl --fail --silent --show-error --get -H 'Accept: application/sparql-results+json' \
+    --data-urlencode "query=${health_graphs_query}" "http://${next_ip}:7878/query" >/dev/null
+curl --fail --silent --show-error --max-time 2 --get -H 'Accept: application/sparql-results+json' \
+    --data-urlencode "query=${health_count_query}" "http://${next_ip}:7878/query" >/dev/null
+curl --fail --silent --show-error --max-time 2 --get -H 'Accept: application/sparql-results+json' \
+    --data-urlencode "query=${health_graphs_query}" "http://${next_ip}:7878/query" >/dev/null
+printf 'optimize=passed health_queries_under_2s=passed\n' >>"${backup_dir}/next-graph-optimize.txt"
 
 if ! docker image inspect "${v2_api_image}" >/dev/null 2>&1; then
     docker build --label "mafest.runtime-base=${release_sha}" \
@@ -489,7 +508,7 @@ files=(
     old-api-image.tar old-api-image-id.txt old-api-image-ref.txt
     old-api-health.json old-api-stats.json old-api-probe.json old-graph-count.json
     old-absent-schemas.txt v2-failed-contracts.txt
-    next-graph-volume.tgz next-graph-volume-name.txt next-graph-tar-list.txt next-graph-restore-drill.txt
+    next-graph-volume.tgz next-graph-volume-name.txt next-graph-tar-list.txt next-graph-restore-drill.txt next-graph-optimize.txt
     scratch-rdb-validation.json scratch-api-health.json scratch-api-version.json scratch-api-stats.json
     scratch-api-tables.json scratch-api-catalog.json scratch-api-coverage.json
     scratch-restored-counts.txt scratch-schema-roundtrip.txt

@@ -286,6 +286,8 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("bash deploy/backup_v2.sh", retry)
         self.assertIn("scratch-schema-roundtrip", retry)
         self.assertIn("SCRATCH_VERIFY_HTTP", retry)
+        self.assertIn("optimize -l /data", retry)
+        self.assertIn("health_queries_under_2s=passed", retry)
         self.assertIn("T105 RETRY READY PASS", retry)
         self.assertIn("Get-FileHash", retry_windows)
         self.assertIn("SAFE JOURNAL STATE", diagnose)
