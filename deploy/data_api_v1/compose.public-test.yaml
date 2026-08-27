@@ -1,0 +1,29 @@
+services:
+  api:
+    environment:
+      API_PUBLIC_CURATED_ONLY: "1"
+      PUBLIC_TEST_MODE: "1"
+      PUBLIC_TEST_EXPIRES_AT: ${PUBLIC_TEST_EXPIRES_AT:?PUBLIC_TEST_EXPIRES_AT is required}
+      PUBLIC_RATE_LIMIT_PER_MINUTE: ${PUBLIC_RATE_LIMIT_PER_MINUTE:-60}
+      API_MAX_BODY_BYTES: "1048576"
+
+  api-debug:
+    build: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL for the read-only role must be set}
+      OXIGRAPH_URL: http://graph:7878
+      API_PUBLIC_CURATED_ONLY: "0"
+      PUBLIC_TEST_MODE: "0"
+      API_MAX_ROWS: ${API_MAX_ROWS:-100}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-2000}
+    depends_on:
+      db:
+        condition: service_healthy
+      graph:
+        condition: service_started
+    ports:
+      - "127.0.0.1:${API_DEBUG_PORT:-8001}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped

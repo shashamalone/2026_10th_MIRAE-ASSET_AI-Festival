@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "release_id": "financial-products-2026-08-24@ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38",
+  "documents": [
+    {
+      "source_type": "official_policy",
+      "title": "「국민참여형 국민성장펀드」가 5.22일부터 3주간 일반국민을 대상으로 판매됩니다",
+      "publisher": "금융위원회",
+      "published_at": "2026-05-06",
+      "source_url": "https://www.fsc.go.kr/no010101/86834",
+      "source_file": "sources/fsc-national-growth-fund-2026-05-06.html",
+      "source_sha256": "PREPARE_SCRIPT_FILLS_THIS",
+      "extracted_text_file": "sources/fsc-national-growth-fund-2026-05-06.txt",
+      "extracted_text_sha256": "PREPARE_SCRIPT_FILLS_THIS",
+      "product_id": null,
+      "page_number": null,
+      "locator": "I. 추진경과 / 펀드 구조 문단",
+      "citation_text": "국민참여성장펀드는 국민의 자금을 모아 모펀드를 만들고, 이를 다수의 자펀드에 투자하는 구조로 설계되었다.",
+      "chunk_text": "국민참여성장펀드는 국민의 자금을 모아 모펀드를 만들고, 이를 다수의 자펀드에 투자하는 구조로 설계되었다.",
+      "chunk_sha256": "PREPARE_SCRIPT_FILLS_THIS"
+    },
+    {
+      "source_type": "official_risk",
+      "title": "TIGER MSCI Korea TR 상품자료",
+      "publisher": "미래에셋자산운용",
+      "published_at": "2024-11-08",
+      "source_url": "https://www.tigeretf.com/upload/etf/20241108075220009535.pdf",
+      "source_file": "sources/tiger-msci-korea-tr-2024-11-08.pdf",
+      "source_sha256": "PREPARE_SCRIPT_FILLS_THIS",
+      "extracted_text_file": "sources/tiger-msci-korea-tr-2024-11-08.txt",
+      "extracted_text_sha256": "PREPARE_SCRIPT_FILLS_THIS",
+      "product_id": "etf_kr:KR7310970009",
+      "page_number": 1,
+      "locator": "1쪽 투자 유의사항",
+      "citation_text": "ETF는 실적배당상품으로 운용결과에 따른 이익 또는 손실이 투자자에게 귀속됩니다.",
+      "chunk_text": "ETF는 실적배당상품으로 운용결과에 따른 이익 또는 손실이 투자자에게 귀속됩니다.",
+      "chunk_sha256": "PREPARE_SCRIPT_FILLS_THIS"
+    }
+  ]
+}
