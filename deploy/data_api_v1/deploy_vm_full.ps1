@@ -17,7 +17,26 @@ $repo = (Resolve-Path (Join-Path $scriptDir '..\..')).Path
 if (-not $T105ArtifactDir) {
     $T105ArtifactDir = Join-Path $repo '..\T-105-data-api-cutover\artifacts\runs\T-105-data-api-cutover\codex-v2-cutover-0826'
 }
-$t105 = Join-Path $T105ArtifactDir 'data_api_cutover.ps1'
+$sourceT105ArtifactDir = (Resolve-Path $T105ArtifactDir).Path
+$patchedT105ArtifactDir = Join-Path $repo 'artifacts\runs\T-106-agent-data-api\codex-agent-data-api-0827\t105-default-graph-fix'
+New-Item -ItemType Directory -Path $patchedT105ArtifactDir -Force | Out-Null
+Copy-Item -Path (Join-Path $sourceT105ArtifactDir '*') -Destination $patchedT105ArtifactDir -Recurse -Force
+
+$oldGraphQuery = 'query=SELECT (COUNT(*) AS ?triples) WHERE { GRAPH ?g { ?s ?p ?o } }'
+$allGraphQuery = 'query=SELECT (COUNT(*) AS ?triples) WHERE { { ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } } }'
+foreach ($name in ('data_api_cutover.sh', 'data_api_rollback.sh')) {
+    $path = Join-Path $patchedT105ArtifactDir $name
+    $content = [IO.File]::ReadAllText($path)
+    $matches = ([regex]::Matches($content, [regex]::Escape($oldGraphQuery))).Count
+    if ($matches -ne 1) {
+        throw "Expected exactly one legacy named-graph count in ${name}; actual=$matches"
+    }
+    $content = $content.Replace($oldGraphQuery, $allGraphQuery)
+    [IO.File]::WriteAllText($path, $content, [Text.UTF8Encoding]::new($false))
+}
+Write-Host 'T-105 compatibility patch prepared: old Graph count includes default and named graphs for cutover and rollback.'
+
+$t105 = Join-Path $patchedT105ArtifactDir 'data_api_cutover.ps1'
 $t106 = Join-Path $scriptDir 'deploy_vm.ps1'
 foreach ($file in ($t105, $t106)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing deployment script: $file" }

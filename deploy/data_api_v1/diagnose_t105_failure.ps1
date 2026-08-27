@@ -42,7 +42,7 @@ if [[ ! -s ${pointer} ]]; then
       continue
     fi
     docker inspect -f 'container='"${container}"' image={{.Config.Image}} running={{.State.Running}} status={{.State.Status}} mounts={{range .Mounts}}{{.Destination}}={{.Name}};{{end}}' "${container}"
-    port=$(docker port "${container}" 7878/tcp 2>/dev/null | awk '/^127[.]0[.]0[.]1:/{print; exit}')
+    port=$(docker port "${container}" 7878/tcp 2>/dev/null | awk '/^127[.]0[.]0[.]1:/{print; exit}' || true)
     echo "container=${container} port=${port:-none}"
     if [[ -n ${port} ]]; then
       curl --fail --silent --show-error --get \
