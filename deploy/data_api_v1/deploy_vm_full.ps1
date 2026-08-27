@@ -34,7 +34,25 @@ foreach ($name in ('data_api_cutover.sh', 'data_api_rollback.sh')) {
     $content = $content.Replace($oldGraphQuery, $allGraphQuery)
     [IO.File]::WriteAllText($path, $content, [Text.UTF8Encoding]::new($false))
 }
-Write-Host 'T-105 compatibility patch prepared: old Graph count includes default and named graphs for cutover and rollback.'
+$cutoverPath = Join-Path $patchedT105ArtifactDir 'data_api_cutover.sh'
+$cutoverContent = [IO.File]::ReadAllText($cutoverPath)
+$oldImagePreserve = 'docker tag "${old_api_image}" "${old_api_tag}"'
+$safeImagePreserve = @'
+if docker image inspect "${old_api_image}" >/dev/null 2>&1; then
+    docker tag "${old_api_image}" "${old_api_tag}"
+else
+    echo "OLD_API_IMAGE_MISSING: committing running container ${api_id} for rollback"
+    docker commit --pause=true "${api_id}" "${old_api_tag}" >/dev/null
+fi
+old_api_image=$(docker image inspect -f '{{.Id}}' "${old_api_tag}")
+'@.TrimEnd()
+$imageMatches = ([regex]::Matches($cutoverContent, [regex]::Escape($oldImagePreserve))).Count
+if ($imageMatches -ne 1) {
+    throw "Expected exactly one legacy old-image tag command; actual=$imageMatches"
+}
+$cutoverContent = $cutoverContent.Replace($oldImagePreserve, $safeImagePreserve)
+[IO.File]::WriteAllText($cutoverPath, $cutoverContent, [Text.UTF8Encoding]::new($false))
+Write-Host 'T-105 compatibility patch prepared: full old Graph count and recoverable running API image.'
 
 $t105 = Join-Path $patchedT105ArtifactDir 'data_api_cutover.ps1'
 $t106 = Join-Path $scriptDir 'deploy_vm.ps1'

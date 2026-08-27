@@ -272,6 +272,8 @@ class ApiRouteContractTest(unittest.TestCase):
         self.assertIn("t105-default-graph-fix", full_windows)
         self.assertIn("UNION { GRAPH ?g", full_windows)
         self.assertIn("data_api_rollback.sh", full_windows)
+        self.assertIn("docker commit --pause=true", full_windows)
+        self.assertIn("OLD_API_IMAGE_MISSING", full_windows)
         self.assertIn("SAFE JOURNAL STATE", diagnose)
         self.assertNotIn("OLD_READER_VERIFIER)=", diagnose)
         self.assertIn("APPLY_TWO_OFFICIAL_DOCUMENTS", seed)

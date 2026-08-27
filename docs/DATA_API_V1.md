@@ -121,6 +121,8 @@ T-105가 이미 완료된 경우 위 실행기는 cutover를 건너뛴다. T-106
 
 기존 Oxigraph가 default graph에 triple을 저장한 환경에서는 T-105의 named-graph 전용 rollback fingerprint가 `0`을 반환한다. 전체 실행기는 T-105 원본을 수정하지 않고 세션별 복사본의 cutover/rollback fingerprint만 default+named 전체 합계로 교정한다.
 
+기존 API 컨테이너의 원본 image가 Docker 정리로 사라졌지만 컨테이너가 계속 실행 중이면, 전환 전에 해당 컨테이너를 일시 정지해 exact rollback image로 commit한 뒤 그 image ID를 journal에 기록한다.
+
 설치기는 활성 Graph volume이 `financial-agent-prep_oxigraph-next-2026-08-24-57c4edc`인지 확인하고 Graph 서비스를 재생성하지 않은 채 API 컨테이너만 교체한다. T-105가 아직 완료되지 않았거나 정본 행 수가 다르면 배포를 거부한다.
 
 제출 VM에서는 public-test overlay와 host port를 사용하지 않는다. Data API는 Compose 내부 DNS로만 Agent에 제공하고 외부에는 HTTPS Agent `POST /query`만 공개한다.
