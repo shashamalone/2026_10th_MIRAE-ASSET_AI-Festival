@@ -139,7 +139,7 @@ VM에서는 `DEMO_VECTOR_APPLY_ACK=APPLY_TWO_OFFICIAL_DOCUMENTS`를 명시한 �
 
 - `COMPOSE_PROJECT_NAME=financial-agent-prep`
 - `V2_CUTOVER_CONFIRMED=V2_RELEASE_IS_ACTIVE`
-- `PUBLIC_TEST_EXPIRES_AT` — UTC ISO-8601, 기본 운영 기간 7일
+- `PUBLIC_TEST_EXPIRES_AT` — timezone-aware ISO-8601, PowerShell 기본 2일·최대 30일
 - 읽기전용 `DATABASE_URL`; PostgreSQL 5432와 Oxigraph 7878은 외부 미공개
 
 `deploy/data_api_v1/deploy_public_test.sh`의 기본값은 public curated API를 `:8000`, SQL/SPARQL debug API를 `127.0.0.1:8001`에 띄우고 공개 `/db*`를 404로 차단한다. 명시적 팀 테스트 모드에서는 `:8000`의 동일 API가 `/v1`과 guarded read-only `/db`를 함께 제공하고 중복 debug 컨테이너를 제거한다. 두 모드 모두 분당 60요청, 1MB body, 최대 100행, 2초 SQL 제한과 만료시간을 적용한다.
@@ -150,10 +150,10 @@ T-105 DB/Graph cutover부터 팀 테스트 API 배포까지 연속 수행하려�
 .\deploy\data_api_v1\deploy_vm_full.ps1 `
   -AcceptExistingPublicReadOnlyDbRisk `
   -KeepPublicReadOnlyDbForTeamTest `
-  -PublicTestExpiresAt '2026-08-29T23:59:00+09:00'
+  -PublicTestExpiresAt '2026-09-20T23:59:00+09:00'
 ```
 
-`-KeepPublicReadOnlyDbForTeamTest`를 생략하면 제출 준비용 curated-only 모드로 배포되어 공개 `/db*`가 404를 반환한다. 팀 테스트 모드는 최대 7일 이내의 timezone-aware 만료시간과 서버 측 exact 위험 승인 문자열 없이는 시작되지 않는다.
+`-KeepPublicReadOnlyDbForTeamTest`를 생략하면 제출 준비용 curated-only 모드로 배포되어 공개 `/db*`가 404를 반환한다. 팀 테스트 모드는 최대 30일 이내의 timezone-aware 만료시간과 서버 측 exact 위험 승인 문자열 없이는 시작되지 않는다.
 
 T-105가 이미 완료된 경우 위 실행기는 cutover를 건너뛴다. T-106만 다시 설치하려면 `deploy_vm.ps1`을 직접 실행한다.
 

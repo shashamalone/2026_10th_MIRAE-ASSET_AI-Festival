@@ -28,8 +28,8 @@ except ValueError as exc:
     raise SystemExit(f"REFUSE_EXPIRY: {exc}")
 if parsed.tzinfo is None or parsed.astimezone(timezone.utc) <= datetime.now(timezone.utc):
     raise SystemExit("REFUSE_EXPIRY: a future timezone-aware timestamp is required")
-if (parsed.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds() > 7 * 24 * 60 * 60:
-    raise SystemExit("REFUSE_EXPIRY: public test exposure cannot exceed 7 days")
+if (parsed.astimezone(timezone.utc) - datetime.now(timezone.utc)).total_seconds() > 30 * 24 * 60 * 60:
+    raise SystemExit("REFUSE_EXPIRY: public test exposure cannot exceed 30 days")
 PY
 case "${access_mode}" in
   curated) ;;

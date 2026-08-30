@@ -1,6 +1,6 @@
 # 금융상품 데이터 플랫폼 V2 인수 문서
 
-검증 기준일: 2026-08-27 (Asia/Seoul)
+검증 기준일: 2026-08-30 (Asia/Seoul)
 
 이 문서는 팀원이 테스트 Agent를 바로 연결할 수 있도록 현재 VM 배포 상태, 데이터 출처, 저장 위치와 데이터베이스별 적재 결과를 정리한다. 물리 컬럼과 쿼리 생성 규칙은 별도 [Agent DB 스키마 인수 문서](AGENT_DB_SCHEMA_HANDOFF.md)를 사용한다.
 
@@ -14,7 +14,7 @@
 | snapshot SHA-256 | `ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38` |
 | readiness | `true` |
 | load run | 정확히 1건, `passed / cutover_ready` |
-| 임시 공개 만료 | `2026-08-29T14:59:00Z` = `2026-08-29 23:59 KST` |
+| 임시 공개 만료 | `2026-09-20T14:59:00Z` = `2026-09-20 23:59 KST` |
 | 공개 범위 | `:8000`의 `/v1/*`와 guarded read-only `/db*` |
 | 외부 차단 | PostgreSQL `5432`, Oxigraph `7878`은 외부 TCP 접속 불가로 확인 |
 | canonical vector | `pending`, 세 테이블 모두 0행 |
@@ -200,7 +200,7 @@ Vector가 비어 있다는 사실을 “근거 문서가 없다”로 해석하�
 3. 일반 질의는 `/v1/*`, 맞춤 SQL/SPARQL이 필요한 질의만 `/db/*`를 사용한다.
 4. `/db/tables` → 필터된 `/db/catalog` → 파라미터화된 `/db/sql` 순서로 query context를 만든다.
 5. 결과에 `product_id`, 값, 단위, 실제 `as_of`, 출처와 문서 ID를 보존한다.
-6. 2026-08-29 23:59 KST 전에 테스트를 끝내거나 운영자가 만료를 갱신해 API를 재배포한다.
+6. 2026-09-20 23:59 KST 전에 테스트를 끝내거나 운영자가 만료를 갱신해 API를 재배포한다.
 7. 제출 VM에서는 `/db`를 외부에 공개하지 않고 `/v1` 또는 최종 Agent `/query`만 공개한다.
 
 이전에 채팅에 노출된 CLOVA 키는 사용하지 말고 폐기·재발급한다. 새 키는 Agent/VM의 비밀 환경변수에만 저장한다.

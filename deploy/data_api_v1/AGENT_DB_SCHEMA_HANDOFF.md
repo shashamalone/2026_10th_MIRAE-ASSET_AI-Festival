@@ -275,4 +275,4 @@ SQL은 `SELECT`/`WITH` 한 statement만 허용한다. 문자열을 직접 붙이
 - POST 자동 재시도 금지
 - DDL/DML, multi-statement, `COPY`, SQL 주석 우회, SPARQL update 차단
 
-팀 테스트용 공개 `/db`는 2026-08-29 23:59 KST에 만료된다. 제출 환경에서는 Data API를 Agent와 같은 VM/Compose 내부 DNS로만 연결하고 공개 `/db*`를 404로 차단한다. 외부에는 최종 Agent `POST /query`와 필요한 health 경로만 HTTPS로 공개한다.
+팀 테스트용 공개 `/db`는 2026-09-20 23:59 KST에 만료된다. 제출 환경에서는 Data API를 Agent와 같은 VM/Compose 내부 DNS로만 연결하고 공개 `/db*`를 404로 차단한다. 외부에는 최종 Agent `POST /query`와 필요한 health 경로만 HTTPS로 공개한다.
