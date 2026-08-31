@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""HTTP-only client used by local or same-VM LangGraph tools.
-
-This module intentionally has no PostgreSQL, Oxigraph, or CLOVA dependency.  The
-Agent owns question embeddings and sends the resulting 1024-dimensional vector
-to ``semantic_search``.
-"""
+"""HTTP-only raw SQL/SPARQL client for local or same-VM Agent tools."""
 from __future__ import annotations
 
 import os
@@ -53,7 +48,7 @@ class FinancialDataClient:
             self._client = httpx.Client(
                 base_url=self.base_url,
                 timeout=httpx.Timeout(self.timeout_seconds),
-                headers={"User-Agent": "financial-agent-data-client/1.0"},
+                headers={"User-Agent": "financial-agent-data-client/4.0"},
             )
         return self._client
 
@@ -92,10 +87,12 @@ class FinancialDataClient:
                 f"JSON이 아닌 응답입니다: HTTP {response.status_code}",
             ) from exc
         if response.is_error:
+            detail = payload.get("detail")
+            message = payload.get("message") or (detail if isinstance(detail, str) else None)
             raise DataApiClientError(
                 response.status_code,
                 str(payload.get("code") or "DATA_API_ERROR"),
-                str(payload.get("message") or response.reason_phrase),
+                str(message or response.reason_phrase),
                 payload.get("details") if isinstance(payload.get("details"), dict) else {},
             )
         release_id = payload.get("release_id")
@@ -115,12 +112,6 @@ class FinancialDataClient:
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
 
-    def release(self) -> dict[str, Any]:
-        return self._request("GET", "/v1/release")
-
-    def capabilities(self) -> dict[str, Any]:
-        return self._request("GET", "/v1/capabilities")
-
     def db_version(self) -> dict[str, Any]:
         payload = self._request("GET", "/db/version", verify_release=False)
         rows = payload.get("rows") or []
@@ -129,11 +120,15 @@ class FinancialDataClient:
             raise DataApiClientError(
                 409,
                 "RELEASE_MISMATCH",
-                "Agent와 raw Data API의 release_id가 다릅니다",
+                "Agent와 Data API의 release_id가 다릅니다",
                 {"expected": self.expected_release_id, "actual": actual},
             )
         self._raw_release_verified = True
         return payload
+
+    def stats(self) -> dict[str, Any]:
+        self._ensure_raw_release()
+        return self._request("GET", "/db/stats", verify_release=False)
 
     def tables(self) -> dict[str, Any]:
         self._ensure_raw_release()
@@ -162,13 +157,14 @@ class FinancialDataClient:
         }
         return self._request("GET", "/db/catalog", verify_release=False, params=params)
 
-    def sql(self, statement: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def sql(self, statement: str) -> dict[str, Any]:
         self._ensure_raw_release()
         return self._request(
             "POST",
             "/db/sql",
             verify_release=False,
-            json={"sql": statement, "params": params or {}},
+            content=statement.encode("utf-8"),
+            headers={"Content-Type": "text/plain; charset=utf-8"},
         )
 
     def sparql(self, statement: str) -> dict[str, Any]:
@@ -177,73 +173,6 @@ class FinancialDataClient:
             "POST",
             "/db/sparql",
             verify_release=False,
-            json={"sparql": statement},
-        )
-
-    def search_products(
-        self,
-        name: str,
-        *,
-        match: str = "exact",
-        product_types: list[str] | None = None,
-        limit: int = 10,
-    ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/v1/products/search",
-            json={"name": name, "match": match, "product_types": product_types or [], "limit": limit},
-        )
-
-    def query_products(self, **query: Any) -> dict[str, Any]:
-        return self._request("POST", "/v1/products/query", json=query)
-
-    def product(self, product_id: str) -> dict[str, Any]:
-        return self._request("GET", f"/v1/products/{product_id}")
-
-    def compare_products(self, product_ids: list[str], metric_codes: list[str]) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/v1/products/compare",
-            json={"product_ids": product_ids, "metric_codes": metric_codes},
-        )
-
-    def holdings(self, product_id: str, *, as_of: str = "latest", limit: int = 20) -> dict[str, Any]:
-        return self._request(
-            "GET",
-            f"/v1/products/{product_id}/holdings",
-            params={"as_of": as_of, "limit": limit},
-        )
-
-    def traverse(
-        self,
-        start_entity_id: str,
-        path: list[str],
-        *,
-        as_of: str = "latest",
-        limit: int = 20,
-    ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/v1/relations/traverse",
-            json={"start_entity_id": start_entity_id, "path": path, "as_of": as_of, "limit": limit},
-        )
-
-    def validate_ontology(self, **request: Any) -> dict[str, Any]:
-        return self._request("POST", "/v1/ontology/validate", json=request)
-
-    def semantic_search(
-        self,
-        query_embedding: list[float],
-        *,
-        candidate_product_ids: list[str] | None = None,
-        top_k: int = 2,
-    ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/v1/evidence/semantic-search",
-            json={
-                "query_embedding": query_embedding,
-                "candidate_product_ids": candidate_product_ids,
-                "top_k": top_k,
-            },
+            content=statement.encode("utf-8"),
+            headers={"Content-Type": "text/plain; charset=utf-8"},
         )

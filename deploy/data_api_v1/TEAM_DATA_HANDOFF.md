@@ -15,7 +15,7 @@
 | readiness | `true` |
 | load run | 정확히 1건, `passed / cutover_ready` |
 | 임시 공개 만료 | `2026-09-20T14:59:00Z` = `2026-09-20 23:59 KST` |
-| 공개 범위 | `:8000`의 `/v1/*`와 guarded read-only `/db*` |
+| 공개 범위 | `:8000`의 guarded read-only `/db/*`와 `/health`, `/docs` |
 | 외부 차단 | PostgreSQL `5432`, Oxigraph `7878`은 외부 TCP 접속 불가로 확인 |
 | canonical vector | `pending`, 세 테이블 모두 0행 |
 | HyperCLOVA | Data API에는 미설정. DB 조회에는 영향 없음 |
@@ -26,7 +26,6 @@
 
 ```powershell
 Invoke-RestMethod http://40.82.145.44:8000/health
-Invoke-RestMethod http://40.82.145.44:8000/v1/release
 Invoke-RestMethod http://40.82.145.44:8000/db/version
 ```
 
@@ -51,7 +50,7 @@ FINANCIAL_DATA_RELEASE_ID=financial-products-2026-08-24@ddb3d994a4a5115a75bed7ef
 | 백업 루트 | `/home/user1106/financial-agent-v2/shared/backups/` | PostgreSQL dump, Graph archive, cutover journal |
 | Compose project | `financial-agent-prep` | 기존 VM 프로젝트 유지 |
 | PostgreSQL volume | `financial-agent-prep_postgres-data-pg17` | 활성 PostgreSQL 17 데이터 |
-| 활성 Graph volume | `financial-agent-prep_oxigraph-next-2026-08-24-57c4edc` | 검증 후 승격된 V2 Graph |
+| 활성 Graph volume | T-107 Stage receipt의 versioned volume | 공식 V2와 `data/ontology` 병합 Graph |
 | 이전 Graph volume | `financial-agent-prep_oxigraph-data` | rollback/evidence용 보존 |
 
 `.env`는 release별로 권한 `600`을 유지하며 비밀값은 VM에서만 관리한다. archive와 backup을 임의로 삭제하지 않는다.
@@ -140,25 +139,19 @@ coverage는 holdings `available` 711상품, `unavailable` 30,172상품, `not_app
 
 ## 5. GraphDB 적재 결과
 
-Graph 엔진은 Oxigraph다. default graph는 사용하지 않으며 TBox와 ABox를 named graph로 분리했다.
+Graph 엔진은 Oxigraph다. 공식 V2 TBox/ABox와 팀원이 전달한 `data/ontology`
+10개 TTL을 동일한 10개 named graph에 set-union으로 적재한다.
 
-| named graph | triples | 구분 |
-|---|---:|---|
-| `http://mafest.ai/graph/abox/bond_kr` | 81,974 | ABox |
-| `http://mafest.ai/graph/abox/company` | 439,248 | ABox |
-| `http://mafest.ai/graph/abox/etf_gl` | 36,200 | ABox |
-| `http://mafest.ai/graph/abox/etf_kr` | 9,628 | ABox |
-| `http://mafest.ai/graph/abox/fund_pub` | 88,338 | ABox |
-| **ABox 합계** | **655,388** | 운영 health 계약 |
-| `http://mafest.ai/graph/tbox/common` | 1,058 | TBox |
-| `http://mafest.ai/graph/tbox/bond_kr` | 387 | TBox |
-| `http://mafest.ai/graph/tbox/etf_kr` | 790 | TBox |
-| `http://mafest.ai/graph/tbox/etf_gl` | 136 | TBox |
-| `http://mafest.ai/graph/tbox/fund_pub` | 248 | TBox |
-| **TBox 합계** | **2,619** | ontology 계약 |
-| **전체 named graph 합계** | **658,007** | ABox + TBox |
+| 계약 | triples |
+|---|---:|
+| `data/ontology` 단독 strict-load | 1,169,374 |
+| 공식 V2 + 팀 ontology 병합 활성 Graph | **1,628,311** |
 
-`fpi:` 상품 URI에서 접두사를 제거한 값은 RDB `product_id`와 같다. 사모펀드는 RDB에는 있지만 현재 ABox 상품 클래스에는 올리지 않았다.
+서버는 `serve-read-only --union-default-graph`로 실행하므로 `GRAPH ?g`로 감싸지 않은
+`WHERE { ?s ?p ?o }`도 모든 named graph를 조회한다. graph별 count와 실제 활성
+volume은 T-107 Stage receipt에 기록한다.
+
+`fpi:` 상품 URI에서 접두사를 제거한 값은 RDB `product_id`와 같다.
 
 ## 6. VectorDB 상태
 
@@ -168,12 +161,12 @@ Graph 엔진은 Oxigraph다. default graph는 사용하지 않으며 TBox와 ABo
 
 - RDB 숫자 필터·정렬·집계
 - Graph 관계 탐색과 ontology 검증
-- `/v1` curated 기능과 `/db` 맞춤 SQL/SPARQL
+- `/db/sql`, `/db/sparql` 원문 기반 맞춤 질의
 
 다음은 아직 운영 준비가 아니다.
 
 - canonical vector 의미 검색
-- `POST /v1/evidence/semantic-search`의 실제 문서 검색 결과
+- 투자보고서 Vector 적재 handoff 전의 의미 검색 결과
 - Data API 자체의 HyperCLOVA 답변 생성
 
 Vector가 비어 있다는 사실을 “근거 문서가 없다”로 해석하지 않는다. Agent가 vector 기능을 요구하면 별도 embedding release가 필요하다.
@@ -182,25 +175,26 @@ Vector가 비어 있다는 사실을 “근거 문서가 없다”로 해석하�
 
 2026-08-27 외부 공개 경로에서 다음을 재검증했다.
 
-- `/health`: `status=ok`, `readiness=true`, API `3.0.0`
-- `/v1/release`: exact release와 snapshot 일치
+- `/health`: `status=ok`, `readiness=true`, API `4.0.0`
+- `/db/version`: exact release와 snapshot 일치
 - `/db/version`, `/db/stats`, `/db/tables`: 200, canonical object 41개
 - `/db/catalog`: 499개 컬럼 메타데이터 제공
-- `/db/sql`: SELECT/CTE만 허용, 최대 100행, DB timeout 2초
-- `/db/sparql`: 읽기 질의만 허용, Graph timeout 10초
+- `/db/sql`: UTF-8 `text/plain` SELECT/CTE 원문, 최대 100행, DB timeout 2초
+- `/db/sparql`: UTF-8 `text/plain` 읽기 질의 원문, Graph timeout 10초
 - 분당 60요청, 요청 본문 1MB
 - API 포트 `8000`만 외부 접근 가능; `5432`, `7878` 차단 확인
 
-이번 Data API 배포는 기존 데이터를 다시 적재하지 않고 이미 승격된 PostgreSQL·Graph를 읽도록 API 컨테이너만 교체했다.
+T-107은 PostgreSQL을 다시 적재하지 않는다. Graph는 새 versioned volume에 병합
+Stage한 뒤 1,628,311 count를 확인하고, API와 Graph runtime pointer만 전환한다.
 
 ## 8. 팀 전달 체크리스트
 
 1. Base URL과 exact release ID를 Agent 환경변수에 넣는다.
-2. Agent 시작 시 `/health`의 `readiness`, `/v1/release`의 `release_id`를 확인한다.
-3. 일반 질의는 `/v1/*`, 맞춤 SQL/SPARQL이 필요한 질의만 `/db/*`를 사용한다.
-4. `/db/tables` → 필터된 `/db/catalog` → 파라미터화된 `/db/sql` 순서로 query context를 만든다.
+2. Agent 시작 시 `/health`의 `readiness`, `/db/version`의 `release_id`를 확인한다.
+3. 모든 DB 질의는 `/db/sql` 또는 `/db/sparql`에 UTF-8 `text/plain` 원문으로 보낸다.
+4. `/db/tables` → 필터된 `/db/catalog` → `/db/sql` 순서로 query context를 만든다.
 5. 결과에 `product_id`, 값, 단위, 실제 `as_of`, 출처와 문서 ID를 보존한다.
 6. 2026-09-20 23:59 KST 전에 테스트를 끝내거나 운영자가 만료를 갱신해 API를 재배포한다.
-7. 제출 VM에서는 `/db`를 외부에 공개하지 않고 `/v1` 또는 최종 Agent `/query`만 공개한다.
+7. 제출 VM에서는 `/db/*`를 외부에 공개하지 않고 최종 Agent `/query`만 공개한다.
 
 이전에 채팅에 노출된 CLOVA 키는 사용하지 말고 폐기·재발급한다. 새 키는 Agent/VM의 비밀 환경변수에만 저장한다.

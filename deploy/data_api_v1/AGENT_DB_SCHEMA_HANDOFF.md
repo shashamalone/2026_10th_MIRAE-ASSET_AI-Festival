@@ -15,13 +15,12 @@
 
 | 질문 유형 | 사용 DB/API | 이유 |
 |---|---|---|
-| 상품 정확 조회, 수치 필터, TOP-N, 집계 | PostgreSQL `/db/sql` 또는 curated `/v1/products/*` | 숫자·단위·날짜를 정확하게 처리 |
-| 편입→기업→자회사 같은 다중 홉, 클래스·domain/range | Oxigraph `/db/sparql` 또는 `/v1/relations/traverse` | 관계와 ontology 제약을 탐색 |
-| 자연어를 schema 용어에 연결, 문서 인용 검색 | pgvector `vec.*` 또는 `/v1/evidence/semantic-search` | 의미 유사도 검색 |
-| 일반적인 팀 Agent 기능 | `/v1/*` | 검증된 필드·연산자·evidence 계약이 내장됨 |
-| `/v1`에 없는 맞춤 질의 | guarded read-only `/db/*` | Agent가 schema-aware SQL/SPARQL 생성 |
+| 상품 정확 조회, 수치 필터, TOP-N, 집계 | PostgreSQL `/db/sql` | 숫자·단위·날짜를 정확하게 처리 |
+| 편입→기업→자회사 같은 다중 홉, 클래스·domain/range | Oxigraph `/db/sparql` | 관계와 ontology 제약을 탐색 |
+| 자연어를 schema 용어에 연결, 문서 인용 검색 | pgvector `vec.*`를 SQL로 조회 | 의미 유사도 검색 |
+| 구조 discovery | `/db/tables`, `/db/catalog` | Agent가 schema-aware SQL/SPARQL 생성 |
 
-현재 canonical vector는 `pending`이며 0행이다. 따라서 RDB와 Graph는 사용 가능하지만 vector hit에 의존하는 답변은 아직 만들면 안 된다.
+Vector 사용 가능 여부와 행 수는 호출 시 `/health`와 `/db/stats`로 확인한다.
 
 ## 2. Query 생성 전 discovery 순서
 
@@ -56,8 +55,7 @@ tables = client.tables()
 catalog = client.catalog(table_schema="enriched", table_name="product_master")
 rows = client.sql(
     "SELECT product_id,name,effective_as_of "
-    "FROM enriched.product_master WHERE name=%(name)s LIMIT 20",
-    {"name": "KODEX 200"},
+    "FROM enriched.product_master WHERE name='KODEX 200' LIMIT 20"
 )
 ```
 
@@ -181,29 +179,26 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 ```
 
-### 5.1 TBox named graph
+### 5.1 Named graph와 활성 count
 
-| graph | triples | 역할 |
-|---|---:|---|
-| `http://mafest.ai/graph/tbox/common` | 1,058 | 공통 상품·문서·관계·분류·통제어휘 |
-| `http://mafest.ai/graph/tbox/bond_kr` | 387 | 채권 등급·만기·담보·발행 어휘 |
-| `http://mafest.ai/graph/tbox/etf_kr` | 790 | 국내 ETF/ETN 분류·거래·위험 어휘 |
-| `http://mafest.ai/graph/tbox/etf_gl` | 136 | 해외 ETF/ETN 전략·설정일·식별 어휘 |
-| `http://mafest.ai/graph/tbox/fund_pub` | 248 | 공모펀드·클래스·판매·수익률 어휘 |
+Graph는 `tbox/{common,bond_kr,etf_kr,etf_gl,fund_pub}`와
+`abox/{bond_kr,etf_kr,etf_gl,fund_pub,company}`의 10개 named graph로 구성한다.
+공식 V2 Graph와 `data/ontology`의 TBox/ABox를 같은 graph 이름에 병합하며, 중복
+triple은 Oxigraph set semantics로 한 번만 저장한다.
 
-TBox 합계는 2,619 triples다. 클래스 55개, ObjectProperty 45개, DatatypeProperty 94개, 통제어휘 개체 297개다.
+- `data/ontology` 단독 strict-load: 1,169,374 triples
+- 공식 V2 + `data/ontology` 병합 활성 계약: **1,628,311 triples**
+- 런타임: `serve-read-only --union-default-graph`
 
-### 5.2 ABox named graph
+따라서 bare pattern `WHERE { ?s ?p ?o }`가 모든 named graph의 union을 조회한다.
+graph별 실측은 다음 질의로 확인한다.
 
-| graph | triples | 주요 내용 |
-|---|---:|---|
-| `http://mafest.ai/graph/abox/bond_kr` | 81,974 | 채권 상품 |
-| `http://mafest.ai/graph/abox/etf_kr` | 9,628 | 국내 ETF·ETN과 분류 |
-| `http://mafest.ai/graph/abox/etf_gl` | 36,200 | 해외 ETF·ETN과 분류 |
-| `http://mafest.ai/graph/abox/fund_pub` | 88,338 | 공모펀드와 분류 |
-| `http://mafest.ai/graph/abox/company` | 439,248 | 기업, 증권, 문서, holding·subsidiary n-ary 관계 |
-
-ABox 합계는 정확히 655,388 triples다. 편입·자회사·문서 관계는 `abox/company`에 있으므로 상품 graph와 함께 조회한다. default graph에 의존하지 않는다.
+```sparql
+SELECT ?g (COUNT(*) AS ?triples)
+WHERE { GRAPH ?g { ?s ?p ?o } }
+GROUP BY ?g
+ORDER BY ?g
+```
 
 상품 URI `fpi:{product_id}`의 `{product_id}`는 RDB 값과 같다. 관계 URI와 provenance 구조는 다음과 같다.
 
@@ -215,12 +210,14 @@ ABox 합계는 정확히 655,388 triples다. 편입·자회사·문서 관계는
 
 정확 상품 조회:
 
-```json
+```http
 POST /db/sql
-{
-  "sql": "SELECT product_id,name,product_type,effective_as_of FROM enriched.product_master WHERE name=%(name)s LIMIT 20",
-  "params": {"name": "KODEX 200"}
-}
+Content-Type: text/plain; charset=utf-8
+
+SELECT product_id,name,product_type,effective_as_of
+FROM enriched.product_master
+WHERE name='KODEX 200'
+LIMIT 20
 ```
 
 동일 통화 AUM TOP-N:
@@ -242,14 +239,23 @@ LIMIT 10
 
 상품 graph 조회:
 
-```json
+```http
 POST /db/sparql
-{
-  "sparql": "PREFIX fp: <http://mafest.ai/product#> SELECT ?product ?name WHERE { GRAPH <http://mafest.ai/graph/abox/etf_kr> { ?product a fp:KoreanETF ; fp:productName ?name . FILTER(?name = 'KODEX 200') } } LIMIT 20"
+Content-Type: text/plain; charset=utf-8
+
+PREFIX fp: <http://mafest.ai/product#>
+SELECT ?product ?name
+WHERE {
+  ?product a fp:KoreanETF ; fp:productName ?name .
+  FILTER(?name = 'KODEX 200')
 }
+LIMIT 20
 ```
 
-SQL은 `SELECT`/`WITH` 한 statement만 허용한다. 문자열을 직접 붙이지 말고 `%(name)s`와 `params`를 사용한다. SPARQL은 `SELECT`, `ASK`, `CONSTRUCT`, `DESCRIBE`만 사용하며 `SERVICE`를 포함한 update·원격 실행은 거부된다.
+SQL은 `SELECT`/`WITH` 한 statement만 허용한다. API는 쿼리 원문만 받으므로
+Agent는 SQL literal을 만들 때 PostgreSQL escaping을 적용해야 한다. SPARQL은
+`SELECT`, `ASK`, `CONSTRUCT`, `DESCRIBE`만 사용하며 `SERVICE`를 포함한
+update·원격 실행은 거부된다.
 
 ## 7. LLM이 반드시 지킬 데이터 규칙
 
