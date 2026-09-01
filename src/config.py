@@ -18,7 +18,6 @@ ARTIFACTS = ROOT / "artifacts"
 # FAISS(정규화 후 IndexFlatIP)와 최대 오차 5.03e-07 로 일치해 임계값을 그대로 쓴다.
 # 비밀번호를 포함하므로 DSN 을 로그에 찍지 않는다. 접속 정보는 환경변수로 덮을 수 있다.
 import os
-
 # Azure Data API
 # 현재 공개 테스트 API는 임시 주소다. 운영에서는 환경변수로 반드시 덮어쓴다.
 FINANCIAL_DATA_API_URL = os.environ.get(

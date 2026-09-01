@@ -14,4 +14,10 @@ ontology/instances_*.ttl
 ontology.zip
 
 artifacts/
+.agents/
+.claude/
 
+
+# 전달용 패키지(재생성 가능, TTL 포함 대용량)
+gragh/
+gragh.zip

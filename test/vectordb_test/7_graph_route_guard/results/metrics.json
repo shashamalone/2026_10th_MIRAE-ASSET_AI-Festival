@@ -1,0 +1,37 @@
+{
+  "route_guard_pass": true,
+  "route_guard_output": "PASS route guard — RDB 14/14, unsupported 3/3, cutoff safety 4/4",
+  "schema_cutoff_gate_pass": false,
+  "schema_cutoff_gate_output": "Traceback (most recent call last):\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/src/kb/build_schema_catalog.py\", line 239, in <module>\n    main()\n    ~~~~^^\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/src/kb/build_schema_catalog.py\", line 228, in main\n    validate(cat, metadata, rules)\n    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/src/kb/build_schema_catalog.py\", line 218, in validate\n    raise ValueError(\"\\n\".join(bad))\nValueError: bond_kr: as_of 2026-08-21가 cutoff 2026-07-11 이후\netf_kr: as_of 2026-08-21가 cutoff 2026-07-11 이후\netf_gl: as_of 2026-08-21가 cutoff 2026-07-11 이후\nfund_pub: as_of 2026-08-21가 cutoff 2026-07-11 이후",
+  "rdb_regression_pass": false,
+  "rdb_regression_output": "Traceback (most recent call last):\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/script/test_rdb_vertical_slice.py\", line 182, in <module>\n    main()\n    ~~~~^^\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/script/test_rdb_vertical_slice.py\", line 175, in main\n    plans = static_test()\n  File \"/mnt/c/users/rladl/desktop/2026_mirae_asset_ai-festival/2026_10th_mirae-asset_ai-festival/script/test_rdb_vertical_slice.py\", line 61, in static_test\n    assert validate_query(qmap[qid], plan) is None, qid\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: q001",
+  "graph": {
+    "cutoff": "2026-07-11",
+    "triple_count": 1624933,
+    "excluded_future_nodes": 573,
+    "future_as_of_count": 0,
+    "ecopro_path_rows": 46,
+    "distinct_etfs": 45,
+    "etn_rows": 0,
+    "relation_evidence_coverage": 1.0,
+    "supported_by_coverage": 1.0,
+    "store_evidence_coverage": {
+      "holding": {
+        "total": 47016,
+        "supported": 47016,
+        "coverage": 1.0
+      },
+      "subsidiary_relation": {
+        "total": 29524,
+        "supported": 29524,
+        "coverage": 1.0
+      }
+    },
+    "readonly_rejection": true,
+    "service_rejection": true,
+    "graph_execution_pass": true,
+    "graph_only_promotion_ready": true,
+    "blocker": null
+  },
+  "overall": "BLOCKED"
+}

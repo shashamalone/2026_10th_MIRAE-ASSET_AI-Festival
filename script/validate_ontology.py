@@ -16,8 +16,9 @@
   C) 스팟체크 — 에코프로 → 자회사 에코프로비엠 → 247540 증권 → 편입 ETF ≥ 30종
   D) 스팟체크 — KODEX 200(KR7069500007) 편입종목 수 > 0
 
-실행: python3 EDA/validate_ontology.py
+실행: python3 script/validate_ontology.py
 """
+import json
 import sys
 import time
 from pathlib import Path
@@ -27,6 +28,7 @@ from rdflib import Graph, RDF, RDFS, OWL, URIRef, Literal, XSD
 
 FP = "http://mafest.ai/product#"
 ROOT = Path(__file__).resolve().parent.parent
+CUTOFF = "2026-07-11"
 FILES = ["common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl"]
 INSTANCE_FILES = ["instances_bond_kr.ttl", "instances_etf_kr.ttl", "instances_etf_gl.ttl",
                   "instances_fund_pub.ttl", "instances_company.ttl"]
@@ -150,6 +152,12 @@ for d in merged.objects(fp("hasHolding"), RDFS.domain):
     holding_domain |= expand(d)
 check(fp("ETN") not in holding_domain, "fp:hasHolding domain에 fp:ETN이 포함됨(ETN은 편입종목 없음)")
 
+supported_domain = set()
+for d in merged.objects(fp("supportedBy"), RDFS.domain):
+    supported_domain |= expand(d)
+check(fp("Holding") in supported_domain and fp("SubsidiaryRelation") in supported_domain,
+      "fp:supportedBy domain에 Holding/SubsidiaryRelation 누락")
+
 ranks = {int(o) for o in merged.objects(None, fp("ratingRank"))}
 check(ranks == set(range(1, 20)), f"CreditRating 서열이 1~19가 아님: {sorted(ranks)}")
 aa_minus = [s for s in merged.subjects(fp("ratingRank"), None)
@@ -227,6 +235,60 @@ print("\n== A) 개체 수 ↔ 원천 CSV 행수")
 for label, got, want in expected:
     print(f"  {label:32s} {got:8,d} / CSV {want:8,d} {'OK' if got == want else 'MISMATCH'}")
     check(got == want, f"{label} 수 불일치: 그래프 {got} vs CSV {want}")
+
+# --- A-1) 관계 → 근거문서 계약 ---------------------------------------------
+holdings = set(inst.subjects(RDF.type, fp("Holding")))
+subsidiaries = set(inst.subjects(RDF.type, fp("SubsidiaryRelation")))
+
+
+def as_of(node):
+    value = next(inst.objects(node, fp("asOf")), None)
+    return str(value) if value is not None else ""
+
+
+eligible_subsidiaries = {x for x in subsidiaries if as_of(x) <= CUTOFF}
+future_subsidiaries = subsidiaries - eligible_subsidiaries
+eligible_relations = holdings | eligible_subsidiaries
+bad_link_count = {x: len(list(inst.objects(x, fp("supportedBy"))))
+                  for x in eligible_relations
+                  if len(list(inst.objects(x, fp("supportedBy")))) != 1}
+future_links = sum(len(list(inst.objects(x, fp("supportedBy")))) for x in future_subsidiaries)
+documents = {o for x in eligible_relations for o in inst.objects(x, fp("supportedBy"))}
+required_document_props = ("documentTitle", "documentPublisher",
+                           "documentPublishedDate", "documentQuote")
+bad_documents = []
+for doc in documents:
+    if (doc, RDF.type, fp("Document")) not in inst:
+        bad_documents.append((doc, "type"))
+        continue
+    for prop in required_document_props:
+        values = list(inst.objects(doc, fp(prop)))
+        if len(values) != 1 or not str(values[0]).strip():
+            bad_documents.append((doc, prop))
+    published = next(inst.objects(doc, fp("documentPublishedDate")), None)
+    if published is not None and str(published) > CUTOFF:
+        bad_documents.append((doc, "cutoff"))
+    evidence_quote = next(inst.objects(doc, fp("documentQuote")), None)
+    if evidence_quote is not None:
+        try:
+            claim = json.loads(str(evidence_quote))
+        except (TypeError, json.JSONDecodeError):
+            bad_documents.append((doc, "quote_json"))
+        else:
+            if not isinstance(claim, dict) or not claim:
+                bad_documents.append((doc, "quote_empty"))
+
+all_document_nodes = set(inst.subjects(RDF.type, fp("Document")))
+orphan_documents = all_document_nodes - documents
+print("\n== A-1) supportedBy 문서 evidence")
+print(f"  Holding                 {len(holdings) - sum(x in bad_link_count for x in holdings):8,d} / {len(holdings):8,d}")
+print(f"  cutoff 내 출자관계       {len(eligible_subsidiaries) - sum(x in bad_link_count for x in eligible_subsidiaries):8,d} / {len(eligible_subsidiaries):8,d}")
+print(f"  cutoff 이후 evidence    {future_links:8,d} / 기대 0")
+print(f"  Document                {len(documents):8,d} / 필수속성 오류 {len(bad_documents):,d}")
+check(not bad_link_count, f"eligible 관계 supportedBy 1개 계약 위반 {len(bad_link_count)}건")
+check(future_links == 0, f"cutoff 이후 출자관계 evidence link {future_links}건")
+check(not bad_documents, f"Document type/필수속성/cutoff 오류 {len(bad_documents)}건: {bad_documents[:3]}")
+check(not orphan_documents, f"참조되지 않는 Document {len(orphan_documents)}건")
 
 # --- B) domain/range 위반 ---------------------------------------------------
 sup = {}  # 클래스 → 자기 자신 + 모든 상위 클래스

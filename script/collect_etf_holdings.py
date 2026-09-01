@@ -1,12 +1,18 @@
-"""국내 ETF 편입종목 스냅샷 수집 (KODEX/TIGER/RISE/ACE, as_of=2026-07-10).
+"""국내 ETF 편입종목 스냅샷 수집 (KODEX/TIGER/RISE/ACE/PLUS/SOL).
+
+스냅샷 날짜는 COLLECT_AS_OF 환경변수로 바꾼다 (기본 2026-07-10, 대회 컷오프 2026-08-24 이하).
+파일명에 날짜가 들어가므로 스냅샷끼리 덮어쓰지 않고 이미 받은 파일은 자동으로 건너뛴다.
+
+    COLLECT_AS_OF=2026-08-24 python3 script/collect_etf_holdings.py TIGER
+    # KODEX(samsungfund.com)는 Cloudflare가 시간당 요청수로 429를 건다 — 45초 간격이면 0회
+    COLLECT_AS_OF=2026-08-24 COLLECT_SLEEP=45 COLLECT_BACKOFF=900 COLLECT_MAX_RETRY=8 python3 script/collect_etf_holdings.py KODEX
 
 설계: docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md
 원본을 data/external/etf_kr_holdings/{brand}_{ticker}_{as_of}.{ext} + 사이드카로 저장한다.
-브랜드별 어댑터는 list_products / url / parse 3함수뿐이고 나머지 파이프라인은 공유한다.
+브랜드별 어댑터는 list / url / parse 3함수뿐이고 나머지 파이프라인은 공유한다.
 
-    python3 EDA/collect_etf_holdings.py        # 전량
-    python3 EDA/collect_etf_holdings.py 3      # 브랜드당 3종 시범
-    COLLECT_SLEEP=2 python3 EDA/collect_etf_holdings.py KODEX   # 한 브랜드만 천천히 재시도
+    python3 script/collect_etf_holdings.py        # 전량
+    python3 script/collect_etf_holdings.py 3      # 브랜드당 3종 시범
 
 parse()는 build_etf_holding.py가 재사용한다(원본 → 행 변환 로직 중복 방지).
 """
@@ -25,9 +31,15 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 MASTER = ROOT / "data/csv/PREF01N001_etf_kr_master_20260824.csv"
 OUTDIR = ROOT / "data/external/etf_kr_holdings"
-AS_OF = "2026-07-10"
+AS_OF = os.environ.get("COLLECT_AS_OF", "2026-07-10")  # 기본값 유지 = 과거 실행 재현성
 YMD = AS_OF.replace("-", "")
 DOT = AS_OF.replace("-", ".")
+
+
+def set_as_of(date):
+    """스냅샷 날짜 전역 전환 (build_etf_holding.py가 날짜별 원본을 파싱할 때 사용)"""
+    global AS_OF, YMD, DOT
+    AS_OF, YMD, DOT = date, date.replace("-", ""), date.replace("-", ".")
 SLEEP = float(os.environ.get("COLLECT_SLEEP", 0.3))  # 429를 맞으면 늘려서 재실행(받은 파일은 건너뛴다)
 # 429는 레이트리밋이라 기다리면 풀린다. COLLECT_BACKOFF>0이면 중단 대신 그만큼 쉬었다 같은 종목을 재시도한다.
 BACKOFF = float(os.environ.get("COLLECT_BACKOFF", 0))
@@ -124,6 +136,47 @@ def ace_parse(b):
     return [(x["jm_KSC_CD"], x["sec_NM"], x["wg"]) for x in lst]  # 드롭: cu_ITEM_CNT·val_AM
 
 
+# ── PLUS (한화) : 내부 6자리 id 매핑 필요, JSON ───────────────────────────
+def plus_list():
+    m, page = {}, 0
+    while True:
+        r = requests.post("https://www.plusetf.co.kr/api/v1/product/find/list", headers=UA, timeout=30,
+                          json={"searchSortTy": None, "searchSort": "DESC", "page": page,
+                                "searchAnnuityOptionTy": None, "searchWord": ""})
+        r.raise_for_status()
+        j = r.json()
+        m.update({it["nameCode"]: it["id"] for it in j["content"]})
+        page += 1
+        if page >= j["totalPages"]:
+            return m
+        time.sleep(SLEEP)
+
+
+def plus_parse(b):
+    lst = json.loads(b)["content"] or []
+    bad = {x.get("wkdate") for x in lst} - {YMD}
+    if bad:  # 요청 일자와 응답 기준일 대조
+        raise ValueError(f"기준일 불일치 {sorted(bad)}")
+    return [(x["jmCd"], x["jmNm"], x["ratio"]) for x in lst]  # 드롭: amount(수량)·krJmCd(중복 식별자)
+
+
+# ── SOL (신한) : 내부 6자리 fund_cd 매핑 필요, JSON ───────────────────────
+def sol_list():
+    r = requests.post("https://www.soletf.com/api/common/searchByEtfNameOrFilter",
+                      headers=UA, data={"viewCount": 300}, timeout=30)
+    r.raise_for_status()
+    return {x["ETF_CD6"]: x["FUND_CD"] for x in r.json()["items"] if x["ETF_CD6"]}
+
+
+def sol_parse(b):
+    lst = json.loads(b) or []
+    bad = {x.get("WORK_DT") for x in lst} - {YMD}
+    if bad:
+        raise ValueError(f"기준일 불일치 {sorted(bad)}")
+    # 드롭: QTY(수량)·PRICE(평가금액). WT_DISP는 "7.47%" 문자열이라 % 제거
+    return [(x["STOCK_CODE"], x["SEC_NM"], str(x["WT_DISP"]).rstrip("%")) for x in lst]
+
+
 BRANDS = {
     "KODEX": dict(
         key="ticker", ext="json", list=kodex_list, parse=kodex_parse,
@@ -142,6 +195,14 @@ BRANDS = {
         key="isin", ext="json", list=ace_list, parse=ace_parse,
         url=lambda i: f"https://papi.aceetf.co.kr/api/funds/{i}/pdf?page=1&size=1000&std_dt={YMD}",
         source="한국투자신탁운용 ACE ETF (papi.aceetf.co.kr)"),
+    "PLUS": dict(
+        key="ticker", ext="json", list=plus_list, parse=plus_parse,
+        url=lambda i: f"https://www.plusetf.co.kr/api/v1/product/pdf/list?n={i}&page=0&d={YMD}&pageSize=1000",
+        source="한화자산운용 PLUS ETF (plusetf.co.kr)"),
+    "SOL": dict(
+        key="ticker", ext="json", list=sol_list, parse=sol_parse,
+        url=lambda i: f"https://www.soletf.com/api/fund/pdfList?fund_cd={i}&work_dt={YMD}",
+        source="신한자산운용 SOL ETF (soletf.com)"),
 }
 
 

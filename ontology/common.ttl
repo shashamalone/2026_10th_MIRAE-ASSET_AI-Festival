@@ -369,7 +369,7 @@ fp:sameVehicleAs a owl:ObjectProperty, owl:SymmetricProperty ;
     fp:sourceTable "PRFD01N001", "PREF01N001" ; fp:sourceColumn "ksd_itm_no", "pd_itm_no" .
 
 fp:supportedBy a owl:ObjectProperty ;
-    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot fp:Risk ) ] ;
+    rdfs:domain [ a owl:Class ; owl:unionOf ( fp:Holding fp:MetricSnapshot fp:Risk fp:SubsidiaryRelation ) ] ;
     rdfs:range fp:Document ;
     rdfs:label "근거문서"@ko, "supported by"@en ;
     rdfs:comment "관계·주장 → 이를 지지하는 문서. 근거가 없는 관계는 답변에 포함하지 않는다. 문서에 함께 언급되었다는 사실만으로 편입·모자회사·테마 관계를 확정하지 않는다."@ko .
@@ -632,14 +632,14 @@ fp:documentPublishedDate a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:date ;
     rdfs:label "문서 발행일"@ko, "document published date"@en ;
-    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-08-24) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
+    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-07-11) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
 
 fp:documentQuote a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:string ;
     rdfs:label "근거 문장"@ko, "evidence quote"@en ;
-    rdfs:comment "관계·주장을 직접 지지하는 인용 문장."@ko ;
+    rdfs:comment "관계·주장을 직접 지지하는 원문 발췌. 원천이 표·API이면 필드와 값을 보존한 구조화 레코드를 허용한다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.quote" .
 
 fp:organizationName a owl:DatatypeProperty ;

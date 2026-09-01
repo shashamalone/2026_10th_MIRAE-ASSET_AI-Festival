@@ -19,18 +19,24 @@ URI 규칙 (인스턴스 전용 프리픽스 fpi: = http://mafest.ai/instance/)
 넣지 않는 것: 파생 플래그(is_sellable·crd_grd_rank 등 RDB 담당), 룩어헤드/더미 컬럼,
               추정 기준일(etf_theme의 as_of는 공란이라 fp:asOf 트리플 자체를 생략).
 """
+import hashlib
+import json
 import re
 import time
-from collections import Counter
+from collections import Counter, defaultdict, deque
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 import pandas as pd
 from rdflib import RDF, RDFS, Graph, Namespace, URIRef
 
+from collect_etf_holdings import BRANDS, path_of
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "ontology"
 FP = "http://mafest.ai/product#"
 FPI = "http://mafest.ai/instance/"
+CUTOFF = "2026-07-11"
 
 # 정규화 규칙은 build_company_relations.py의 corp_name_norm과 동일해야 조인이 성립한다
 ALIAS = {"에스케이": "SK", "엘지": "LG", "케이티": "KT", "지에스": "GS", "씨제이": "CJ",
@@ -75,6 +81,40 @@ def dec(v):
 
 def date(v):
     return f'"{v}"^^xsd:date'
+
+
+def number(v):
+    """CSV 숫자와 원천 표기(5, 5.0, 5.00)를 같은 claim key로 맞춘다."""
+    s = str(v).strip().replace(",", "")
+    if s in ("", "-", "None", "nan"):
+        return ""
+    try:
+        return format(Decimal(s).normalize(), "f")
+    except InvalidOperation as exc:
+        raise SystemExit(f"근거 숫자 파싱 실패: {v!r}") from exc
+
+
+def claim_uri(path, claim):
+    raw = path.relative_to(ROOT).as_posix() + "\n" + json.dumps(
+        claim, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "fpi:doc-" + hashlib.sha256(raw.encode()).hexdigest()[:20]
+
+
+def quote(claim):
+    """자연어를 만들지 않고 원천 필드·값을 그대로 보존한다."""
+    return lit(json.dumps(claim, ensure_ascii=False, separators=(",", ":")))
+
+
+def document(docs, path, claim, title, publisher, published):
+    uri = claim_uri(path, claim)
+    pairs = [("a", "fp:Document"), ("fp:documentTitle", lit(title)),
+             ("fp:documentPublisher", lit(publisher)),
+             ("fp:documentPublishedDate", date(published)),
+             ("fp:documentQuote", quote(claim))]
+    if uri in docs and docs[uri] != pairs:
+        raise SystemExit(f"근거문서 URI 충돌: {uri}")
+    docs[uri] = pairs
+    return uri
 
 
 HEADER = """@prefix fp:   <{fp}> .
@@ -321,6 +361,7 @@ for r in bond.sort_values(_bond_key).itertuples(index=False):
 etf_kr = read("data/csv/PREF01N001_etf_kr_master_20260824.csv")
 etf_kr = etf_kr[etf_kr.pd_grp_no == "ETF"].sort_values("pd_itm_no")
 ETF_URI = {c: f"fpi:etfkr-{esc(c)}" for c in etf_kr.pd_itm_no}
+ETF_ROW = etf_kr.set_index("pd_itm_no")
 
 # LSEG 파생 replication은 '실물(액티브)'처럼 복제방식·운용전략 조합값이다. 복제방식만 떼어 쓴다.
 _etfen = read("data/enriched/etf_kr_enriched.csv")
@@ -335,12 +376,58 @@ theme = read("data/relations/etf_theme.csv").sort_values(["pd_itm_no", "theme"])
 fund = read("data/csv/PRFD01N001_fund_pub_master_20260824.csv").sort_values("itm_no")
 SAME = {k: v for k, v in zip(fund.ksd_itm_no, fund.itm_no) if k in ETF_URI}
 
+holding_documents, holding_doc, holding_name_conflicts = {}, {}, []
+for product_code, rows in hold.groupby("pd_itm_no", sort=False):
+    if product_code not in ETF_ROW.index:
+        raise SystemExit(f"편입관계 상품이 주최측 ETF master에 없음: {product_code}")
+    product = ETF_ROW.loc[product_code]
+    brand = product.pd_abrv_nm.split()[0]
+    if brand not in BRANDS:
+        raise SystemExit(f"지원하지 않는 편입 원천: {product.pd_abrv_nm}")
+    raw_path = path_of(brand, product.pd_itm_no_ma[1:])
+    meta_path = raw_path.with_name(raw_path.name + ".meta.json")
+    if not raw_path.is_file() or not meta_path.is_file():
+        raise SystemExit(f"편입 근거 원천 누락: {raw_path.relative_to(ROOT)}")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    as_of = rows.as_of.iloc[0]
+    date_tokens = {as_of, as_of.replace("-", ""), as_of.replace("-", ".")}
+    checks = {
+        "isin": meta.get("isin") == product_code,
+        "as_of": meta.get("as_of") == as_of and rows.as_of.eq(as_of).all(),
+        "source": meta.get("source") == BRANDS[brand]["source"] and rows.source.eq(brand).all(),
+        "url_date": any(x in meta.get("url", "") for x in date_tokens),
+    }
+    if not all(checks.values()):
+        raise SystemExit(f"편입 sidecar 충돌 {product_code}: {checks}")
+    name_conflict = meta.get("name") != product.pd_abrv_nm
+    if name_conflict:
+        holding_name_conflicts.append((product_code, meta.get("name"), product.pd_abrv_nm))
+    raw_rows = BRANDS[brand]["parse"](raw_path.read_bytes())
+    key = lambda code, name, weight: (str(code), str(name), number(weight))  # noqa: E731
+    raw_count = Counter(key(*x) for x in raw_rows)
+    relation_count = Counter(key(x.holding_code_raw, x.holding_name, x.weight)
+                             for x in rows.itertuples(index=False))
+    if raw_count != relation_count:
+        raise SystemExit(f"편입 raw exact match 실패 {product_code}: "
+                         f"raw={sum(raw_count.values())}, relation={sum(relation_count.values())}")
+    for code, name, weight in raw_rows:
+        claim = {"holding_code_raw": str(code), "holding_name": str(name),
+                 "weight": str(weight)}
+        if name_conflict:  # 주최측 명칭 우선, 외부 sidecar와의 충돌도 evidence에 보존
+            claim.update({"source_product_name": meta.get("name", ""),
+                          "organizer_product_name": product.pd_abrv_nm})
+        holding_doc[(product_code, key(code, name, weight))] = document(
+            holding_documents, raw_path, claim,
+            f"{product.pd_abrv_nm} 구성종목 현황 ({as_of})", meta["source"], as_of)
+
 holdings_by_etf, hold_rows = {}, []
 for r in hold.itertuples(index=False):
     uri = f"fpi:hold-{esc(r.pd_itm_no)}-{esc(r.holding_code_raw)}-{r.seq}"
     holdings_by_etf.setdefault(r.pd_itm_no, []).append(uri)
     hold_rows.append((uri, security(r.holding_code_raw, r.holding_code_type, r.holding_name),
-                      r.weight, r.as_of, r.source))
+                      r.weight, r.as_of, r.source,
+                      holding_doc[(r.pd_itm_no, (r.holding_code_raw, r.holding_name,
+                                                 number(r.weight)))]))
 themes_by_etf = theme.groupby("pd_itm_no").theme.apply(list).to_dict()
 
 d_kr = Doc("fp-instances-etf-kr — 국내ETF 1,202종 + 편입관계 47,016건 + 테마 5,646건",
@@ -377,10 +464,13 @@ for r in etf_kr.itertuples(index=False):
                                                  if k == r.pd_itm_no)))
     d_kr.add(ETF_URI[r.pd_itm_no], pairs)
 
-for uri, sec, weight, as_of, source in hold_rows:
+for uri, sec, weight, as_of, source, evidence in hold_rows:
     d_kr.add(uri, [("a", "fp:Holding"), ("fp:holdingSecurity", sec),
                    ("fp:weight", dec(weight) if weight else ""),  # 결측 798건은 트리플 생략
-                   ("fp:asOf", date(as_of)), ("fp:sourceId", lit(source))])
+                   ("fp:asOf", date(as_of)), ("fp:sourceId", lit(source)),
+                   ("fp:supportedBy", evidence)])
+for uri in sorted(holding_documents):
+    d_kr.add(uri, holding_documents[uri])
 
 # 테마 개체는 etf_kr.ttl에 이미 선언되어 있다. URI가 어긋나면 그래프가 끊기므로 즉시 실패시킨다.
 declared = set(re.findall(r"<(http://mafest\.ai/product#Theme_[^>]+)>", (OUT / "etf_kr.ttl").read_text("utf-8")))
@@ -429,7 +519,64 @@ for r in fund.itertuples(index=False):
     d_fund.add(f"fpi:fund-{esc(r.itm_no)}", pairs)
 
 # ── 5. 기업·증권·자회사 관계 ────────────────────────────────────────────────
-sub = read("data/relations/company_subsidiary.csv").sort_values(
+sub = read("data/relations/company_subsidiary.csv")
+
+
+def subsidiary_key(parent_code, parent_name, child_name, pct, purpose, as_of):
+    return (str(parent_code).zfill(8), " ".join(str(parent_name).split()),
+            " ".join(str(child_name).split()), number(pct),
+            " ".join(str(purpose).split()), as_of)
+
+
+subsidiary_documents, raw_subsidiary = {}, defaultdict(deque)
+governance = ROOT / "data/external/company_governance"
+for raw_path in sorted(governance.glob("dart_invst_*.json")):
+    if raw_path.name.endswith(".meta.json"):
+        continue
+    meta_path = raw_path.with_name(raw_path.name + ".meta.json")
+    if not meta_path.is_file():
+        raise SystemExit(f"DART sidecar 누락: {raw_path.relative_to(ROOT)}")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if meta.get("source") != "DART OpenAPI (opendart.fss.or.kr)" or meta.get("as_of") > CUTOFF:
+        raise SystemExit(f"DART sidecar 출처/cutoff 위반: {meta_path.relative_to(ROOT)}")
+    payload = json.loads(raw_path.read_text(encoding="utf-8"))
+    for raw in payload.get("list") or []:
+        receipt = str(raw.get("rcept_no", ""))
+        ymd = receipt[:8]
+        if len(ymd) != 8 or not ymd.isdigit():
+            raise SystemExit(f"DART 접수번호 형식 오류: {receipt!r}")
+        published = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}"
+        child_name = " ".join(str(raw.get("inv_prm", "")).split())
+        if norm(child_name) in {"합계", "소계", "계", "-", ""} or published > CUTOFF:
+            continue
+        parent_code = str(raw.get("corp_code", "")).zfill(8)
+        if parent_code != meta.get("corp_code"):
+            raise SystemExit(f"DART corp_code 충돌: {raw_path.relative_to(ROOT)}")
+        parent_name = " ".join(str(raw.get("corp_name", "")).split())
+        purpose = " ".join(str(raw.get("invstmnt_purps", "")).split())
+        pct = raw.get("trmend_blce_qota_rt", "")
+        claim = {"rcept_no": receipt, "inv_prm": str(raw.get("inv_prm", "")),
+                 "trmend_blce_qota_rt": str(pct),
+                 "invstmnt_purps": str(raw.get("invstmnt_purps", ""))}
+        evidence = document(
+            subsidiary_documents, raw_path, claim,
+            f"{parent_name} {meta.get('bsns_year', '')} 사업보고서 타법인 출자현황",
+            parent_name, published)
+        raw_subsidiary[subsidiary_key(parent_code, parent_name, child_name, pct,
+                                      purpose, published)].append(evidence)
+
+eligible = sub[sub.as_of <= CUTOFF]
+relation_count = Counter(subsidiary_key(
+    r.parent_corp_code, r.parent_name, r.child_name, r.ownership_pct,
+    r.invest_purpose, r.as_of) for r in eligible.itertuples(index=False))
+raw_count = Counter({k: len(v) for k, v in raw_subsidiary.items()})
+if relation_count != raw_count:
+    missing = sum((relation_count - raw_count).values())
+    extra = sum((raw_count - relation_count).values())
+    raise SystemExit(f"DART raw exact match 실패: relation={sum(relation_count.values())}, "
+                     f"raw={sum(raw_count.values())}, missing={missing}, extra={extra}")
+
+sub = sub.sort_values(
     ["parent_corp_code", "child_name_norm", "child_corp_code", "ownership_pct"], kind="stable")
 sub["seq"] = sub.groupby(["parent_corp_code", "child_name_norm"]).cumcount()  # 중복 공시 105건
 
@@ -438,7 +585,10 @@ for r in sub.itertuples(index=False):
     parent = company(r.parent_name, code=r.parent_corp_code)
     child = company(r.child_name, code=r.child_corp_code)
     uri = f"fpi:sub-{esc(r.parent_corp_code)}-{esc(r.child_name_norm)}-{r.seq}"
-    sub_rows.append((uri, parent, child, r.ownership_pct, r.as_of, r.source))
+    key = subsidiary_key(r.parent_corp_code, r.parent_name, r.child_name,
+                         r.ownership_pct, r.invest_purpose, r.as_of)
+    evidence = raw_subsidiary[key].popleft() if r.as_of <= CUTOFF else ""
+    sub_rows.append((uri, parent, child, r.ownership_pct, r.as_of, r.source, evidence))
 
 # 증권 → 발행기업 (해소표 우선, 없으면 상장 종목코드 직매칭)
 sec_company = {}
@@ -469,10 +619,13 @@ for uri in sorted(securities):
                    ("skos:altLabel", [lit(x) for x in names[1:]] if len(names) > 1 else ""),
                    ("fp:issuedByCompany", sec_company.get(uri, ""))])
 
-for uri, parent, child, pct, as_of, source in sorted(sub_rows):
+for uri, parent, child, pct, as_of, source, evidence in sorted(sub_rows):
     d_co.add(uri, [("a", "fp:SubsidiaryRelation"), ("fp:subsidiaryCompany", child),
                    ("fp:ownershipPct", dec(pct) if pct else ""),  # 결측 2,378건은 트리플 생략
-                   ("fp:asOf", date(as_of)), ("fp:sourceId", lit(source))])
+                   ("fp:asOf", date(as_of)), ("fp:sourceId", lit(source)),
+                   ("fp:supportedBy", evidence)])
+for uri in sorted(subsidiary_documents):
+    d_co.add(uri, subsidiary_documents[uri])
 # 모회사 → 관계 노드. 기업 블록과 분리해 두어야 정렬이 결정적이다.
 by_parent = {}
 for uri, parent, *_ in sub_rows:
@@ -493,6 +646,7 @@ print(f"  {'합계':30s} {'':8s} {total:9,d}")
 print(f"기업 {len(companies):,}종(고유번호 매칭 {sum(1 for e in companies.values() if e['code']):,}) / "
       f"증권 {len(securities):,}종(발행기업 링크 {len(sec_company):,}) / "
       f"편입관계 {len(hold_rows):,} / 자회사관계 {len(sub_rows):,} / 동일상품 {len(SAME)}")
+print(f"편입 sidecar 상품명 충돌 {len(holding_name_conflicts):,}종(주최측 명칭 사용)")
 
 # ── 코드리스트 배선 보고 ────────────────────────────────────────────────────
 # 0건인 축은 배선이 끊긴 것이다. 미매핑은 조용히 넘기지 않고 전부 센다.

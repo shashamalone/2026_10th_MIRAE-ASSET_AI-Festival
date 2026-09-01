@@ -50,6 +50,21 @@ def validate_query(question: str, grounded: dict) -> dict | None:
     return None
 
 
+def validate_graph_request(question: str, frame: dict) -> dict | None:
+    """Graph route 공통 cutoff·seed 검사. path 타입 검사는 Graph compiler가 맡는다."""
+    _, rules, _ = metadata()
+    cutoff = date.fromisoformat(rules["data_cutoff"])
+    explicit_dates = [date.fromisoformat(x) for x in
+                      re.findall(r"(?<!\d)(20\d{2}-\d{2}-\d{2})(?!\d)", question)]
+    if any(x > cutoff for x in explicit_dates):
+        return _result("ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF",
+                       f"요청 기준일이 데이터 cutoff {cutoff.isoformat()} 이후입니다.",
+                       [{"as_of": cutoff.isoformat(), "rule": "as_of <= data_cutoff"}])
+    if not any(x.get("text") for x in frame.get("entities") or []):
+        return _result("ABSTAIN_ENTITY_NOT_FOUND", "Graph 탐색을 시작할 seed entity가 없습니다.")
+    return None
+
+
 def validate_entity_count(count: int, entity: dict) -> dict | None:
     if count:
         return None

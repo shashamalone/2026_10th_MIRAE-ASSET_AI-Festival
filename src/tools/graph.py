@@ -144,6 +144,95 @@ def _result(rows, status=None, **extra):
     return out
 
 
+# 자연어 해석기는 이 이름만 반환하고, 실제 SPARQL은 여기 등록된 함수가
+# 생성한다.  따라서 LLM이 임의의 함수나 Python 코드를 실행할 수 없다.
+_TEMPLATE_NAMES = {
+    "product_info": "product_info",
+    "product_classifications": "product_classifications",
+    "company_info": "company_info",
+    "subsidiaries": "subsidiaries",
+    "product_holdings": "product_holdings",
+    "etfs_holding_security": "etfs_holding_security",
+    "subsidiary_holding_etfs": "subsidiary_holding_etfs",
+    "bond_info": "bond_info",
+    "product_info_by_code": "product_info_by_code",
+    "etfs_holding_security_like": "etfs_holding_security_like",
+    "subsidiary_holding_etf_codes": "subsidiary_holding_etf_codes",
+}
+
+
+def _validate_generated_query(query: str) -> str:
+    """Text2SPARQL 산출물을 실행 전에 검증한다.
+
+    자유 생성 경로도 sparql()의 읽기 전용 계약을 공유한다. 알려진 prefix만
+    허용하고, PREFIX 뒤의 실제 질의가 SELECT/ASK인지 확인한다.
+    """
+    if not isinstance(query, str) or not query.strip():
+        raise ValueError("생성된 Graph query가 비어 있습니다")
+
+    allowed_prefixes = {"fp", "rdfs", "rdf", "skos", "xsd"}
+    prefix_re = re.compile(
+        r"(?is)^\s*PREFIX\s+([A-Za-z_]\w*)\s*:\s*<[^>]+>\s*"
+    )
+    rest = query
+    while True:
+        match = prefix_re.match(rest)
+        if not match:
+            break
+        if match.group(1) not in allowed_prefixes:
+            raise ValueError(f"허용하지 않는 SPARQL prefix: {match.group(1)}")
+        rest = rest[match.end():]
+
+    kind = rest.lstrip().split(None, 1)[0].upper() if rest.strip() else ""
+    if kind not in {"SELECT", "ASK"}:
+        raise ValueError("Text2SPARQL은 SELECT/ASK만 생성해야 합니다")
+    return query
+
+
+def hybrid_search(template: str | None = None, params: dict | None = None,
+                  generated_query: str | None = None) -> dict:
+    """템플릿 우선, 미지원/무결과 시 제한된 Text2SPARQL fallback.
+
+    ``template``은 ``_TEMPLATE_NAMES``에 등록된 함수명만 받을 수 있다.
+    Text2SPARQL은 호출자가 LLM으로 생성해 전달하되, 실행 직전에 동일한
+    읽기 전용 검증을 받는다. 두 경로 모두 결과 형식을 ``dict``로 통일한다.
+    """
+    params = dict(params or {})
+    template_error = None
+
+    if template:
+        function_name = _TEMPLATE_NAMES.get(template)
+        if function_name is None:
+            template_error = f"지원하지 않는 Graph 템플릿: {template}"
+        else:
+            try:
+                result = globals()[function_name](**params)
+                if result.get("rows"):
+                    result["retrieval_mode"] = "template"
+                    result["fallback_used"] = False
+                    return result
+                template_error = "템플릿 조회 결과가 없습니다"
+            except Exception as exc:  # fallback 경로에서 생성 질의를 시도한다.
+                template_error = f"템플릿 실행 실패: {type(exc).__name__}: {exc}"
+
+    if generated_query is not None:
+        try:
+            query = _validate_generated_query(generated_query)
+            raw = sparql(query)
+            rows = ([{"ask": raw}] if isinstance(raw, bool) else raw)
+            return _result(rows, retrieval_mode="text2sparql",
+                           fallback_used=True, template_error=template_error)
+        except Exception as exc:
+            return _result([], status="abstain_invalid_graph_query",
+                           retrieval_mode="text2sparql", fallback_used=True,
+                           template_error=template_error,
+                           query_error=f"{type(exc).__name__}: {exc}")
+
+    return _result([], status="abstain_unsupported_graph_query",
+                   retrieval_mode="none", fallback_used=False,
+                   template_error=template_error)
+
+
 def product_info(short_name: str) -> dict:
     """G01/G02: 상품 URI·정식명·코드·투자지역."""
     rows = _q(f"""
