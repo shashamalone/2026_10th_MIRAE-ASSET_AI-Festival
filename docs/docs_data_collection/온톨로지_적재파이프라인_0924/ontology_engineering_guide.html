@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금융상품 온톨로지 엔지니어링 정의서</title>
+  <style>
+    :root{--ink:#172033;--muted:#5d687a;--line:#dbe2ec;--blue:#1456a0;--blue-soft:#edf5ff;--green:#16734b;--green-soft:#edf9f3;--amber:#946200;--amber-soft:#fff8e8;--red:#a32727;--red-soft:#fff1f1;--paper:#fff;--canvas:#f5f7fa;--code:#f1f3f6}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:var(--canvas);color:var(--ink);font-family:"Pretendard","Noto Sans KR","Malgun Gothic",Arial,sans-serif;line-height:1.68}
+    .wrap{max-width:1180px;margin:0 auto;padding:0 28px}.hero{background:#fff;border-bottom:1px solid var(--line);padding:58px 0 42px}.eyebrow{color:var(--blue);font-size:13px;font-weight:800;letter-spacing:.08em}.hero h1{font-size:38px;line-height:1.25;margin:12px 0 14px;letter-spacing:-.04em}.hero p{max-width:850px;color:var(--muted);font-size:16px;margin:0}.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.tag{display:inline-block;border:1px solid #c9d8eb;border-radius:999px;background:var(--blue-soft);color:var(--blue);padding:4px 11px;font-size:12px;font-weight:700}
+    .layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:34px;align-items:start}.toc{position:sticky;top:18px;margin-top:30px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}.toc h2{font-size:14px;margin:0 0 10px}.toc ol{padding-left:20px;margin:0}.toc li{margin:5px 0;font-size:13px}.toc a{color:var(--muted);text-decoration:none}.toc a:hover{color:var(--blue)}main{padding:30px 0 70px}.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:30px 32px;margin-bottom:22px;box-shadow:0 2px 8px rgba(30,50,80,.03)}h2{font-size:25px;line-height:1.3;border-bottom:2px solid #e8eef6;padding-bottom:12px;margin:0 0 24px;letter-spacing:-.03em}h3{font-size:18px;margin:26px 0 10px;color:#1e3d68}h4{font-size:15px;margin:18px 0 6px}p{margin:8px 0}.lead{font-size:17px;color:#33445d}.note,.good,.warn,.danger{border-left:4px solid;padding:13px 16px;border-radius:7px;margin:16px 0}.note{border-color:var(--blue);background:var(--blue-soft)}.good{border-color:var(--green);background:var(--green-soft)}.warn{border-color:#d89b19;background:var(--amber-soft)}.danger{border-color:var(--red);background:var(--red-soft)}
+    table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:13px}th,td{border:1px solid var(--line);padding:9px 10px;vertical-align:top;text-align:left}th{background:#f1f5fa;color:#243c5c;font-weight:800}tr:nth-child(even) td{background:#fbfcfe}.small{font-size:12px;color:var(--muted)}code{background:var(--code);border:1px solid #e0e4ea;border-radius:4px;padding:1px 4px;color:#263c59;font-family:Consolas,"Courier New",monospace;font-size:.92em}pre{overflow:auto;background:#f4f6f8;border:1px solid #dfe4ea;border-radius:8px;padding:15px;font-size:12px;line-height:1.55;color:#23324a}a{color:var(--blue)}ul,ol{padding-left:22px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{border:1px solid var(--line);border-radius:9px;padding:14px;background:#fcfdff}.card h4{margin:0 0 5px;color:#1d4f8d}.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0}.node{padding:9px 13px;border:1px solid #b9cee7;border-radius:8px;background:#f5f9ff;color:#174d89;font-weight:700;font-size:13px}.arrow{color:#718198;font-weight:800}.footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:22px;margin-top:30px}
+    @media(max-width:850px){.layout{display:block}.toc{position:static}.hero h1{font-size:30px}.section{padding:23px 20px}.grid{grid-template-columns:1fr}.wrap{padding:0 16px}}
+  </style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">2026 MIRAE ASSET AI FESTIVAL · ONTOLOGY ENGINEERING</div>
+  <h1>금융상품 온톨로지 엔지니어링 정의서</h1>
+  <p>주최측 2026-08-24 배포본을 기준으로 구축된 TBox, 자동 생성 ABox, 관계·근거문서 모델, 자연어 매핑과 검증 계약을 설명한다. 이 문서는 실제 저장소의 TTL·빌더·검증기와 <code>docs/docs_data_collection/온톨로지</code>의 설계 기록을 함께 반영한다.</p>
+  <div class="meta"><span class="tag">기준일 2026-08-24</span><span class="tag">Namespace fp / fpi</span><span class="tag">TBox 5개 TTL</span><span class="tag">ABox 5개 TTL</span><span class="tag">흰색 배경</span></div>
+</div></header>
+<div class="wrap layout">
+<aside class="toc"><h2>목차</h2><ol>
+  <li><a href="#s1">TBox 개요</a></li><li><a href="#s2">Class 설계</a></li><li><a href="#s3">Object Property 설계</a></li><li><a href="#s4">Datatype Property 설계</a></li><li><a href="#s5">Graph Relation Pattern</a></li><li><a href="#s6">Semantic Definition</a></li><li><a href="#s7">자연어–Ontology Term Mapping</a></li><li><a href="#s8">URI 및 Entity Identifier</a></li><li><a href="#s9">Source → Ontology Mapping</a></li><li><a href="#s10">Ontology Validation</a></li><li><a href="#s11">대표 Mapping 사례</a></li>
+</ol></aside>
+<main>
+<section class="section" id="s1"><h2>1. TBox 개요</h2>
+<h3>1.1 구축 목적 및 범위</h3>
+<p class="lead">TBox는 금융상품 질의에서 상품 유형·관계 방향·허용된 분류·근거 요건을 고정하는 의미 모델이다. 숫자 계산은 RDB가 수행하고, 그래프는 다중 홉 관계와 domain/range 제약을 담당한다.</p>
+<div class="note"><strong>구현 구분:</strong> TBox는 현재 <code>build_graph.py</code>가 생성하지 않는다. 사람이 설계한 <code>ontology/*.ttl</code>이 TBox이고, <code>build_ontology_instances.py</code>가 ABox를 생성하며, <code>build_graph.py</code>가 TBox+ABox를 Oxigraph에 적재한다.</div>
+<p>범위는 국내채권, 국내 ETF, 해외 ETF, 국내 공모펀드와 이들 사이의 기관·증권·테마·편입·자회사·근거문서 관계다. 룩어헤드 값, 전량 dummy 값, 확인되지 않은 분류는 그래프에서 제외하거나 미매핑으로 남긴다.</p>
+<h3>1.2 5개 TTL 구성</h3>
+<table><thead><tr><th>파일</th><th>역할</th><th>주요 범위</th></tr></thead><tbody>
+<tr><td><a href="../ontology/common.ttl">common.ttl</a></td><td>공통 상위 TBox</td><td>Product, Security, Organization, Document, Holding, 공통 분류·관계·provenance</td></tr>
+<tr><td><a href="../ontology/bond_kr.ttl">bond_kr.ttl</a></td><td>국내채권 도메인</td><td>채권 유형, 발행사, 만기, 쿠폰, 담보, 신용등급</td></tr>
+<tr><td><a href="../ontology/etf_kr.ttl">etf_kr.ttl</a></td><td>국내 ETF/ETN 도메인</td><td>ETF·ETN 분리, 레버리지, 운용전략, 복제방식, 테마</td></tr>
+<tr><td><a href="../ontology/etf_gl.ttl">etf_gl.ttl</a></td><td>해외 ETF/ETN 도메인</td><td>티커, ISIN, CIK, 투자전략, 인버스, 설정일</td></tr>
+<tr><td><a href="../ontology/fund_pub.ttl">fund_pub.ttl</a></td><td>공모펀드 도메인</td><td>펀드 유형, 클래스, 환헤지, 판매상태, 투자자격, 벤치마크</td></tr>
+</tbody></table>
+<h3>1.3 Namespace 및 Prefix</h3>
+<pre>@prefix fp:  &lt;http://mafest.ai/product#&gt; .
+@prefix fpi: &lt;http://mafest.ai/instance/&gt; .
+@prefix rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .
+@prefix owl: &lt;http://www.w3.org/2002/07/owl#&gt; .
+@prefix xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt; .
+@prefix skos:&lt;http://www.w3.org/2004/02/skos/core#&gt; .</pre>
+<p><code>fp:</code>는 클래스·property·통제어휘를, <code>fpi:</code>는 실제 상품·기업·관계·문서 인스턴스를 식별한다. 각 도메인 파일은 <code>owl:imports &lt;http://mafest.ai/ontology/fp-common&gt;</code>를 선언한다.</p>
+</section>
+
+<section class="section" id="s2"><h2>2. Class 설계</h2>
+<h3>2.1 Class Hierarchy</h3>
+<div class="flow"><span class="node">Product</span><span class="arrow">├─</span><span class="node">Bond</span><span class="arrow">├─</span><span class="node">ETF</span><span class="arrow">├─</span><span class="node">ETN</span><span class="arrow">└─</span><span class="node">PublicFund</span></div>
+<div class="flow"><span class="node">Organization</span><span class="arrow">→</span><span class="node">Company</span><span class="arrow">/</span><span class="node">Issuer</span><span class="arrow">/</span><span class="node">AssetManager</span><span class="arrow">/</span><span class="node">Custodian</span></div>
+<p><code>Bond</code>와 <code>ETF</code>는 상품인 동시에 편입 가능한 <code>Security</code>이고, <code>PublicFund</code>는 Product의 하위다. <code>ShareClass</code>는 PublicFund의 하위로서 개별 종목번호를 가진 판매 단위를 표현한다.</p>
+<h3>2.2 Class 정의</h3>
+<table><thead><tr><th>분류</th><th>Class</th><th>의미와 설계 기준</th></tr></thead><tbody>
+<tr><td>상품</td><td>Product, Bond, ETF, ETN, PublicFund</td><td>상품 유형을 분리한다. 국내 ETF 원천의 <code>pd_grp_no='ETF'</code>만 ETF로 적재하고 ETN은 별도 분리한다.</td></tr>
+<tr><td>기관</td><td>Organization, Company, Issuer, AssetManager, Custodian</td><td>기업·채권 발행기관·운용사·수탁사를 역할별로 구분한다.</td></tr>
+<tr><td>관계/근거</td><td>Holding, SubsidiaryRelation, Document, MetricSnapshot</td><td>시점·비중·소유비율·근거를 포함해야 하는 사실을 중간 노드로 표현한다.</td></tr>
+<tr><td>통제어휘</td><td>CreditRating, RatingStatus, RiskGrade, AssetType, InvestmentRegion, Currency, Theme, Index</td><td>문자열 비교 대신 URI·label·rank·altLabel을 이용해 의미를 정규화한다.</td></tr>
+</tbody></table>
+<h3>2.3 Instance 생성 기준</h3>
+<ul><li>국내채권: 원천 복합키를 보존하되 상품 URI는 <code>pd_no</code> 기반으로 생성한다.</li><li>국내 ETF: <code>pd_grp_no='ETF'</code>만 적재하고 오염키 <code>KR</code>은 제외한다.</li><li>해외 ETF/ETN: <code>pd_grp_no</code>로 유형을 나누어 동일 원천에서 생성한다.</li><li>펀드: <code>itm_no</code>가 단독 상품키다. 공모는 PublicFund, 사모·구분 결측은 Product로 선언한다.</li><li>기업: 모든 기업을 무조건 그래프로 만들지 않고 편입·발행·자회사 관계에서 참조되는 기업을 생성한다.</li></ul>
+</section>
+
+<section class="section" id="s3"><h2>3. Object Property 설계 ★</h2>
+<h3>3.1 Domain–Predicate–Range</h3>
+<table><thead><tr><th>Domain</th><th>Predicate</th><th>Range</th><th>핵심 조건</th></tr></thead><tbody>
+<tr><td>Bond</td><td><code>issuedBy</code></td><td>Issuer</td><td>채권 전용. ETF가 사용하면 domain 위반</td></tr>
+<tr><td>ETF ∪ ETN ∪ PublicFund</td><td><code>managedBy</code></td><td>AssetManager</td><td>채권에는 적용하지 않음</td></tr>
+<tr><td>ETF ∪ PublicFund</td><td><code>hasHolding</code></td><td>Holding</td><td>ETN 제외. 상품→증권 직결 금지</td></tr>
+<tr><td>Holding</td><td><code>holdingSecurity</code></td><td>Security</td><td>편입관계 노드에서만 사용</td></tr>
+<tr><td>Security</td><td><code>issuedByCompany</code></td><td>Company</td><td>편입증권의 발행기업 연결</td></tr>
+<tr><td>Product ∪ Company</td><td><code>relatedToTheme</code></td><td>Theme</td><td>현재는 국내 ETF 테마 연결 중심</td></tr>
+<tr><td>Holding ∪ SubsidiaryRelation ∪ MetricSnapshot ∪ Risk</td><td><code>supportedBy</code></td><td>Document</td><td>관계·주장에 근거문서 필요</td></tr>
+<tr><td>Product</td><td><code>sameVehicleAs</code></td><td>Product</td><td>47종 동일상품 후보. owl:sameAs가 아님</td></tr>
+</tbody></table>
+<h3>3.2 관계 방향</h3>
+<p>관계는 질의가 시작되는 주체에서 의미상 대상 방향으로 정의한다. 예를 들어 <code>ETF → hasHolding → Holding → holdingSecurity → Security → issuedByCompany → Company</code>는 “ETF가 어떤 기업의 증권을 편입했는가”를 표현한다.</p>
+<h3>3.3 역관계</h3>
+<p><code>sameVehicleAs</code>는 <code>owl:SymmetricProperty</code>로 선언했다. 다만 현재 Oxigraph 런타임은 자동 추론에 의존하지 않으므로 양방향 탐색이 필요한 경우 양쪽 triple을 직접 생성하거나 질의에서 양방향을 명시해야 한다. <code>subsidiaryOf</code>는 전이성으로 선언하지 않는다. 지분율과 투자목적이 관계마다 달라 손자회사 탐색은 SPARQL 경로 탐색으로 수행한다.</p>
+<h3>3.4 관계 사용 조건</h3>
+<div class="warn">관계가 존재한다는 것과 답변 가능한 근거가 있다는 것은 다르다. <code>supportedBy</code>·<code>asOf</code>·원천 source를 확인하고, 기준일을 모르면 날짜를 추정하지 않는다.</div>
+</section>
+
+<section class="section" id="s4"><h2>4. Datatype Property 설계</h2>
+<h3>4.1 Domain</h3><p>Datatype property는 가능한 주체를 좁게 선언한다. 예를 들어 <code>maturityDate</code>는 Bond, <code>ticker</code>는 ETF/ETN, <code>saleStatus</code>는 PublicFund에 귀속한다. 여러 도메인에 공통인 속성은 OWL anonymous union으로 명시한다.</p>
+<h3>4.2 Datatype</h3>
+<table><thead><tr><th>종류</th><th>예시</th><th>표현</th></tr></thead><tbody><tr><td>문자열</td><td>productName, ticker, organizationName</td><td><code>xsd:string</code></td></tr><tr><td>날짜</td><td>issueDate, maturityDate, asOf</td><td><code>xsd:date</code></td></tr><tr><td>수치</td><td>weight, couponRate, ownershipPct</td><td><code>xsd:decimal</code></td></tr><tr><td>논리값</td><td>isInverse, isSellable, currencyHedged</td><td><code>xsd:boolean</code></td></tr><tr><td>순서값</td><td>ratingRank</td><td><code>xsd:integer</code></td></tr></tbody></table>
+<h3>4.3 값 형식 및 제약</h3>
+<ul><li>모든 <code>owl:DatatypeProperty</code>에는 <code>fp:sourceTable</code>과 <code>fp:sourceColumn</code>을 기록한다.</li><li>파생값은 <code>derived:파일명.컬럼명</code>으로 원본값과 구분한다.</li><li>결측·sentinel은 실제 의미에 따라 triple을 생략하거나 상태값으로 변환한다. 예: 국채 등급 결측은 <code>UnratedByDesign</code>.</li><li>전량 dummy인 괴리율·추적오차 등은 property 자체를 온톨로지에 올리지 않는다.</li><li><code>weight</code>·<code>ownershipPct</code> 결측은 임의의 0으로 치환하지 않고 triple을 생략한다.</li></ul>
+</section>
+
+<section class="section" id="s5"><h2>5. Graph Relation Pattern ★</h2>
+<h3>5.1 기업-자회사</h3><pre>?parent a fp:Company ; fp:hasSubsidiary ?rel .
+?rel a fp:SubsidiaryRelation ; fp:subsidiaryCompany ?child ;
+     fp:ownershipPct ?pct ; fp:asOf ?date ; fp:supportedBy ?doc .</pre>
+<p>실제 관계는 DART 원천 및 접수일을 이용해 생성하며, 기준일 초과 관계는 적재 대상에서 제외한다. 단순히 “출자”가 있다고 해서 모두 지배 자회사라고 해석하지 않는다.</p>
+<h3>5.2 ETF-Holding-Security</h3><pre>?etf a fp:ETF ; fp:hasHolding ?holding .
+?holding a fp:Holding ; fp:holdingSecurity ?security ;
+         fp:weight ?weight ; fp:asOf ?asOf ; fp:supportedBy ?doc .</pre>
+<p>편입비중·기준일·문서를 Holding 노드에 함께 둔다. ETN에는 <code>hasHolding</code>을 연결하지 않는다.</p>
+<h3>5.3 상품-발행사</h3><p>채권은 <code>Bond → issuedBy → Issuer</code>이고, 편입증권은 <code>Security → issuedByCompany → Company</code>다. ETF의 운용사를 발행사 관계로 잘못 연결하지 않도록 두 관계를 분리한다.</p>
+<h3>5.4 상품-테마</h3><p><code>Product → relatedToTheme → Theme</code>를 사용한다. 현재 테마는 국내 ETF 1,099종·176종 테마·5,646 관계가 중심이며 <code>etf_theme.as_of</code>가 공란이므로 기간 질의에 날짜 근거로 사용하지 않는다.</p>
+<h3>5.5 관계-근거문서</h3><p>Holding·SubsidiaryRelation 등 사실 노드는 하나의 <code>Document</code>에 연결하며 문서명·발행기관·발행일·인용문을 필수로 검증한다. 근거문서에 함께 언급되었다는 사실만으로 관계를 새로 추론하지 않는다.</p>
+</section>
+
+<section class="section" id="s6"><h2>6. Semantic Definition ★</h2>
+<h3>6.1 Class 의미</h3><p>Class는 원천 컬럼명이 아니라 질의에서 구분되어야 하는 금융상품·기관·관계·분류 개념이다. 예컨대 ETN은 ETF 원천 파일에 함께 들어 있어도 편입종목 개념이 없으므로 별도 Class로 분리한다.</p>
+<h3>6.2 Property 의미</h3><p>Property의 comment에는 적용 대상, 원천 컬럼, 결측·sentinel 처리, 답변 가능성에 영향을 주는 규칙을 기록한다. 이 comment와 label은 schema grounding 및 자연어 term retrieval의 입력이다.</p>
+<h3>6.3 포함/제외 기준</h3>
+<div class="grid"><div class="card"><h4>포함</h4><p>질의 필터·조인·관계 탐색에 직접 필요한 식별자, 분류, 수치, 기준일, 근거 속성.</p></div><div class="card"><h4>제외</h4><p>전량 dummy, 의미 미확정 코드, 룩어헤드 값, 근거 없는 추정 매핑, RDB가 더 정확히 처리하는 파생 플래그.</p></div></div>
+<p>미매핑은 조용히 폐기하지 않고 builder가 값·건수를 출력한다. 현재 결정 대기 대표 사례는 레버리지 ±0.5/±1.5, 채권 만기 미상, 지방채 분류, 해외 ETF 국가→지역 매핑이다.</p>
+</section>
+
+<section class="section" id="s7"><h2>7. 자연어–Ontology Term Mapping ★</h2>
+<h3>7.1 Class 동의어</h3><table><thead><tr><th>자연어</th><th>Class 후보</th><th>처리</th></tr></thead><tbody><tr><td>채권·회사채·국채</td><td>Bond, CorporateBond, GovernmentBond</td><td>하위 클래스와 원천 분류를 함께 확인</td></tr><tr><td>ETF·상장지수펀드</td><td>ETF</td><td>국내는 pd_grp_no로 ETN 제거</td></tr><tr><td>펀드·공모펀드</td><td>PublicFund</td><td>prvo_pbff_desc='공모' 조건</td></tr><tr><td>기업·회사·모회사·자회사</td><td>Company</td><td>corpCode 우선, 이름은 별칭·정규화 보조</td></tr></tbody></table>
+<h3>7.2 Property 동의어</h3><table><thead><tr><th>질의 표현</th><th>Ontology term</th></tr></thead><tbody><tr><td>발행사·발행기업</td><td>Bond: <code>issuedBy</code> / Security: <code>issuedByCompany</code></td></tr><tr><td>운용사·관리회사</td><td><code>managedBy</code></td></tr><tr><td>구성종목·편입종목·보유종목</td><td><code>hasHolding</code> → <code>holdingSecurity</code></td></tr><tr><td>자회사·출자관계</td><td><code>hasSubsidiary</code> → <code>SubsidiaryRelation</code></td></tr><tr><td>관련 테마·테마 ETF</td><td><code>relatedToTheme</code></td></tr></tbody></table>
+<h3>7.3 Taxonomy 표현</h3><p>“AA- 이상”은 ratingRank 1~4, “AAAA”는 개체 부재, “미평가 국채”는 RatingStatus=UnratedByDesign으로 해석한다. “국내 ETF”는 ETF class이면서 국내 ETF 원천에 속하는 URI 집합으로 제한한다. 근사 매핑은 답변 근거를 만들기 때문에 사용하지 않는다.</p>
+<h3>7.4 Query 표현 매핑</h3><pre>질문: 에코프로 자회사가 편입된 ETF는?
+→ Company(에코프로)
+→ hasSubsidiary / SubsidiaryRelation
+→ subsidiaryCompany
+→ issuedByCompany
+→ holdingSecurity / hasHolding
+→ ETF
+→ 결과와 각 관계의 asOf·source·Document 반환</pre>
+<p>실행 시 <code>src/tools/graph_schema.py</code>가 질문에서 seed class를 고르고, 임베딩 인덱스가 없으면 lexical fallback을 사용해 허용된 schema fragment를 만든다.</p>
+</section>
+
+<section class="section" id="s8"><h2>8. URI 및 Entity Identifier</h2>
+<h3>8.1 URI 생성 규칙</h3><table><thead><tr><th>엔티티</th><th>URI 패턴</th></tr></thead><tbody><tr><td>국내채권</td><td><code>fpi:bond-{pd_no}</code></td></tr><tr><td>국내 ETF</td><td><code>fpi:etfkr-{pd_itm_no}</code></td></tr><tr><td>해외 ETF/ETN</td><td><code>fpi:etfgl-{pd_itm_no}</code></td></tr><tr><td>펀드</td><td><code>fpi:fund-{itm_no}</code></td></tr><tr><td>기업</td><td><code>fpi:corp-{corp_code}</code>, 미매칭 시 정규화명 기반</td></tr><tr><td>증권</td><td><code>fpi:sec-{정규화 코드}</code></td></tr><tr><td>편입/자회사 관계</td><td><code>fpi:hold-...</code> / <code>fpi:sub-...</code></td></tr></tbody></table>
+<h3>8.2 Canonical ID</h3><p>RDB 원천키를 canonical ID로 사용한다. 채권 물리 PK는 <code>(pd_no,pd_exg_mkt,info_seq)</code> 전체를 보존하며, 펀드는 <code>itm_no</code> 단독키다. 기업은 DART <code>corp_code</code>가 최우선 식별자다.</p>
+<h3>8.3 Entity 동일성 기준</h3><ul><li>동일 상품 추정은 이름 유사도가 아니라 검증된 식별자 교집합으로 판정한다.</li><li>펀드 KSD code와 국내 ETF pd_itm_no가 일치하는 47종은 <code>sameVehicleAs</code>로 연결하되 서로 다른 URI를 유지한다.</li><li>기업명은 법인격·한글 음차를 정규화하고 DART code가 있으면 code 기반 노드를 사용한다.</li><li>동일 코드가 없는 증권은 원천 코드·종목명·코드 유형을 함께 보존하며 불확실한 병합을 피한다.</li></ul>
+</section>
+
+<section class="section" id="s9"><h2>9. Source → Ontology Mapping ★</h2>
+<h3>9.1 원천 데이터별 Mapping</h3><table><thead><tr><th>원천</th><th>변환 계층</th><th>그래프 대상</th></tr></thead><tbody><tr><td>PRBD01N001</td><td>주최측 raw + bond enrichment</td><td>Bond 인스턴스·등급·만기·발행사</td></tr><tr><td>PREF01N001</td><td>ETF/ETN 필터 + ETF enrichment</td><td>국내 ETF, 테마, Holding</td></tr><tr><td>PREF02N001</td><td>pd_grp_no 분리</td><td>해외 ETF/ETN</td></tr><tr><td>PRFD01N001</td><td>itm_no 원본 직접 사용</td><td>공모 PublicFund, 사모 Product</td></tr><tr><td>DART/KIND 및 관계 CSV</td><td>기업명·코드 정규화</td><td>Company, Security, SubsidiaryRelation</td></tr></tbody></table>
+<h3>9.2 Column → Property</h3><p>각 datatype property에 source annotation을 기록한다.</p><table><thead><tr><th>Property</th><th>Source table</th><th>Source column</th></tr></thead><tbody><tr><td><code>issuedBy</code></td><td>PRBD01N001</td><td>pd_pbcm</td></tr><tr><td><code>hasMaturityClass</code></td><td>derived:bond_kr_enriched</td><td>maturity_bucket</td></tr><tr><td><code>hasRiskGrade</code></td><td>PRBD01N001 / PREF01N001 / PRFD01N001</td><td>도메인별 risk code</td></tr><tr><td><code>relatedToTheme</code></td><td>derived:etf_theme</td><td>theme</td></tr><tr><td><code>weight</code></td><td>data/relations/etf_holding</td><td>weight</td></tr></tbody></table>
+<h3>9.3 FK/ID → URI</h3><p>상품 foreign key는 정규화된 상품 URI로, holding code는 Security URI로, DART corp_code는 Company URI로 변환한다. 채권은 복합키로 RDB join을 수행하고, URI 생성 시 상품 식별자와 관계의 sequence를 분리한다.</p>
+<h3>9.4 변환·정규화 규칙</h3><ul><li>URI에 사용할 수 없는 문자는 UTF-8 percent encoding, 한글은 가독성을 위해 유지한다.</li><li>기업명에서 <code>(주)</code>, <code>㈜</code>, 공백 등을 제거하고 <code>에스케이→SK</code>, <code>엘지→LG</code> 등의 alias를 적용한다.</li><li>원천 sentinel은 명시적으로 NULL·상태·적재 제외로 구분한다.</li><li>주최측 명칭과 외부 명칭이 충돌하면 주최측을 표시명으로 유지하고 충돌을 evidence에 남긴다.</li><li>builder는 입력 순서를 정렬해 결정적 TTL을 생성하며 매핑 실패 건수를 출력한다.</li></ul>
+</section>
+
+<section class="section" id="s10"><h2>10. Ontology Validation</h2>
+<h3>10.1 Domain/Range</h3><p><a href="../script/validate_ontology.py">validate_ontology.py</a>가 모든 Object/Datatype property의 domain·range 존재 여부와 ABox의 실제 주어·목적어 타입을 검사한다. subclass closure와 unionOf를 확장해 검사하며, ETF에 Bond 전용 <code>issuedBy</code>를 붙이는 오류를 차단한다.</p>
+<h3>10.2 Cardinality</h3><p>현재 TBox에 전면적인 OWL cardinality restriction이나 SHACL shape를 두지는 않았다. 대신 관계별 계약을 validator에 구현한다. 예: cutoff 내 Holding/SubsidiaryRelation은 정확히 하나의 supportedBy 문서를 가져야 한다.</p>
+<h3>10.3 필수 속성</h3><ul><li>모든 TBox entity: <code>rdfs:label</code></li><li>모든 typed property: <code>rdfs:domain</code>, <code>rdfs:range</code></li><li>모든 datatype property: <code>fp:sourceTable</code>, <code>fp:sourceColumn</code></li><li>관계 evidence 문서: type, title, publisher, published date, quote</li><li>관계 노드: 관계별 asOf·source·supportedBy 계약</li></ul>
+<h3>10.4 관계 방향</h3><p>validator는 Holding, SubsidiaryRelation의 필수 경로와 대표 spot check를 검증한다. 대표 경로는 <code>Company → SubsidiaryRelation → Company → Security → Holding → ETF</code>다.</p>
+<h3>10.5 SHACL/Validator 규칙</h3><div class="good"><strong>현재 구현:</strong> SHACL(pySHACL)이 아니라 Python 검사와 Oxigraph SPARQL ASK/SELECT를 사용한다. 설계 기록에서도 검증 항목이 domain/range·등급·출처·cutoff 중심이어서 SPARQL validator를 선택했다.</div><table><thead><tr><th>검증 대상</th><th>검사 방식</th></tr></thead><tbody><tr><td>Turtle 문법·imports</td><td>rdflib parse + owl:imports 확인</td></tr><tr><td>스키마 완결성</td><td>class/property/label/domain/range/source annotation</td></tr><tr><td>분류 회귀</td><td>ratingRank 1~19, AAAA 부재, Theme 176종</td></tr><tr><td>ABox 행수</td><td>CSV 행수와 RDF 개체·관계 수 대조</td></tr><tr><td>provenance/cutoff</td><td>supportedBy 문서 필수 속성·기준일 검사</td></tr><tr><td>Graph Store</td><td>build_graph.py가 미래 asOf와 필수 다중홉 경로 검사</td></tr></tbody></table>
+</section>
+
+<section class="section" id="s11"><h2>11. 대표 Mapping 사례</h2>
+<h3>11.1 원천 데이터</h3><p>예시 질문은 “에코프로의 자회사가 편입된 ETF는?”이다. 입력에는 <code>company_master.csv</code>, <code>company_subsidiary.csv</code>, <code>holding_code_map.csv</code>, <code>etf_holding.csv</code>와 DART·운용사 원천 evidence가 사용된다.</p>
+<h3>11.2 Entity Resolution</h3><p>기업명 <code>에스케이하이닉스(주)</code>와 <code>SK하이닉스</code>는 법인격·음차 정규화 후 비교한다. 가능하면 DART <code>corp_code</code>를 canonical ID로 채택하고, 불확실하면 임의 병합하지 않는다.</p>
+<h3>11.3 Triple 생성</h3><pre>fpi:corp-01234567 a fp:Company ; rdfs:label "에코프로" .
+fpi:sub-01234567-에코프로비엠-0 a fp:SubsidiaryRelation ;
+    fp:subsidiaryCompany fpi:corp-01160363 ;
+    fp:ownershipPct "..."^^xsd:decimal ;
+    fp:asOf "2026-07-11"^^xsd:date ;
+    fp:supportedBy fpi:doc-... .
+fpi:sec-247540 a fp:Security ;
+    fp:issuedByCompany fpi:corp-01160363 .
+fpi:hold-KODEX-247540-0 a fp:Holding ;
+    fp:holdingSecurity fpi:sec-247540 ;
+    fp:weight "..."^^xsd:decimal ;
+    fp:asOf "2026-07-10"^^xsd:date ;
+    fp:supportedBy fpi:doc-... .
+fpi:etfkr-KR... a fp:ETF ; fp:hasHolding fpi:hold-KODEX-247540-0 .</pre>
+<h3>11.4 최종 Graph 구조</h3><div class="flow"><span class="node">에코프로</span><span class="arrow">→ hasSubsidiary →</span><span class="node">에코프로비엠</span><span class="arrow">← issuedByCompany ←</span><span class="node">247540 Security</span><span class="arrow">← holdingSecurity ←</span><span class="node">Holding</span><span class="arrow">← hasHolding ←</span><span class="node">ETF</span></div>
+<p>최종 응답에는 ETF 목록뿐 아니라 각 편입관계의 비중·기준일·source, 자회사 관계의 기준일·DART 문서, 그리고 “확인 불가”인 경우 그 사유를 함께 전달한다.</p>
+<div class="danger"><strong>현재 한계:</strong> Graph Store와 SPARQL runtime은 코드상 빌더·읽기 전용 인터페이스가 준비되어 있으나 환경에 따라 pyoxigraph가 설치되어 있어야 한다. 해외 ETF·공모펀드 편입관계, 일부 해외 종목 Entity Resolution, 테마 기준일 미상은 여전히 데이터 갭으로 표시해야 한다.</div>
+</section>
+
+<div class="footer"><strong>참조 구현:</strong> <a href="../src/kb/build_ontology_instances.py">ABox builder</a> · <a href="../src/kb/build_graph.py">Graph Store builder</a> · <a href="../src/tools/graph_schema.py">schema grounding</a> · <a href="../script/validate_ontology.py">ontology validator</a> · <a href="docs_data_collection/온톨로지/DECISIONS_Ontology.md">온톨로지 결정 대기 목록</a> · <a href="docs_data_collection/온톨로지/WBS_EQUITY.md">기업·관계 WBS</a> · <a href="docs_data_collection/온톨로지/WBS_BOND.md">채권 WBS</a> · <a href="docs_data_collection/온톨로지/WBS_FUND.md">펀드 WBS</a></div>
+</main></div>
+</body></html>

@@ -882,18 +882,12 @@ VOO 질의 실제 결과 : 
 | ④ select_route   | 답할 수 있는가 | 우리 구현이 아직 없음 | 그래프 경로 미구현   |
 
 
-
-
 핵심 3가지:
 
 - ① LLM 없고, ③과 마찬가지로 규칙만 설정한다.
-
 - intent와 plan을 보고 4개 관문을 순서대로 통과시킨다.
-
 - ②  Graph/Vector 경로는 enum에 이름만 있고 실제로는 안 나온다(tools/route.py:24 주석). 
-
 - vertical slice가 통과하기 전까지 활성화하지 않는다는 뜻이다. 지금 나오는 값은 rdb_only 아니면 unsupported 둘뿐이다
-
 - ③ 계약을 코드로 강제 — step 수 상한 3을 assert로 박아둔다(tools/route.py:41).
 
 ```
@@ -910,7 +904,7 @@ State 업데이트:
 4단계 후      {"route": {query_type·execution_plan·reason}, "abstain": None 또는 {...}, ...}
 ```
 
-                     
+
 
 - route·abstain·trace 3개만 반환한다. abstain을 항상 반환하는 게 중요하다
 - 통과하면 None으로 명시적으로 덮어써서, 앞 단계의 잔재가 남지 않는다.
@@ -983,9 +977,9 @@ State 업데이트:
   }}
 ```
 
-  
 
 
+&nbsp;
 
 통과 관문 4개 — 위에서부터 먼저 걸리는 하나. 전부 통과해야만 rdb_only가 나온다.
 
@@ -1062,21 +1056,18 @@ route 출력 구조
 
   관련 코드: agent/nodes.py:53, tools/rdb.py:187, tools/rdb.py:94
 
- 
+
 
 >  ④가 rdb_only를 통과시킨 계획을, 검증된 binding만 써서 SQL로 컴파일해 실제로 조회하고, 각 값에 출처·기준일을 붙여 돌려준다.
 
-   
+
 
   핵심 4가지:
 
-  - ① 문자열 조립 금지 — psycopg.sql의 Identifier/SQL 조합으로만 쿼리를 만들고, 값은 전부 %s 파라미터로 나간다. 사용자 입력이 SQL 문법에 닿지 않는다.
-
-  - ② 등록된 binding만 — 매핑표(schema_bindings.json)에 없는 binding은 컴파일 자체가 실패(ValueError)한다. 게다가 binding마다 usage가 있어 select/filter/sort 용도별로 따로 허가된다.
-
-  - ③ 읽기 전용 + 타임아웃 — SET TRANSACTION READ ONLY + statement_timeout. 15초 응답 예산과 데이터 동결 규칙을 엔진 레벨에서 보장한다.
-
-  - ④ evidence는 rows와 함께 나온다 — 답변 생성 단계가 나중에 지어내는 게 아니라, 컴파일 시점에 select한 컬럼마다 출처·기준일이 확정된다.
+- ① 문자열 조립 금지 — psycopg.sql의 Identifier/SQL 조합으로만 쿼리를 만들고, 값은 전부 %s 파라미터로 나간다. 사용자 입력이 SQL 문법에 닿지 않는다.
+- ② 등록된 binding만 — 매핑표(schema_bindings.json)에 없는 binding은 컴파일 자체가 실패(ValueError)한다. 게다가 binding마다 usage가 있어 select/filter/sort 용도별로 따로 허가된다.
+- ③ 읽기 전용 + 타임아웃 — SET TRANSACTION READ ONLY + statement_timeout. 15초 응답 예산과 데이터 동결 규칙을 엔진 레벨에서 보장한다.
+- ④ evidence는 rows와 함께 나온다 — 답변 생성 단계가 나중에 지어내는 게 아니라, 컴파일 시점에 select한 컬럼마다 출처·기준일이 확정된다.
 
 ```
 select_route ─(rdb_only)─▶ execute_rdb ──▶ verify_results ──▶ render_answer
@@ -1084,11 +1075,11 @@ select_route ─(rdb_only)─▶ execute_rdb ──▶ verify_results ──▶ 
                                 └─ 3곳에서 ABSTAIN 가능 (엔티티 0건 / 행 초과 / 실행 실패
 ```
 
-  
+
 
   출력 업데이트:
 
-  
+
 
 ```
 {  "results": {
@@ -1134,9 +1125,9 @@ State 업데이트:
 5단계 후      {"results": {rows·columns·evidence·abstain}, "evidence": [...], "abstain": None 또는 {...}}
 ```
 
-  
 
 
+&nbsp;
 
 출력 : 
 
@@ -1195,8 +1186,6 @@ ABSTAIN 3종
 | 조회 전 | ABSTAIN_ENTITY_NOT_FOUND | 완전일치 상품 0건         | tools/validate.py:53 ← tools/rdb.py:190 |
 | 조회 후 | ABSTAIN_RESULT_TOO_LARGE | 행 수 상한 초과          | tools/validate.py:60 ← tools/rdb.py:200 |
 | 예외   | ABSTAIN_EXECUTION_FAILED | 컴파일 · 연결 · 타임아웃 실패 | agent/nodes.py:57                       |
-
-
 
 
 compile_plan은 "안 되는 것"을 조용히 무시하지 않고 전부 예외로 만듭니다.
@@ -1326,9 +1315,9 @@ compile_plan은 "안 되는 것"을 조용히 무시하지 않고 전부 예외�
 
 
 
+&nbsp;
 
-
-## 코드 
+## 코드
 
 ### ① extract_query_frame — Query Frame
 
@@ -1353,8 +1342,6 @@ compile_plan은 "안 되는 것"을 조용히 무시하지 않고 전부 예외�
 | 3단계 Planner용 (항목명 확인 필요)              | agent/query_frame.py:478 |
 | 별도 감사 프롬프트                            | agent/query_frame.py:540 |
 | 별도 감사 호출 (use_audit=True)             | agent/query_frame.py:575 |
-
-
 
 
 ### ② ground_query — LogicalPlan
@@ -1398,8 +1385,8 @@ LogicalPlan 키별
 | as_of (도메인별 실질 기준일)                   | tools/schema_context.py:244                   |
 
 
-###   
-  
+
+
 ③ validate_query — 실행 전 결정적 검증 (Python 규칙)
 
 항목
@@ -1474,13 +1461,9 @@ LogicalPlan 키별
 | 라우트 JSON 스키마                 | (원문 소실)                |
 
 
-
-
 ---
 
 ### ⑤ execute_rdb — LogicalPlan → 제한된 SELECT → evidence
-
-
 
 관련 코드 인덱스
 
