@@ -69,7 +69,7 @@ SELECT DISTINCT ?etf ?etf_name ?child ?child_name ?security ?weight ?holding_as_
             fp:documentPublisher ?relation_document_publisher ;
             fp:documentPublishedDate ?relation_document_date ;
             fp:documentQuote ?relation_document_quote .
-  FILTER (?relation_as_of <= "2026-07-11"^^xsd:date)
+  FILTER (?relation_as_of <= "2026-08-24"^^xsd:date)
   ?child rdfs:label ?child_name .
   ?security fp:issuedByCompany ?child .
   ?holding fp:holdingSecurity ?security ; fp:asOf ?holding_as_of ;
@@ -78,7 +78,7 @@ SELECT DISTINCT ?etf ?etf_name ?child ?child_name ?security ?weight ?holding_as_
            fp:documentPublisher ?holding_document_publisher ;
            fp:documentPublishedDate ?holding_document_date ;
            fp:documentQuote ?holding_document_quote .
-  FILTER (?holding_as_of <= "2026-07-11"^^xsd:date)
+  FILTER (?holding_as_of <= "2026-08-24"^^xsd:date)
   OPTIONAL { ?holding fp:weight ?weight }
   ?etf a fp:ETF ; fp:hasHolding ?holding ; rdfs:label ?etf_name .
 }

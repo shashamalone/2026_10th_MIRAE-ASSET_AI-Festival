@@ -632,7 +632,7 @@ fp:documentPublishedDate a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:date ;
     rdfs:label "문서 발행일"@ko, "document published date"@en ;
-    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-07-11) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
+    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-08-24) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
 
 fp:documentQuote a owl:DatatypeProperty ;
