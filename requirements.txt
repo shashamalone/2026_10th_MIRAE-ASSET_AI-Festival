@@ -1,29 +1,24 @@
-# 2026 미래에셋 AI Festival — 금융상품 Agent
-# python3 -m pip install -r requirements.txt
+# LLM (HyperCLOVA X) + 환경변수
+langchain-naver==0.1.1
+python-dotenv==1.2.2
 
-# 데이터 파이프라인
-pandas
-numpy
-openpyxl          # 주최측 xlsx 읽기
-lxml              # DART corpCode.xml 파싱
-requests
+# 파이프라인 오케스트레이션
+langgraph==1.2.11
 
-# 온톨로지
-rdflib
-pyoxigraph
+# GraphDB (로컬 oxigraph 스토어 + 온톨로지 파싱)
+pyoxigraph==0.5.10
+rdflib==7.6.0
 
-# KnowledgeBase
-psycopg[binary]   # PostgreSQL 드라이버 (스키마 벡터 인덱스)
-pgvector          # vector 타입 + cosine 연산자(<=>). PostgreSQL 확장도 설치 필요
+# RDB HTTP API 호출 (agent/utils.py의 run_sql)
+requests==2.34.2
 
-# Agent
-langgraph
-langchain
-langchain-naver   # ChatClovaX / ClovaXEmbeddings (HyperCLOVA X)
+pandas==3.0.5
+psycopg2-binary==2.9.12
 
-# 서비스
-fastapi
-uvicorn
+# typing_extensions.Annotated (agent/state.py)
+typing_extensions==4.16.0
 
-# 시각화 (선택 — EDA/viz)
-pyvis
+# 커널 + IPython.display
+ipykernel==7.3.0
+ipython==9.16.1
+jupyter_client==8.9.1
