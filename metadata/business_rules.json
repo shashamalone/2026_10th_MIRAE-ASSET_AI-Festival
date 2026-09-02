@@ -15,7 +15,7 @@
   "target_filters": [
     {"domain":"bond_kr","phrases":["원화채권","원화 채권"],"filters":[{"binding":"bond.currency","operator":"==","value":"KRW"}]},
     {"domain":"bond_kr","phrases":["회사채"],"filters":[{"binding":"bond.class","operator":"==","value":"회사채"}]},
-    {"domain":"bond_kr","phrases":["매수 가능한 채권","매수 가능한 회사채","매수할 수 있는 채권","매수할 수 있는 회사채","구매 가능한 채권"],"filters":[{"binding":"bond.remaining_days","operator":">","value":0}]},
+    {"domain":"bond_kr","phrases":["매수 가능한 채권","매수 가능한 회사채","매수할 수 있는 채권","매수할 수 있는 회사채","구매 가능한 채권","판매 가능한","판매 중인"],"filters":[{"binding":"bond.remaining_days","operator":">","value":0}]},
     {"domain":"etf_gl","phrases":["미국 주식형 ETF"],"filters":[{"binding":"etf_gl.asset_type","operator":"==","value":"Equity"},{"binding":"etf_gl.region","operator":"==","value":"United States of America"}]},
     {"domain":"etf_gl","phrases":["해외 채권 ETF","채권 ETF"],"filters":[{"binding":"etf_gl.asset_type","operator":"==","value":"Bond"}]}
   ],

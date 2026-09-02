@@ -1,0 +1,74 @@
+{
+  "rules": [
+    {
+      "operation_type": "relation_traversal",
+      "preferred_engine": "graph",
+      "description": "기업 관계, 자회사, 편입 관계, 발행 관계 등 관계 탐색"
+    },
+    {
+      "operation_type": "filter",
+      "preferred_engine": "rdb",
+      "description": "정형 컬럼 조건 검색"
+    },
+    {
+      "operation_type": "rank",
+      "preferred_engine": "rdb",
+      "description": "순자산, 수익률, 만기 등 수치 정렬"
+    },
+    {
+      "operation_type": "aggregate",
+      "preferred_engine": "rdb",
+      "description": "COUNT, SUM, AVG 등 집계"
+    },
+    {
+      "operation_type": "numeric_comparison",
+      "preferred_engine": "rdb",
+      "description": "상품 간 정형 수치 비교"
+    },
+    {
+      "operation_type": "document_evidence",
+      "preferred_engine": "vector",
+      "description": "투자설명서, 공시, 상품 설명 문장 검색"
+    },
+    {
+      "operation_type": "explanation",
+      "preferred_engine": "vector",
+      "description": "위험요인, 전략, 특징 등 비정형 설명 검색"
+    }
+  ],
+
+  "preferred_sequences": [
+    {
+      "pattern": [
+        "relation_traversal",
+        "rank"
+      ],
+      "engines": [
+        "graph",
+        "rdb"
+      ]
+    },
+    {
+      "pattern": [
+        "relation_traversal",
+        "document_evidence"
+      ],
+      "engines": [
+        "graph",
+        "vector"
+      ]
+    },
+    {
+      "pattern": [
+        "relation_traversal",
+        "rank",
+        "document_evidence"
+      ],
+      "engines": [
+        "graph",
+        "rdb",
+        "vector"
+      ]
+    }
+  ]
+}

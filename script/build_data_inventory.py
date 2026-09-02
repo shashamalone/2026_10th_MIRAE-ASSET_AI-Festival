@@ -1,11 +1,13 @@
 # data/ 하위 CSV를 스캔해 DATA_INVENTORY.md 생성.
 # 출력은 결정적(생성 시각·랜덤 요소 없음)이어야 한다 — git diff가 곧 데이터 구조 변경 이력이기 때문.
+# python3 script/build_data_inventory.py
+
 import glob
 import os
 
 import pandas as pd
 
-OUT = "docs/docs_data_layer/DATA_INVENTORY.md"
+OUT = "docs/docs_data_layer/데이터 인벤토리.md"
 LAYERS = [("data/csv", "원본"), ("data/enriched", "파생"), ("data/relations", "관계"), ("data/external", "외부")]
 BUILDER = {  # 파일 → 생성 스크립트. 자동 추론이 불가능해 하드코딩한다.
     "etf_kr_enriched.csv": "build_etf_enrichment.py",

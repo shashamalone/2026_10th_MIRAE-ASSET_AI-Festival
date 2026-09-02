@@ -2,7 +2,7 @@
 """RDB 14문항 vertical slice LangGraph."""
 from langgraph.graph import END, START, StateGraph
 
-from agent.nodes import (execute_rdb, extract_query_frame, ground_query,
+from agent.nodes import (execute_graph, execute_rdb, extract_query_frame, ground_query,
                          render_answer, select_route, validate_query,
                          verify_results)
 from agent.state import State
@@ -13,7 +13,12 @@ def _after_validation(state: State) -> str:
 
 
 def _after_routing(state: State) -> str:
-    return "execute_rdb" if state.get("route", {}).get("query_type") == "rdb_only" else "render_answer"
+    query_type = state.get("route", {}).get("query_type")
+    if query_type == "rdb_only":
+        return "execute_rdb"
+    if query_type in {"graph_only", "graph_then_rdb"}:
+        return "execute_graph"
+    return "render_answer"
 
 
 def build():
@@ -23,6 +28,7 @@ def build():
     graph.add_node("validate_query", validate_query)
     graph.add_node("select_route", select_route)
     graph.add_node("execute_rdb", execute_rdb)
+    graph.add_node("execute_graph", execute_graph)
     graph.add_node("verify_results", verify_results)
     graph.add_node("render_answer", render_answer)
     graph.add_edge(START, "extract_query_frame")
@@ -31,8 +37,10 @@ def build():
     graph.add_conditional_edges("validate_query", _after_validation,
                                 {"select_route": "select_route", "render_answer": "render_answer"})
     graph.add_conditional_edges("select_route", _after_routing,
-                                {"execute_rdb": "execute_rdb", "render_answer": "render_answer"})
+                                {"execute_rdb": "execute_rdb", "execute_graph": "execute_graph",
+                                 "render_answer": "render_answer"})
     graph.add_edge("execute_rdb", "verify_results")
+    graph.add_edge("execute_graph", "render_answer")
     graph.add_edge("verify_results", "render_answer")
     graph.add_edge("render_answer", END)
     return graph.compile()

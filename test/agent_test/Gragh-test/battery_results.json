@@ -1,0 +1,528 @@
+{
+  "B1": {
+    "id": "B1",
+    "question": "미래에셋증권이 발행한 채권을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "seed_resolved_company_family",
+        true,
+        "status=resolved class=http://mafest.ai/product#Issuer"
+      ],
+      [
+        "rows>0",
+        true,
+        "rows=1"
+      ],
+      [
+        "evidence_exists",
+        true,
+        "evidence=1"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 1건입니다.\n- bond_name=미래에셋증권74-2\n[출처 PRBD01N001.pd_pbcm, 적재 기준일 2026-08-24 스냅샷]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "ok",
+    "rows_count": 1,
+    "evidence_count": 1,
+    "rows_sample": [
+      {
+        "bond_name": "미래에셋증권74-2"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "B2": {
+    "id": "B2",
+    "question": "국민은행이 발행한 채권의 신용등급을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "abstain_invalid_graph_plan",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows>0",
+        false,
+        "rows=0"
+      ],
+      [
+        "evidence_row_or_tbox",
+        false,
+        "evidence_sample=[]"
+      ]
+    ],
+    "answer": "확인할 수 없음: plan sanitize: bond_n-001 -> n1",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "abstain_invalid_graph_plan",
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 0
+  },
+  "B3": {
+    "id": "B3",
+    "question": "VOO가 발행한 회사채를 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(graph_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "abstain_invalid_graph_plan",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "abstain_or_zero_rows",
+        true,
+        "status=abstain_invalid_graph_plan rows=0"
+      ]
+    ],
+    "answer": "확인할 수 없음: plan sanitize: vo -> seed",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "graph_only",
+    "result_status": "abstain_invalid_graph_plan",
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 0
+  },
+  "E1": {
+    "id": "E1",
+    "question": "KODEX 200이 보유한 종목을 비중과 함께 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows>0",
+        true,
+        "rows=12"
+      ],
+      [
+        "row_evidence_exists",
+        true,
+        "evidence=12"
+      ],
+      [
+        "as_of<=cutoff",
+        true,
+        "violations=[]"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 12건입니다.\n- weight=0.19 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.35 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.1 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=3.11 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.13 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.05 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.08 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.08 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.22 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.05 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=1.54 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]\n- weight=0.02 [관계 기준일 2026-07-10, 출처 KODEX, 근거 KODEX 200 구성종목 현황 (2026-07-10)]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "ok",
+    "rows_count": 12,
+    "evidence_count": 12,
+    "rows_sample": [
+      {
+        "weight": "0.19",
+        "security_name": null,
+        "n1_as_of": "2026-07-10",
+        "n1_source": "KODEX",
+        "n1_document": "http://mafest.ai/instance/doc-0523ae43b52c1824eb6e",
+        "n1_document_title": "KODEX 200 구성종목 현황 (2026-07-10)"
+      },
+      {
+        "weight": "0.35",
+        "security_name": null,
+        "n1_as_of": "2026-07-10",
+        "n1_source": "KODEX",
+        "n1_document": "http://mafest.ai/instance/doc-d9fea88c7e47ff1257e6",
+        "n1_document_title": "KODEX 200 구성종목 현황 (2026-07-10)"
+      },
+      {
+        "weight": "0.1",
+        "security_name": null,
+        "n1_as_of": "2026-07-10",
+        "n1_source": "KODEX",
+        "n1_document": "http://mafest.ai/instance/doc-8193600040ad3a03e84c",
+        "n1_document_title": "KODEX 200 구성종목 현황 (2026-07-10)"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "E2": {
+    "id": "E2",
+    "question": "삼성전자가 편입된 ETF를 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(graph_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "abstain_invalid_graph_plan",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "observation_only",
+        true,
+        "OBSERVED status=abstain_invalid_graph_plan rows=0"
+      ]
+    ],
+    "answer": "확인할 수 없음: schema: mode=lexical_fallback+explicit classes=18 properties=60",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "graph_only",
+    "result_status": "abstain_invalid_graph_plan",
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 0
+  },
+  "E3": {
+    "id": "E3",
+    "question": "우주항공 테마와 연결된 ETF를 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(graph_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "seed_theme",
+        true,
+        "status=resolved class=http://mafest.ai/product#Theme"
+      ],
+      [
+        "rows>0",
+        true,
+        "rows=1"
+      ],
+      [
+        "evidence_exists",
+        true,
+        "evidence=1"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 1건입니다.\n- etf_name=한국투자 ACE 유럽방산TOP10증권상장지수투자신탁(주식)\n[출처 derived:etf_theme.theme, 적재 기준일 2026-08-24 스냅샷]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "graph_only",
+    "result_status": "ok",
+    "rows_count": 1,
+    "evidence_count": 1,
+    "rows_sample": [
+      {
+        "etf_name": "한국투자 ACE 유럽방산TOP10증권상장지수투자신탁(주식)"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "E4": {
+    "id": "E4",
+    "question": "TIGER 미국S&P500의 투자지역을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows>0",
+        true,
+        "rows=1"
+      ],
+      [
+        "tbox_source_evidence",
+        true,
+        "evidence=[{'kind': 'tbox_source', 'property': 'fp:hasInvestmentRegion', 'source_table': 'PREF01N001, PREF02N001, PRFD01N001', 'source_column': 'fd_ivst_rgn_desc, wu_inv_rgn', 'as_of_rule': 'snapshot@2026-08-24'}]"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 1건입니다.\n- investment_region_label=미국\n[출처 PREF01N001, PREF02N001, PRFD01N001.fd_ivst_rgn_desc, wu_inv_rgn, 적재 기준일 2026-08-24 스냅샷]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "ok",
+    "rows_count": 1,
+    "evidence_count": 1,
+    "rows_sample": [
+      {
+        "investment_region_label": "미국"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "E5": {
+    "id": "E5",
+    "question": "LVDS ETF가 보유한 종목을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "ambiguous",
+      "S5": "SKIP",
+      "S6-S9": "abstain_entity_ambiguous",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "status_ambiguous",
+        true,
+        "status=abstain_entity_ambiguous"
+      ],
+      [
+        "candidates>=2",
+        true,
+        "candidates=2"
+      ]
+    ],
+    "answer": "확인할 수 없음: entity: ambiguous (LVDS ETF/product/ETF=ambiguous)",
+    "rate_limited": false,
+    "seed_status": "ambiguous",
+    "route_query_type": "rdb_only",
+    "result_status": "abstain_entity_ambiguous",
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 2
+  },
+  "F1": {
+    "id": "F1",
+    "question": "미래에셋국공채MMF투자신탁1호[국공채]C의 위험등급을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows>0",
+        true,
+        "rows=1"
+      ],
+      [
+        "tbox_source_evidence",
+        true,
+        "evidence=[{'kind': 'tbox_source', 'property': 'fp:hasRiskGrade', 'source_table': 'PRBD01N001, PREF01N001, PRFD01N001', 'source_column': 'pd_risk_cd, pd_risk_gcd, zrin_fd_ivst_risk_gcd', 'as_of_rule': 'snapshot@2026-08-24'}]"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 1건입니다.\n- risk_grade_label=매우 낮은 위험(6등급)\n[출처 PRBD01N001, PREF01N001, PRFD01N001.pd_risk_cd, pd_risk_gcd, zrin_fd_ivst_risk_gcd, 적재 기준일 2026-08-24 스냅샷]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "ok",
+    "rows_count": 1,
+    "evidence_count": 1,
+    "rows_sample": [
+      {
+        "risk_grade_label": "매우 낮은 위험(6등급)"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "F2": {
+    "id": "F2",
+    "question": "미래에셋국공채MMF투자신탁1호[국공채]C의 투자지역과 자산유형을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows>0",
+        true,
+        "rows=1"
+      ],
+      [
+        "outputs>=2",
+        true,
+        "keys=['investment_region_label', 'asset_type_label']"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 1건입니다.\n- investment_region_label=국내, asset_type_label=단기자금\n[출처 PREF01N001, PREF02N001, PRFD01N001.fd_ivst_rgn_desc, wu_inv_rgn, 적재 기준일 2026-08-24 스냅샷]\n[출처 PREF01N001, PREF02N001, PRFD01N001.or_attr_desc, wu_inv_ast_type, 적재 기준일 2026-08-24 스냅샷]",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "ok",
+    "rows_count": 1,
+    "evidence_count": 2,
+    "rows_sample": [
+      {
+        "investment_region_label": "국내",
+        "asset_type_label": "단기자금"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "F3": {
+    "id": "F3",
+    "question": "미래에셋국공채MMF투자신탁1호[국공채]C가 보유한 종목을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(rdb_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(empty)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "zero_rows_or_abstain",
+        true,
+        "status=empty rows=0"
+      ],
+      [
+        "no_false_negative_phrase",
+        true,
+        "answer='근거가 완비된 관계를 확인할 수 없습니다.'"
+      ]
+    ],
+    "answer": "근거가 완비된 관계를 확인할 수 없습니다.",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "rdb_only",
+    "result_status": "empty",
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 0
+  },
+  "X1": {
+    "id": "X1",
+    "question": "에코프로와 연결된 자회사 관계를 알려줘. 관계 기준일과 출처도 함께 보여줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "PASS",
+      "S3": "PASS(graph_only)",
+      "S4": "PASS(resolved)",
+      "S5": "PASS(classes=12)",
+      "S6-S9": "PASS(ok)",
+      "S10": "PASS"
+    },
+    "checks": [
+      [
+        "rows==22",
+        true,
+        "rows=22"
+      ],
+      [
+        "evidence==22",
+        true,
+        "evidence=22"
+      ],
+      [
+        "answer_has_as_of_phrase",
+        true,
+        "answer_sample='근거가 확인된 관계는 총 22건입니다.\\n- child_name=에코프로씨엔지, child_corp_code='"
+      ]
+    ],
+    "answer": "근거가 확인된 관계는 총 22건입니다.\n- child_name=에코프로씨엔지, child_corp_code=01616941, ownership_pct=47 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=아이스퀘어충청엔젤징검다리조합1호, ownership_pct=55 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=PT.QMBNEWENERGYMATERIALS, ownership_pct=9 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코프로머티리얼즈, ownership_pct=43 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=PT.GREENECONICKEL, ownership_pct=10 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=WUHANPOWERBATTERYRECYCLINGTECHNOLOGYCO.LTD, ownership_pct=6 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=강원-아이스퀘어중소벤처펀드2호, ownership_pct=12 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=PTMEIMINGNEWENERGYMATERIALS, ownership_pct=9 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코프로비엠, child_corp_code=01160363, ownership_pct=41 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=포항ISV그린테크1호VC, ownership_pct=45 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코프로에이피, child_corp_code=01534814, ownership_pct=90 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=신한아이스퀘어벤처투자조합제1호, ownership_pct=56 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=ECOPROAMERICAINC., ownership_pct=100 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=PTECOPROESGINVESTMENT, ownership_pct=49 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=케이DB모빌리티-이차전지오픈이노베이션조합, ownership_pct=22 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코프로이노베이션, child_corp_code=00965743, ownership_pct=84 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코오픈이노베이션조합1호, ownership_pct=12 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=PTBAHODOPINICKELSMELTINGINDONESIA [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=에코로지스틱스, child_corp_code=01763902, ownership_pct=100 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- child_name=신한에코벤처투자조합제2호, ownership_pct=20 [관계 기준일 2026-03-18, 출처 DART:otrCprInvstmntSttus, 근거 에코프로 2025 사업보고서 타법인 출자현황]\n- 나머지 2건은 응답 길이상 생략했습니다.",
+    "rate_limited": false,
+    "seed_status": "resolved",
+    "route_query_type": "graph_only",
+    "result_status": "ok",
+    "rows_count": 22,
+    "evidence_count": 22,
+    "rows_sample": [
+      {
+        "child_name": "에코프로씨엔지",
+        "child_corp_code": "01616941",
+        "ownership_pct": "47",
+        "relation_as_of": "2026-03-18",
+        "relation_source": "DART:otrCprInvstmntSttus",
+        "relation_document": "http://mafest.ai/instance/doc-b6ef81e0e87becc35e69",
+        "relation_document_title": "에코프로 2025 사업보고서 타법인 출자현황"
+      },
+      {
+        "child_name": "아이스퀘어충청엔젤징검다리조합1호",
+        "child_corp_code": null,
+        "ownership_pct": "55",
+        "relation_as_of": "2026-03-18",
+        "relation_source": "DART:otrCprInvstmntSttus",
+        "relation_document": "http://mafest.ai/instance/doc-85f526ed9842b4cb469f",
+        "relation_document_title": "에코프로 2025 사업보고서 타법인 출자현황"
+      },
+      {
+        "child_name": "PT.QMBNEWENERGYMATERIALS",
+        "child_corp_code": null,
+        "ownership_pct": "9",
+        "relation_as_of": "2026-03-18",
+        "relation_source": "DART:otrCprInvstmntSttus",
+        "relation_document": "http://mafest.ai/instance/doc-775811c714b9ca7f75f2",
+        "relation_document_title": "에코프로 2025 사업보고서 타법인 출자현황"
+      }
+    ],
+    "candidates_count": 0
+  },
+  "X2": {
+    "id": "X2",
+    "question": "2026-09-01 기준 KODEX 200 보유 종목을 알려줘",
+    "stages": {
+      "S1": "PASS(cached)",
+      "S2": "ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF",
+      "S3": "SKIP",
+      "S4": "SKIP",
+      "S5": "SKIP",
+      "S6-S9": "SKIP",
+      "S10": "SKIP"
+    },
+    "checks": [
+      [
+        "s2_code",
+        true,
+        "s2={'code': 'ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF', 'reason': '요청 기준일이 데이터 cutoff 2026-08-24 이후입니다.', 'evidence': [{'as_of': '2026-08-24', 'rule': 'as_of <= data_cutoff'}]}"
+      ],
+      [
+        "subsequent_stages_skip",
+        true,
+        "stages={'S1': 'PASS(cached)', 'S2': 'ABSTAIN_NOT_RELEASED_AS_OF_CUTOFF', 'S3': 'SKIP', 'S4': 'SKIP', 'S5': 'SKIP', 'S6-S9': 'SKIP', 'S10': 'SKIP'}"
+      ]
+    ],
+    "answer": null,
+    "rate_limited": false,
+    "seed_status": null,
+    "route_query_type": null,
+    "result_status": null,
+    "rows_count": 0,
+    "evidence_count": 0,
+    "rows_sample": [],
+    "candidates_count": 0
+  }
+}

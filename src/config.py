@@ -18,7 +18,23 @@ ARTIFACTS = ROOT / "artifacts"
 # FAISS(정규화 후 IndexFlatIP)와 최대 오차 5.03e-07 로 일치해 임계값을 그대로 쓴다.
 # 비밀번호를 포함하므로 DSN 을 로그에 찍지 않는다. 접속 정보는 환경변수로 덮을 수 있다.
 import os
+# Azure Data API
+# 현재 공개 테스트 API는 임시 주소다. 운영에서는 환경변수로 반드시 덮어쓴다.
+FINANCIAL_DATA_API_URL = os.environ.get(
+    "FINANCIAL_DATA_API_URL",
+    "http://40.82.145.44:8000",
+)
+FINANCIAL_DATA_RELEASE_ID = os.environ.get(
+    "FINANCIAL_DATA_RELEASE_ID",
+    "financial-products-2026-08-24@"
+    "ddb3d994a4a5115a75bed7efa9c4cd0f6655f95b0a49f3b0e3c01b2bf8301a38",
+)
+DATA_API_TIMEOUT_SECONDS = float(
+    os.environ.get("DATA_API_TIMEOUT_SECONDS", "10")
+)
 
+# Direct PostgreSQL connection.
+# Existing rdb/bond_schema tools still use this configuration.
 BOND_DB = {
     "host": os.environ.get("PGHOST", "127.0.0.1"),
     "port": os.environ.get("PGPORT", "5432"),
@@ -45,3 +61,9 @@ ANSWER_MODEL = "HCX-005"          # 답변 생성
 CHAT_TIMEOUT_SECONDS = 13           # API tail stall은 재시도 없이 ABSTAIN해 15초 E2E를 지킨다
 
 CLOVA_HOST = "https://clovastudio.stream.ntruss.com"
+
+# --- 콘텐츠 벡터 인덱스 (검증: EXP-20260828-vector-01) ---
+CONTENT_TABLE = "vec.document_chunk"
+CONTENT_TOP_K = 3                   # V01~V08 검증 시 top_k=3, 정답 문서 전부 top-1
+CONTENT_SCORE_FLOOR = 0.45          # bge-m3 cosine — 무관 질의(V08)가 0.43으로 정상 차단됨
+PDF_DEMO_DIR = ROOT / "data" / "pdf_demo"

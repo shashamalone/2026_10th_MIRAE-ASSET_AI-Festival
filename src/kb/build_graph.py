@@ -17,7 +17,7 @@ try:
 except ImportError as exc:  # pragma: no cover - 설치 안내 경로
     raise SystemExit("pyoxigraph 미설치 — python3 -m pip install -r requirements.txt") from exc
 
-CUTOFF = "2026-07-11"
+CUTOFF = "2026-08-24"
 OUT = ARTIFACTS / "oxigraph"
 MANIFEST = OUT / "manifest.json"
 TBOX = ("common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl")

@@ -1,7 +1,69 @@
-# [AGENTS.md](http://AGENTS.md)
+# AGENTS.md
 
-2026 미래에셋 AI Festival **금융상품 Agent(Agentic RAG·QA)** 과제 저장소.
-정형 금융상품 데이터를 온톨로지·지식그래프로 구조화하고, 근거에 기반해 답변하는 에이전트를 만든다.
+## 프로젝트 개요
+
+2026 미래에셋 AI Festival 금융상품 Agent(Agentic RAG·QA) 과제 저장소다. 정형 금융상품 데이터를 온톨로지·지식그래프로 구조화하고, 근거에 기반해 답변하는 에이전트를 만든다.
+
+## 빠른 실행 명령
+
+의존성 설치:
+
+```bash
+pip install -r requirements.txt
+```
+
+스키마 카탈로그 점검:
+
+```bash
+python src/kb/build_schema_catalog.py --check
+```
+
+RDB vertical-slice 테스트:
+
+```bash
+python script/test_rdb_vertical_slice.py
+python script/test_rdb_vertical_slice.py --db
+```
+
+온톨로지 검증:
+
+```bash
+python script/validate_ontology.py
+python script/validate_external.py
+```
+
+## 에이전트 역할
+
+에이전트는 이 저장소의 금융상품 데이터·온톨로지·메타데이터를 우선 사용하고, 검색된 Evidence에 근거해 구현·검증한다. 확인되지 않은 값은 추측하지 않으며, 복잡한 작업은 코드 수정 전에 구현 계획을 작성하고 사용자에게 요약한 뒤 진행한다.
+
+## 작업 및 검증 규칙
+
+- 변경 전 관련 문서, 데이터 스키마, 기존 테스트를 먼저 확인한다.
+- 계획이 필요한 작업은 여러 파일 기능 구현·리팩토링, 아키텍처 결정, 스키마 변경, 대규모 이동·삭제다. 오타나 한 파일의 소규모 수정은 별도 계획 없이 처리한다.
+- 계획의 각 단계를 끝낼 때마다 해당 테스트나 실행 확인을 수행한다.
+- 계획 밖의 리팩토링·추상화·범위 확장을 하지 않는다.
+- `__init__.py`는 만들지 않는다. Python namespace package 구조를 유지한다.
+
+## 코드 스타일
+
+- Python 기존 모듈 구조와 명명 규칙을 따른다.
+- 실행·빌드 로직은 `src/`, 데이터는 `data/`, 스크립트는 `script/`, 문서·실험 기록은 `docs/`에 둔다.
+- 식별자 정규화는 `src/kb/ids.py`의 단일 구현을 사용한다.
+- 새 기능은 관련 테스트를 추가하고 실행한다.
+
+## 테스트 지침
+
+- 변경과 관련된 테스트를 반드시 실행한다.
+- 데이터 계층을 건드린 경우 스키마 카탈로그와 RDB vertical slice를 우선 실행한다.
+- 온톨로지나 외부 데이터를 변경한 경우 `validate_ontology.py`와 `validate_external.py`를 실행한다.
+- 테스트 결과와 실행하지 못한 검증이 있으면 최종 보고에 명시한다.
+
+## 변경·커밋 지침
+
+- `data/csv/`는 동결 영역이다. 값 수정, 컬럼 추가, 파생물 저장을 금지한다.
+- 재생성 가능한 산출물은 `artifacts/`에 두며 제출용 스키마와 생성물의 커밋 규칙을 유지한다.
+- 커밋 메시지는 Conventional Commits 형식(예: `feat:`, `fix:`, `docs:`, `test:`)을 따른다.
+- PR에는 변경 목적, 영향 범위, 실행한 검증 명령과 결과를 적는다.
 
 ## 절대 규칙
 
@@ -9,20 +71,7 @@
 2. **데이터 기준일은 2026-08-24.** 외부 수집 데이터는 반드시 `as_of ≤ 2026-08-24`. 이후 시점이 섞이면 미래정보 유출(look-ahead)이다.
 3. **주최측 데이터가 항상 우선.** 외부 데이터와 상충하면 주최측 값을 쓰고, 상충 사실을 evidence에 기록한다.
 4. **근거 없는 답변 금지.** 데이터로 확인 불가한 질의는 "확인할 수 없음"으로 답해야 정답이다. 추측하면 감점된다.
-5. `**data/csv/`는 동결 / 원본 변환본만 두고 값 수정·컬럼 추가·파생물 저장 모두 금지
-6. 어려운 작업은 상위 모델로 계획 먼저 진행한다, 아래에 해당하는 **복잡한 작업**은 코드를 수정하기 전에 `planner` 서브에이전트(Opus로 실행됨)에게 구현 계획을 먼저 받는다
-  - 여러 파일에 걸친 기능 구현/리팩토링
-  - 아키텍처·설계 결정이 필요한 작업
-  - 요구사항이 모호하거나 접근 방식이 여러 개인 작업
-  - 실패 시 되돌리기 어려운 작업 (스키마 변경, 대규모 이동/삭제 등)
-  - planner가 반환한 계획을 사용자에게 요약해 보여준 뒤 실행한다. 계획과 다르게 진행해야 하면 이유를 말한다.
-  - **단순 작업**(오타 수정, 한 파일 소규모 수정, 단순 질문)은 planner 없이 바로 처리한다 — 과한 위임 금지.
-7. 실행 규칙
-
-- 계획의 각 단계를 완료할 때마다 검증(테스트/실행 확인)을 한다.
-- 계획에 없던 범위 확장(추가 리팩토링, 불필요한 추상화)을 하지 않는다.
-
-
+5. `data/csv/`는 동결된 원본 변환본만 두며 값 수정·컬럼 추가·파생물 저장을 금지한다.
 
 ## 디렉터리
 
@@ -107,19 +156,12 @@ repo/
 ```
 
 `__init__.py`는 만들지 않는다 (namespace package로 충분)
-
 src/       = 실행·빌드 로직
-
 data/      = 실제 데이터
-
 ontology/  = 의미 모델
-
 metadata/  = 의미 ↔ 물리 스키마 연결정보
-
 artifacts/ = 빌드 결과
-
 script/    = 실행/검증
-
 docs/      = 명세/실험 기록
 
 ## 반드시 알아야 할 데이터 함정
@@ -129,14 +171,14 @@ docs/      = 명세/실험 기록
 
 | 함정               | 내용                                                                              | 대응                                                                |
 | ---------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **펀드 그레인**       | 08-24 배포본 23,676행 = 23,676펀드. `itm_no`가 단독 유일키이고 `prfd_attr_cds`는 원천에 이미 집약됨 | `raw.fund_pub_master` 직접 사용. 07-11용 `fund_pub_dedup.csv`는 사용 금지 |
+| **펀드 그레인**       | 08-24 배포본 23,676행 = 23,676펀드. `itm_no`가 단독 유일키이고 `prfd_attr_cds`는 원천에 이미 집약됨    | `raw.fund_pub_master` 직접 사용. 07-11용 `fund_pub_dedup.csv`는 사용 금지   |
 | **ETN 혼입**       | 국내ETF 마스터에 ETN 545종(30.6%)                                                      | `pd_grp_no=='ETF'` 필터. ETN은 편입종목 개념 자체가 없음                        |
 | **괴리율 더미**       | `du_diff_rt`·`du_chas_errt` 전 종목 `0.00` (결측 아닌 미계산)                             | 사용 금지. 필요하면 종가/NAV로 재계산하고 그 사실을 명시                                |
-| **실질 기준일 불일치**   | 배포일은 08-24이나 채권·ETF·펀드 주요 수치의 실질 기준일은 2026-08-21                         | 근거 표시에 테이블·행별 실질 기준일을 쓴다                                      |
+| **실질 기준일 불일치**   | 배포일은 08-24이나 채권·ETF·펀드 주요 수치의 실질 기준일은 2026-08-21                                | 근거 표시에 테이블·행별 실질 기준일을 쓴다                                          |
 | **문자열 sentinel** | 해외ETF `cu_base_index` 겉보기 결측 0.14% → 실제 48.1%(`Index is not provided...` 등 문장형) | 명시적 NULL 처리                                                       |
 | **국채 무등급**       | 국공채·개인투자용국채는 신용등급 100% 결측이나 **정상**(평가 대상 아님)                                    | `UnratedByDesign`과 `RatingUnknown`을 구분. 등급 필터에서 제외하되 "미평가"로 표기    |
 | **총보수 결측**       | 국내ETF `cu_charge_rt` 81.9% 결측, 있는 값도 다수가 `0.0` 더미                               | `etf_kr_enriched.csv`의 `charge_rt_final` 사용(LSEG `ter`로 91.4% 보완) |
-| **채권 복합키**     | 08-24 배포본은 `pd_no` 단독 중복이 있음                                              | `(pd_no,pd_exg_mkt,info_seq)`를 행 유일키와 enriched join key로 사용              |
+| **채권 복합키**       | 08-24 배포본은 `pd_no` 단독 중복이 있음                                                    | `(pd_no,pd_exg_mkt,info_seq)`를 행 유일키와 enriched join key로 사용       |
 | **엔티티 표기**       | 발행사는 `에스케이하이닉스(주)`·`(주)엘지에너지솔루션` 형태. `SK하이닉스`로 검색하면 0건                          | 정규화 후 매칭                                                          |
 | **룩어헤드 컬럼**      | KODEX 현재가·등락, TIGER 등락률은 조회일과 무관하게 오늘 값                                         | 관계 테이블에 절대 넣지 않는다                                                 |
 | **생존편향**         | 운용사 사이트는 상장폐지 종목을 제거해 과거 조회도 0행(25종)                                            | "편입종목 미확보"로 명시. 조용히 빠지면 "편입 안 함" 오답                               |
@@ -163,13 +205,30 @@ docs/      = 명세/실험 기록
 ## 문서
 
 
-| 문서                                                   | 내용                              |
-| ---------------------------------------------------- | ------------------------------- |
-| `EDA/EDA_REPORT.md`                                  | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
-| `docs/docs_data_layer/COLUMN_GUIDE.md`               | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
-| `docs/docs_data_layer/DATA_LAYER_PLAN.md`            | 계층·파일명·출처 규칙의 **단일 기준**         |
-| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md` | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`    | 외부데이터 우선순위(35문항 blocking 기준)    |
-| `docs/QUERY_COVERAGE_35.md`                          | 35문항 커버리지 매트릭스                  |
-| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교          |
-| `docs/docs_data_layer/DATA_INVENTORY.md`             | 자동 생성. 직접 편집 금지                 |
+| 문서                                                        | 내용                              |
+| --------------------------------------------------------- | ------------------------------- |
+| `EDA/EDA_REPORT.md`                                       | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
+| `docs/docs_data_layer/COLUMN_GUIDE.md`                    | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
+| `docs/docs_data_layer/DATA_LAYER_PLAN.md`                 | 계층·파일명·출처 규칙의 **단일 기준**         |
+| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md`      | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
+| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`         | 외부데이터 우선순위(35문항 blocking 기준)    |
+| `docs/QUERY_COVERAGE_35.md`                               | 35문항 커버리지 매트릭스                  |
+| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교               |
+| `docs/docs_data_layer/DATA_INVENTORY.md`                  | 자동 생성. 직접 편집 금지                 |
+
+
+### Agent의 4대 필수 구성요소
+
+1. **정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology**
+  - [Parsing] PDF, PPT 등 데이터를 Markdown으로 변환
+  - [Ontology] 데이터를 종합하여 상품별 LLM 가이드라인(온톨로지) 제작
+2. **금융상품 KnowledgeBase — RDB + Vector + Graph**
+  - [Extraction] 정제된 데이터를 바탕으로 지식 추출
+  - [EntityResolution] 불필요·모호한 데이터의 판별 및 정리
+3. **Intent Analysis &amp; Retrieval Engine — 질의 의도 분석과 검색 엔진**
+  - [NL2SQL] 자연어 입력을 분석해 질의어(SQL)로 변환
+  - [Retrieval] 우선순위·탐색 순서를 효과적으로 조정
+4. **Answer Generator — 근거 기반 답변 생성**
+  - [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
+  - [환각 방지] 데이터에 없는 내용은 추측하지 않음
+

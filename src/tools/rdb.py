@@ -67,6 +67,14 @@ def resolve_entities(conn, plan: dict) -> tuple[dict, dict | None]:
         return plan, None
     schema, rules, bindings = metadata()
     entity = plan["entities"][0]
+    # Graph executor가 이미 검증된 canonical productCode 집합을 넘긴 경우다.
+    # 다시 이름 검색을 하면 URI→RDB handoff가 깨지므로 compiler의 IN allowlist로 바로 보낸다.
+    if entity["mode"] == "in":
+        values = entity.get("values") or []
+        if not values:
+            return plan, {"code": "ABSTAIN_ENTITY_NOT_FOUND",
+                          "reason": "Graph handoff entity ID가 비어 있습니다."}
+        return plan, None
     if entity["mode"] == "exact":
         b = bindings[entity["binding"]]
         query = sql.SQL("SELECT count(*) FROM {} WHERE {} = %s").format(
