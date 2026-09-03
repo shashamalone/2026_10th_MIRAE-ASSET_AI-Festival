@@ -29,7 +29,8 @@ kb/                            적재·검증·빌드 코드
 vector_search_node
   -> tools.vector_search.search_documents
   -> infrastructure.vector_db.client.VectorDBClient.search
-  -> PostgreSQL vec.document_chunk (cosine distance)
+  -> vec.document_chunk + vec.chunk_embedding (cosine distance)
+  -> vec.document_product (선택적 상품 제한)
 ```
 
 ```text
@@ -55,11 +56,28 @@ VECTOR_DB_TIMEOUT=3
 또는 `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`를 사용한다.
 DSN이 없으면 기존 `agent.utils`의 read-only `/db/sql` API를 사용한다.
 
-검색 테이블은 `vec.document_chunk`이며 다음 계약을 검증한다.
+Vector 검색은 정규화된 세 테이블을 사용한다.
+
+```text
+vec.document_chunk
+  content_hash + embedding_model + model_revision
+    -> vec.chunk_embedding
+
+vec.document_chunk.document_id
+    -> vec.document_product.document_id
+    -> product_id
+```
+
+- `vec.document_chunk`: 청크 원문·인용문·페이지·기준일
+- `vec.chunk_embedding`: 고유 content hash별 1024차원 벡터
+- `vec.document_product`: 문서와 정규 상품 ID 연결
+
+검색 계약은 다음과 같다.
 
 - `embedding_model = bge-m3`
 - `embedding_dim = 1024`
-- cosine distance: `embedding <=> query_vector`
+- cosine distance: `chunk_embedding.embedding <=> query_vector`
+- top-k는 청크에 먼저 적용하고 상품 목록은 이후 결합해 중복을 방지
 - 최대 반환 건수: 20
 
 ### Oxigraph
@@ -103,9 +121,15 @@ fallback하지 않는다. Agent는 `SELECT`와 `ASK`만 실행하며 SPARQL upda
 
 ## 4. 실행 전 점검
 
+VectorDB의 실제 테이블 메타데이터·행 수·연결률·출력 샘플은 Jupyter 셀
+스크립트 `test/vector_db/vector_metadata_samples.py`로 확인한다. 1024차원
+원벡터는 출력하지 않으며, 실제 의미 검색 셀은 기본적으로 비활성화한다.
+
 ```bash
 python -m py_compile src/infrastructure/vector_db/client.py src/infrastructure/graph_db/client.py src/tools/vector_search.py src/tools/graph_search.py src/agent/nodes.py
+python -m py_compile test/vector_db/vector_metadata_samples.py
 python -m unittest discover -s test/graph_db -p "test_*.py"
+python -m unittest discover -s test/vector_db -p "test_*.py"
 python src/kb/build_vectors.py --check
 ```
 
