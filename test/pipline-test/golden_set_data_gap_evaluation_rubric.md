@@ -221,6 +221,7 @@ Claim별 데이터 가용성을 다음 값으로 고정한다.
 | `FILTER_ERROR` | 역방향 flag/등급서열/사모·공모 등 조건 오류 |
 | `JOIN_MISS` | DB 간 join 또는 entity link 실패 |
 | `MERGE_LOSS` | 검색 결과가 merge 단계에서 소실 |
+| `RATE_LIMITED` | CLOVA 429(code 42901)로 LLM 호출 실패. 데이터·Agent 결함이 아니므로 정답률 분모에서 분리 |
 
 ## D. 답변 생성 단계
 
@@ -583,7 +584,49 @@ bond 테이블을 검색해 0건이어서 "찾지 못함"
 
 ---
 
-# 13. 테스트 실행 시 반드시 저장할 Trace
+# 13. 실행 전제: CLOVA 429 방지 원칙
+
+`test/ratelimit-test/clova_ratelimit_0903.ipynb` 실측(2026-09-03) 결과다. 이 원칙을 지키지 않으면 429가 오답으로 섞여 아래 모든 진단이 무의미해진다.
+
+## 13.1 실측 요약
+
+| 항목 | 실측값 |
+|---|---|
+| 요청 한도 | 60 req/min (HCX-007·HCX-005·bge-m3 각각 별도 카운터) / 60,000 tok/min (임베딩 40,000) |
+| 창 방식 | 고정창 60s. 소진 후 리셋까지 어떤 백오프도 무효 (지수 백오프 8회·36s 전부 429) |
+| 429 응답 | `code: 42901`, `Retry-After` 없음, `x-ratelimit-reset-requests`만 제공 |
+| 유효한 탈출구 | 예비 모델(HCX-005) 우회만 15초 SLA 안에서 동작 |
+| 소비량 | 질의 1건 ≈ 7 LLM 호출 + 임베딩 1회 → 지속 가능 ≈ 8.6 질의/분 |
+
+골든셋 35문항 × 7호출 ≈ 245 req → 한도상 최소 4.1분. E2E 19s 순차 실행이면 ≈ 22 req/min으로 한도의 1/3이다.
+
+## 13.2 테스트 코드 필수 원칙
+
+1. **문항은 순차 실행.** `ThreadPoolExecutor`/`asyncio.gather`로 문항을 동시 실행하지 않는다. 동시성 2부터 창 소진 위험.
+2. **문항 간 최소 7초 보장.** `sleep(max(0, 7 - elapsed))` — 파이프라인이 더 오래 걸리면 추가 대기 0, abstain·캐시 경로로 빨리 끝나면 남은 만큼만 잔다.
+3. **`x-ratelimit-remaining-requests ≤ 3`이면 `reset`초까지 대기.** 노트북 6단계 `ClovaRateGuard`를 그대로 쓴다.
+4. **429 재시도 루프 금지.** 같은 창 안 재시도는 카운터만 태우고 다음 문항까지 오염시킨다. `ChatClovaX(max_retries=0)`으로 SDK 내부 재시도도 끈다.
+5. **429 문항은 `RATE_LIMITED`로 기록하고 정답률 분모에서 분리한다.** (§6.C) 오답과 섞이면 원인 분석 불가.
+6. **시작 전 `remaining` 1회 확인.** 직전 실험이 창을 비워 뒀으면 `reset`초를 기다리고 시작한다.
+7. **임베딩 40,000 tok/min은 별도 카운터.** 벡터 리빌드 스크립트와 동시에 돌리지 않는다.
+8. **테스트 직전 `clova_ratelimit_0903.ipynb` 3~4단계(`RUN_HEAVY=True`) 실행 금지.** 한도를 의도적으로 소진하는 셀이다.
+
+## 13.3 Trace 필드 추가
+
+§14의 trace에 문항별로 다음을 남긴다. `RATE_LIMITED` 판정과 재실행 대상 선별에 쓴다.
+
+```json
+"rate_limit": {
+  "llm_calls": 7,
+  "remaining_after": 41,
+  "reset_after": "37s",
+  "status_429_count": 0
+}
+```
+
+---
+
+# 14. 테스트 실행 시 반드시 저장할 Trace
 
 현재 테스트 코드에서 최소 다음 필드를 구조화해 저장하는 것을 권장한다.
 
@@ -613,7 +656,7 @@ Console print만 하지 말고 테스트 evaluator가 읽을 수 있도록 dict�
 
 ---
 
-# 14. 기존 테스트 함수 수정 방향
+# 15. 기존 테스트 함수 수정 방향
 
 현재:
 
@@ -657,7 +700,7 @@ result = evaluate_case(
 
 ---
 
-# 15. 최종 평가 출력 형식
+# 16. 최종 평가 출력 형식
 
 ## 문항별
 
@@ -705,7 +748,7 @@ result = evaluate_case(
 
 ---
 
-# 16. 최종 권장 평가 계층
+# 17. 최종 권장 평가 계층
 
 ```text
 Level 0. Query Validity
