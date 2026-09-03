@@ -164,3 +164,36 @@ Agent의 4대 필수 구성요소를 기준으로 task를 구성합니다.
 | [팀원 1](GitHub 프로필 링크) | [팀원 2](GitHub 프로필 링크) | [팀원 3](GitHub 프로필 링크) |
 
 
+---
+
+## 문서
+
+
+| 문서                                                        | 내용                              |
+| --------------------------------------------------------- | ------------------------------- |
+| `EDA/EDA_REPORT.md`                                       | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
+| `docs/docs_data_layer/COLUMN_GUIDE.md`                    | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
+| `docs/docs_data_layer/DATA_LAYER_PLAN.md`                 | 계층·파일명·출처 규칙의 **단일 기준**         |
+| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md`      | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
+| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`         | 외부데이터 우선순위(35문항 blocking 기준)    |
+| `docs/QUERY_COVERAGE_35.md`                               | 35문항 커버리지 매트릭스                  |
+| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교               |
+| `docs/docs_data_layer/DATA_INVENTORY.md`                  | 자동 생성. 직접 편집 금지                 |
+
+
+
+
+### Agent의 4대 필수 구성요소
+
+1. **정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology**
+  - [Parsing] PDF, PPT 등 데이터를 Markdown으로 변환
+  - [Ontology] 데이터를 종합하여 상품별 LLM 가이드라인(온톨로지) 제작
+2. **금융상품 KnowledgeBase — RDB + Vector + Graph**
+  - [Extraction] 정제된 데이터를 바탕으로 지식 추출
+  - [EntityResolution] 불필요·모호한 데이터의 판별 및 정리
+3. **Intent Analysis &amp; Retrieval Engine — 질의 의도 분석과 검색 엔진**
+  - [NL2SQL] 자연어 입력을 분석해 질의어(SQL)로 변환
+  - [Retrieval] 우선순위·탐색 순서를 효과적으로 조정
+4. **Answer Generator — 근거 기반 답변 생성**
+  - [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
+  - [환각 방지] 데이터에 없는 내용은 추측하지 않음

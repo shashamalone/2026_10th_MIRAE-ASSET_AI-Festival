@@ -1,4 +1,30 @@
-"""Read-only Oxigraph client with ordered store and HTTP failover."""
+"""
+Oxigraph GraphDB 읽기 전용 클라이언트.
+
+원격 VM의 Oxigraph 저장소를 Agent 호스트에 마운트한 경로로 직접 읽고,
+해당 저장소를 사용할 수 없을 때 로컬 저장소, HTTP endpoint 순서로
+조회 대상을 전환한다. GraphDB 연결과 SPARQL 실행을 Agent 노드에서
+분리하기 위한 infrastructure adapter다.
+
+[구현 상태]
+
+- Oxigraph 직접 조회: pyoxigraph의 ``Store.read_only``로 파일 기반 저장소를
+  열어 SELECT/ASK 쿼리를 실행한다.
+- 연결 순서: ``OXIGRAPH_REMOTE_STORE_PATH``(원격 VM 마운트 경로) ->
+  ``OXIGRAPH_LOCAL_STORE_PATH`` 또는 기본 artifacts 경로 ->
+  ``OXIGRAPH_FALLBACK_ENDPOINT``/``OXIGRAPH_ENDPOINT``.
+- 장애 처리: 저장소를 열거나 읽을 수 없는 경우에만 다음 transport로
+  failover한다. 잘못된 SPARQL과 정상적인 빈 결과는 장애로 간주하지 않는다.
+- SPARQL 안전성: SERVICE가 없는 SELECT/ASK만 허용하고, INSERT·DELETE·
+  UPDATE 계열 키워드는 차단한다. 결과는 최대 10,000행으로 제한한다.
+- HTTP timeout: ``OXIGRAPH_TIMEOUT``으로 조정할 수 있으며 기본값은 60초다.
+- ``triple_count``: 선택된 GraphDB transport에서 전체 triple 수를 확인한다.
+
+원격 저장소는 HTTP URL을 파일 경로로 직접 전달하는 방식이 아니라,
+SSHFS/NFS 등으로 Agent 실행 환경에 마운트된 실제 filesystem 경로를
+``OXIGRAPH_REMOTE_STORE_PATH``에 설정해야 한다. 직접 저장소를 사용할 수
+없을 때에만 endpoint 조회를 시도한다.
+"""
 from __future__ import annotations
 
 import logging

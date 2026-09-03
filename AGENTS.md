@@ -2,39 +2,19 @@
 
 ## 프로젝트 개요
 
-2026 미래에셋 AI Festival 금융상품 Agent(Agentic RAG·QA) 과제 저장소다. 정형 금융상품 데이터를 온톨로지·지식그래프로 구조화하고, 근거에 기반해 답변하는 에이전트를 만든다.
-
-## 빠른 실행 명령
-
-의존성 설치:
-
-```bash
-pip install -r requirements.txt
-```
-
-스키마 카탈로그 점검:
-
-```bash
-python src/kb/build_schema_catalog.py --check
-```
-
-RDB vertical-slice 테스트:
-
-```bash
-python script/test_rdb_vertical_slice.py
-python script/test_rdb_vertical_slice.py --db
-```
-
-온톨로지 검증:
-
-```bash
-python script/validate_ontology.py
-python script/validate_external.py
-```
+금융상품 Agent(Agentic RAG·QA) 과제 저장소다. 정형 금융상품 데이터를 온톨로지·지식그래프로 구조화하고, 근거에 기반해 답변하는 에이전트를 만든다.
 
 ## 에이전트 역할
 
-에이전트는 이 저장소의 금융상품 데이터·온톨로지·메타데이터를 우선 사용하고, 검색된 Evidence에 근거해 구현·검증한다. 확인되지 않은 값은 추측하지 않으며, 복잡한 작업은 코드 수정 전에 구현 계획을 작성하고 사용자에게 요약한 뒤 진행한다.
+역할 : 시니어 엔지니어야 실무적/범용적 관점에서 코드 및 문서 작성해야한다. 에이전트는 이 저장소의 금융상품 데이터·온톨로지·메타데이터를 우선 사용하고, 검색된 Evidence에 근거해 구현·검증한다. 확인되지 않은 값은 추측하지 않으며, 복잡한 작업은 코드 수정 전에 구현 계획을 작성하고 사용자에게 요약한 뒤 진행한다.
+
+## 주석 작성 원칙
+
+- 주요 모듈은 파일 최상단에 5줄 이하의 Docstring을 작성한다.
+- 순서는 `목적 → 주요 흐름/의존성 → 입력·출력 → 실패·제약 → 구현 상태`로 통일한다.
+- 함수 Docstring은 필요할 때만 `Args → Returns → Raises` 순서로 작성한다.
+- 인라인 주석은 코드에 드러나지 않는 설계 이유와 예외 처리만 설명한다.
+- 코드 변경 시 오래된 주석도 함께 수정하며, 추측·비밀값·중복 설명은 작성하지 않는다.
 
 ## 작업 및 검증 규칙
 
@@ -46,15 +26,12 @@ python script/validate_external.py
 
 ## 코드 스타일
 
-- Python 기존 모듈 구조와 명명 규칙을 따른다.
 - 실행·빌드 로직은 `src/`, 데이터는 `data/`, 스크립트는 `script/`, 문서·실험 기록은 `docs/`에 둔다.
-- 식별자 정규화는 `src/kb/ids.py`의 단일 구현을 사용한다.
 - 새 기능은 관련 테스트를 추가하고 실행한다.
 
 ## 테스트 지침
 
 - 변경과 관련된 테스트를 반드시 실행한다.
-- 데이터 계층을 건드린 경우 스키마 카탈로그와 RDB vertical slice를 우선 실행한다.
 - 온톨로지나 외부 데이터를 변경한 경우 `validate_ontology.py`와 `validate_external.py`를 실행한다.
 - 테스트 결과와 실행하지 못한 검증이 있으면 최종 보고에 명시한다.
 
@@ -67,102 +44,12 @@ python script/validate_external.py
 
 ## 절대 규칙
 
-1. **LLM은 HyperCLOVA X만 사용 가능.** 다른 모델을 쓰면 평가 대상에서 제외된다.
+1. 질의에 대한 답변 제작 API 제작 시 NCP Hyper ClovaX 만 사용, ( 아래 Bold &amp; 기울임 부분 )***질의 Intent분석*** - ( 데이터 조회 및 증거 제작 ) - ***답변 생성***  
+이외에는 LLM 모델 제약사항 없음 **( 점수에 반영하지 않음 )**
 2. **데이터 기준일은 2026-08-24.** 외부 수집 데이터는 반드시 `as_of ≤ 2026-08-24`. 이후 시점이 섞이면 미래정보 유출(look-ahead)이다.
 3. **주최측 데이터가 항상 우선.** 외부 데이터와 상충하면 주최측 값을 쓰고, 상충 사실을 evidence에 기록한다.
 4. **근거 없는 답변 금지.** 데이터로 확인 불가한 질의는 "확인할 수 없음"으로 답해야 정답이다. 추측하면 감점된다.
-5. `data/csv/`는 동결된 원본 변환본만 두며 값 수정·컬럼 추가·파생물 저장을 금지한다.
-
-## 디렉터리
-
-[데이터 관리]
-
-```
-data/csv/        원본 xlsx → CSV 변환본 (동결)
-data/enriched/   파생 테이블 (재그레인·스칼라 보강)
-data/relations/  롱포맷 관계 테이블 (주어ID, 목적어, source, as_of)
-data/external/   외부 수집 원천 + 사이드카 {원본파일명}.meta.json
-ontology/*.ttl   제출 필수 — 스키마 5파일(common + 4도메인, 커밋) + instances_*.ttl 5파일(생성물, gitignore)
-script/*.py      실행 스크립트 (build_/collect_/validate_/test_)
-EDA/src/*.py     jupytext 노트북 소스 전용
-docs/docs_data_layer/      데이터 계층 문서
-docs/docs_data_collection/ 수집 설계 문서
-expected_qa/        예상 평가 질문·정답 35문항 단일 정본
-```
-
-
-
-[에이전트 관리]
-
-```
-repo/
-├── src/                            # 핵심 애플리케이션 코드
-│   │
-│   ├── agent/                      # LangGraph — 상태·노드·그래프
-│   │   ├── agent_core.py           # StateGraph 조립·compile, run(question), to_response()
-│   │   ├── nodes.py                # Agent 노드 함수. Tool은 tools/에서 import
-│   │   └── state.py                # State TypedDict + ABSTAIN 코드
-│   │
-│   ├── tools/                      # 런타임 Tool / Engine
-│   │   ├── rdb.py                  # LogicalPlan -> evidence rows          PostgreSQL
-│   │   ├── graph.py                # [미구현 목표] sparql(...)             pyoxigraph
-│   │   ├── bond_schema.py          # schema_search(...)                    pgvector (TBox)
-│   │   ├── schema_context.py        # TBox → Physical/Business Context
-│   │   ├── content.py              # [미구현 목표] 콘텐츠 Vector 검색
-│   │   └── validate.py             # TBox/domain/value 검증 → ABSTAIN
-│   │
-│   ├── kb/                         # 빌드 타임 코드
-│   │   ├── build_rdb.py            # CSV/enriched/relations → PostgreSQL
-│   │   ├── build_graph.py          # [미구현 목표] ontology/*.ttl → Oxigraph
-│   │   ├── build_bond_index.py     # TBox comment → pgvector
-│   │   ├── build_schema_catalog.py # RDB table/column/type/PK/FK catalog 생성
-│   │   ├── build_content_index.py  # [미구현 목표] Content Vector Index
-│   │   └── ids.py                  # 식별자 정규화 단일 구현
-│   │
-│   ├── api.py                      # FastAPI 진입점
-│   ├── config.py                   # 경로·DB·모델·k·시간예산 상수
-│   └── clova.py                    # HyperCLOVA X client
-│
-├── data/                           # 원천/가공 데이터
-│   ├── csv/
-│   ├── enriched/
-│   └── relations/
-│
-├── ontology/                       # TBox / ABox TTL
-│   ├── bond.ttl
-│   └── ...
-│
-├── metadata/                       # Semantic Schema Context 관련 정적 메타데이터
-│   ├── business_rules.json         # filter/join/unit/value 규칙
-│   └── schema_bindings.json        # 검증된 logical ↔ physical mapping
-│
-├── artifacts/                      # 재생성 가능한 빌드 산출물 (gitignore)
-│   ├── oxigraph/
-│   └── ...
-│
-├── script/                         # 실행·평가·운영 스크립트
-│   ├── test_agent.py
-│   └── ...
-│
-├── vectordb_test/                  # pgvector/검색 실험 및 과거 baseline
-│   └── ...
-│
-├── docs/                           # 명세·실험 보고서
-│   └── ...
-│
-├── requirements.txt
-├── .env
-└── README.md
-```
-
-`__init__.py`는 만들지 않는다 (namespace package로 충분)
-src/       = 실행·빌드 로직
-data/      = 실제 데이터
-ontology/  = 의미 모델
-metadata/  = 의미 ↔ 물리 스키마 연결정보
-artifacts/ = 빌드 결과
-script/    = 실행/검증
-docs/      = 명세/실험 기록
+5. 응답 15초 이내가 평가항목이므로 이를 준수
 
 ## 반드시 알아야 할 데이터 함정
 
@@ -195,40 +82,10 @@ docs/      = 명세/실험 기록
 
 보조/제외 등급 컬럼(괴리율 등)은 온톨로지에 올리지 않는다 — "값이 있다"는 잘못된 신호가 된다.
 
-## 답변 생성 시
+## Agent 답변 생성 시
 
 - 모든 수치에 **기준일과 출처 컬럼**을 붙인다. 관계에는 `as_of`와 근거 문서를 붙인다.
 - 상품명은 **완전일치 우선**. `KODEX 200` 부분일치 14건, `KODEX AI로봇` 유사명 18건이 존재하므로 유사명 대체는 금지다.
 - 답변불가 판정은 사유를 구분한다: 허용값 위반(AAAA) / 기준일 이후 출시 / 상품 부재 / 미래 실현값 / 도메인 위반.
 - 응답 15초 이내가 평가 항목이다. 연산·필터는 RDB가 끝내고 LLM은 자연어 포장만 한다.
-
-## 문서
-
-
-| 문서                                                        | 내용                              |
-| --------------------------------------------------------- | ------------------------------- |
-| `EDA/EDA_REPORT.md`                                       | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
-| `docs/docs_data_layer/COLUMN_GUIDE.md`                    | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
-| `docs/docs_data_layer/DATA_LAYER_PLAN.md`                 | 계층·파일명·출처 규칙의 **단일 기준**         |
-| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md`      | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`         | 외부데이터 우선순위(35문항 blocking 기준)    |
-| `docs/QUERY_COVERAGE_35.md`                               | 35문항 커버리지 매트릭스                  |
-| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교               |
-| `docs/docs_data_layer/DATA_INVENTORY.md`                  | 자동 생성. 직접 편집 금지                 |
-
-
-### Agent의 4대 필수 구성요소
-
-1. **정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology**
-  - [Parsing] PDF, PPT 등 데이터를 Markdown으로 변환
-  - [Ontology] 데이터를 종합하여 상품별 LLM 가이드라인(온톨로지) 제작
-2. **금융상품 KnowledgeBase — RDB + Vector + Graph**
-  - [Extraction] 정제된 데이터를 바탕으로 지식 추출
-  - [EntityResolution] 불필요·모호한 데이터의 판별 및 정리
-3. **Intent Analysis &amp; Retrieval Engine — 질의 의도 분석과 검색 엔진**
-  - [NL2SQL] 자연어 입력을 분석해 질의어(SQL)로 변환
-  - [Retrieval] 우선순위·탐색 순서를 효과적으로 조정
-4. **Answer Generator — 근거 기반 답변 생성**
-  - [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
-  - [환각 방지] 데이터에 없는 내용은 추측하지 않음
 
