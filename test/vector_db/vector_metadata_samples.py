@@ -3,17 +3,17 @@
 #
 # VS Code/Jupyter에서 이 파일을 열고 `# %%` 셀 단위로 실행한다.
 # 비밀값과 1024차원 embedding 원문은 출력하지 않는다.
-# python -m unittest test/vector_db/vector_metadata_samples.py
+# python test\vector_db\vector_metadata_samples.py
 
 
 
 # %% 1. 프로젝트·환경 설정
 from __future__ import annotations
 
+import importlib
 import os
 import re
 import sys
-import importlib
 from collections import defaultdict
 from pathlib import Path
 
@@ -107,7 +107,13 @@ constraint_rows = run_sql(
     """
 )
 
-display(pd.DataFrame(constraint_rows))
+if constraint_rows:
+    display(pd.DataFrame(constraint_rows))
+else:
+    print(
+        "information_schema에서 노출된 제약조건이 없습니다. "
+        "PK·UNIQUE 인덱스는 다음 인덱스 셀에서 확인하세요."
+    )
 
 # %% 4. 인덱스 확인
 # guarded API 정책에 따라 pg_indexes가 차단될 수 있으므로 별도 셀로 둔다.
@@ -199,34 +205,48 @@ LONG_TEXT_COLUMNS = {
     "reason",
     "source_url",
 }
+API_GUARD_BLOCKED_SAMPLE_COLUMNS = {"comment"}
 
 
-def sample_expressions(table: str) -> list[str]:
+def sample_expressions(table: str) -> tuple[list[str], list[str]]:
     expressions = []
+    skipped_columns = []
     for column in columns_by_table.get(table, []):
         name = column["column_name"]
-        if name == "embedding":
+        if USE_SQL_API and name.casefold() in API_GUARD_BLOCKED_SAMPLE_COLUMNS:
+            # 서버 SQL guard가 SELECT 컬럼명도 COMMENT 명령으로 판정한다.
+            skipped_columns.append(name)
+        elif name == "embedding":
             expressions.append('vector_dims("embedding") AS "embedding_dimensions"')
         elif name in LONG_TEXT_COLUMNS:
             expressions.append(f'LEFT("{name}", 300) AS "{name}"')
         else:
             expressions.append(f'"{name}"')
-    return expressions
+    return expressions, skipped_columns
 
 
 table_samples: dict[str, list[dict]] = {}
 for table in TABLES:
-    expressions = sample_expressions(table)
+    expressions, skipped_columns = sample_expressions(table)
     if not expressions:
         print(f"[{table}] 서버에 테이블 또는 컬럼이 없습니다")
         continue
-    rows = run_sql(
-        f"""
-        SELECT {', '.join(expressions)}
-        FROM "{SCHEMA}"."{table}"
-        LIMIT {SAMPLE_LIMIT}
-        """
-    )
+    if skipped_columns:
+        print(
+            f"[{SCHEMA}.{table}] SQL API guard 때문에 샘플에서 제외: "
+            + ", ".join(skipped_columns)
+        )
+    try:
+        rows = run_sql(
+            f"""
+            SELECT {', '.join(expressions)}
+            FROM "{SCHEMA}"."{table}"
+            LIMIT {SAMPLE_LIMIT}
+            """
+        )
+    except RuntimeError as exc:
+        print(f"[{SCHEMA}.{table}] 샘플 조회 실패, 다음 테이블로 계속: {exc}")
+        continue
     table_samples[table] = rows
     print(f"\n[{SCHEMA}.{table}] sample={len(rows)}")
     display(pd.DataFrame(rows))
