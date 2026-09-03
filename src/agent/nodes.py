@@ -713,8 +713,11 @@ def graph_search_node(state: PipelineState) -> dict:
             else:
                 result = graph_orchestrator.run(question, frame=frame)
         except Exception as e:
+            # 예외 문구를 note에도 남긴다 - trace만 두면 step_results 조립에서
+            # 버려져 노트북에 status만 보이고 원인을 추적할 수 없었다(2026-09-03).
             result = {"status": "abstain_exception", "rows": [], "evidence": [],
-                      "entity_codes": [], "trace": [f"{type(e).__name__}: {e}"]}
+                      "entity_codes": [], "trace": [f"{type(e).__name__}: {e}"],
+                      "note": f"{type(e).__name__}: {e}"}
 
         step_results[step_id] = {
             "engine": "graph",
@@ -724,6 +727,7 @@ def graph_search_node(state: PipelineState) -> dict:
             "evidence": result.get("evidence", []),
             "entity": result.get("entity"),
             "sparql": result.get("sparql"),
+            "note": result.get("note"),
         }
         trace_msgs.append(
             f"GraphDB 검색 [{step_id}]: status={result.get('status')}, "

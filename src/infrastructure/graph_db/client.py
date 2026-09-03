@@ -34,7 +34,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from kb.config import ARTIFACTS
+# 저장소 루트: src/infrastructure/graph_db/client.py 기준 3단계 위.
+# kb.config.ARTIFACTS는 src/kb/artifacts를 가리켜 실제 Oxigraph 스토어
+# (저장소 루트의 artifacts/oxigraph)와 다르므로 여기서 쓰지 않는다.
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 MAX_ROWS = 10_000
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -52,6 +55,18 @@ class GraphStoreUnavailable(RuntimeError):
 class GraphDBUnavailable(RuntimeError):
     """No configured GraphDB transport is currently available."""
 
+
+
+def _anchor(path_value: str | Path) -> Path:
+    """상대 store 경로를 저장소 루트 기준으로 고정한다.
+
+    .env의 ``OXIGRAPH_LOCAL_STORE_PATH``가 상대경로("artifacts/oxigraph")면
+    노트북이 ``os.chdir("src")``를 한 뒤에는 cwd 기준으로 풀려
+    ``src/artifacts/oxigraph``를 찾다가 로컬 스토어를 통째로 건너뛰고
+    원격 endpoint로만 붙었다(2026-09-03 실측). 실행 위치와 무관하게 같은
+    스토어를 보도록 저장소 루트에 붙인다."""
+    path = Path(path_value)
+    return path if path.is_absolute() else REPO_ROOT / path
 
 def _validate_query(query: str) -> str:
     text = query.lstrip()
@@ -86,10 +101,10 @@ class OxigraphClient:
             or store_path
             or os.getenv("OXIGRAPH_LOCAL_STORE_PATH")
             or os.getenv("OXIGRAPH_STORE_PATH")
-            or str(ARTIFACTS / "oxigraph")
+            or str(REPO_ROOT / "artifacts" / "oxigraph")
         )
-        self.remote_store_path = Path(remote_value) if remote_value else None
-        self.local_store_path = Path(local_value)
+        self.remote_store_path = _anchor(remote_value) if remote_value else None
+        self.local_store_path = _anchor(local_value)
         self.endpoint = (
             endpoint
             or os.getenv("OXIGRAPH_FALLBACK_ENDPOINT")

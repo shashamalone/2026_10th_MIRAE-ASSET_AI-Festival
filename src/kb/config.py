@@ -6,13 +6,15 @@ RDB 경로(utils.py의 RDB_API_BASE_URL)나 LLM 클라이언트(get_clova.py)는
 이 파일은 GraphDB 빌드·조회 코드(build_graph.py, graph_engine.py 등)가 공유하는
 경로만 담는다.
 
-config.py는 sql_gen_test/ 바로 아래에 있다. .parent 한 번이면 sql_gen_test/다.
-(gragh/src/config.py는 gragh/src/ 안에 있어 .parent.parent가 맞았지만, 이 파일은
-중첩 없이 sql_gen_test/ 최상위에 두므로 한 번만 올려야 한다 — 두 번 올리면 ROOT가
-Test/가 되어 ontology/·artifacts/를 엉뚱한 곳에서 찾게 된다.)
+config.py는 src/kb/ 안에 있으므로 ROOT는 두 단계 위(저장소 루트)다.
+ontology/·artifacts/·data/는 저장소 루트에 있고 src/kb/ 아래에는 없다.
+kb/manifest.py의 ROOT 정의(parents[2])와 같은 기준이다. (예전 sql_gen_test/
+시절 주석은 .parent 한 번이었는데, 파일이 src/kb/로 옮겨진 뒤 갱신되지 않아
+graph_entity·graph_schema·graph_db client가 src/kb/ontology 같은 없는 경로를
+찾다가 조용히 abstain하던 원인이었다 — 2026-09-03 실측.)
 """
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[2]
 ONTOLOGY_DIR = ROOT / "ontology"
 ARTIFACTS = ROOT / "artifacts"

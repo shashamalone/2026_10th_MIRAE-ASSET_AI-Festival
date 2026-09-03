@@ -10,6 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from infrastructure.graph_db.client import (  # noqa: E402
+    REPO_ROOT,
     GraphDBUnavailable,
     GraphStoreUnavailable,
     OxigraphClient,
@@ -103,6 +104,32 @@ class OxigraphFailoverTest(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             client = OxigraphClient(local_store_path="local-store")
         self.assertEqual(client.timeout, 60.0)
+
+
+class StorePathAnchorTest(unittest.TestCase):
+    """상대 store 경로가 cwd가 아니라 저장소 루트에 붙는지 확인한다.
+
+    노트북이 os.chdir("src")를 해도 로컬 스토어를 계속 찾아야 외부
+    endpoint가 끊겼을 때 로컬로 폴백할 수 있다."""
+
+    def test_relative_env_path_anchors_to_repo_root(self):
+        with patch.dict(os.environ, {"OXIGRAPH_LOCAL_STORE_PATH": "artifacts/oxigraph"}, clear=False):
+            client = OxigraphClient()
+        self.assertEqual(client.local_store_path, REPO_ROOT / "artifacts" / "oxigraph")
+        self.assertTrue(client.local_store_path.is_absolute())
+
+    def test_absolute_env_path_is_kept_as_is(self):
+        absolute = str(Path(os.path.abspath(os.sep)) / "srv" / "oxigraph")
+        with patch.dict(os.environ, {"OXIGRAPH_LOCAL_STORE_PATH": absolute}, clear=False):
+            client = OxigraphClient()
+        self.assertEqual(client.local_store_path, Path(absolute))
+
+    def test_default_local_store_points_at_repo_root_artifacts(self):
+        with patch.dict(os.environ, {}, clear=False):
+            for key in ("OXIGRAPH_LOCAL_STORE_PATH", "OXIGRAPH_STORE_PATH"):
+                os.environ.pop(key, None)
+            client = OxigraphClient()
+        self.assertEqual(client.local_store_path, REPO_ROOT / "artifacts" / "oxigraph")
 
 
 if __name__ == "__main__":
