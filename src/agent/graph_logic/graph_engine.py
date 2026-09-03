@@ -12,50 +12,15 @@ SPARQL이라도 이 게이트를 통과하지 않으면 실행되지 않는다.
 """
 from __future__ import annotations
 import re
-from functools import lru_cache
-from pyoxigraph import Store
-from kb.config import ARTIFACTS
+from infrastructure.graph_db.client import OxigraphClient
 
-STORE_PATH = ARTIFACTS / "oxigraph"
-MAX_ROWS = 10_000
-_FORBIDDEN = re.compile(
-    r"\b(?:ADD|CLEAR|COPY|CREATE|DELETE|DROP|INSERT|LOAD|MOVE|SERVICE|WITH)\b",
-    re.IGNORECASE,
-)
-
-
-@lru_cache(maxsize=1)
-def _store() -> Store:
-    if not STORE_PATH.is_dir():
-        raise RuntimeError(f"Graph store 미구축 — python3 build_graph.py 먼저 실행 ({STORE_PATH})")
-    return Store.read_only(str(STORE_PATH))
-
-
-def _value(term):
-    if term is None:
-        return None
-    return term.value
+_CLIENT = OxigraphClient()
 
 
 def sparql(query: str) -> bool | list[dict]:
-    """SELECT/ASK만 허용한다."""
-    text = query.lstrip()
-    text = re.sub(r"(?is)^(?:PREFIX\s+\w*:\s*<[^>]+>\s*)+", "", text).lstrip()
-    kind = text.split(None, 1)[0].upper() if text else ""
-    if kind not in {"SELECT", "ASK"} or _FORBIDDEN.search(query):
-        raise ValueError("Graph query는 SERVICE 없는 SELECT/ASK만 허용합니다")
-    result = _store().query(query)
-    if kind == "ASK":
-        return bool(result)
-    variables = [v.value for v in result.variables]
-    rows = []
-    for solution in result:
-        if len(rows) >= MAX_ROWS:
-            raise ValueError(f"Graph 결과가 상한 {MAX_ROWS:,}행을 초과했습니다")
-        rows.append({name: _value(solution[name]) for name in variables})
-    return rows
+    return _CLIENT.query(query)
 
 
 def triple_count() -> int:
     """store에 적재된 전체 트리플 수. 연결 확인용."""
-    return len(_store())
+    return _CLIENT.triple_count()

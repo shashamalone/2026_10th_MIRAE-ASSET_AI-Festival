@@ -11,12 +11,11 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
   SQL을 실행한다. 카탈로그 우선 + LLM 폴백으로 컬럼을 찾고, 값 검증을
   거치고, 자연어 초안 -> SQL 2단계로 쿼리를 생성한다(utils.py의
   헬퍼들을 그대로 쓴다).
-- graph_search_node, vector_search_node: 스텁이다. plan에 해당 엔진
-  단계가 있으면 그 사실만 인지하고 빈 결과를 돌려준다. GraphDB와
-  VectorDB가 아직 구축되지 않아서, 지금은 "이 자리에 실제 조회가
-  들어간다"는 라우팅 구조만 만들어 뒀다. 실제 SPARQL 생성/실행,
-  임베딩 검색은 나중에 이 두 함수 내부만 채우면 된다(그래프 구조
-  자체는 안 바뀐다).
+- graph_search_node: Graph logical plan을 만들고 GraphDB adapter를 통해
+  읽기 전용 SPARQL을 실행한다.
+- vector_search_node: HyperCLOVA query embedding을 만들고 VectorDB
+  adapter를 통해 pgvector document chunk를 검색한다. DB가 비어 있거나
+  연결되지 않으면 해당 단계만 안전하게 abstain한다.
 - merge_results_node: RDB 결과를 모아서 하나의 리스트로 만든다.
   needs_merge_rank(여러 도메인을 합쳐서 다시 정렬해야 하는 교차질의)
   케이스의 정렬 로직은 아직 최소 구현이다 - 도메인마다 정렬 개념이
@@ -39,6 +38,8 @@ from agent.state import ready_step_ids
 from agent.graph_logic import graph_orchestrator
 from tools import rdb_schema
 from agent import utils
+from agent.get_clova import embed
+from tools.vector_search import search_documents
 
 PipelineState = dict[str, Any]
 
@@ -728,15 +729,13 @@ def graph_search_node(state: PipelineState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 노드 4c: VectorDB 검색 (스텁 - 라우팅 구조만)
+# 노드 4c: VectorDB 검색
 # ---------------------------------------------------------------------------
 def vector_search_node(state: PipelineState) -> dict:
-    """VectorDB가 아직 구축되지 않았다. plan에 vector 단계가 있으면
-    그 사실을 인지하고 빈 결과를 돌려준다. 실제로 채울 부분:
-      1. topics/target_entities로 검색 쿼리 구성
-      2. 임베딩 생성
-      3. 벡터 인덱스에서 유사도 검색, top-k 청크 반환
-    이 함수의 반환 형태만 유지하면 나머지 구조는 안 바뀐다.
+    """질문을 임베딩하고 pgvector에서 top-k 근거 청크를 검색한다.
+
+    DB/embedding 장애는 전체 Agent 실패로 전파하지 않고 Vector 단계의
+    ``abstain_vector_unavailable`` 결과로 남긴다.
 
     §5 웨이브 스케줄러: 다른 두 검색 노드와 같은 이유로 ready_step_ids로
     걸러낸다. vector 단계는 지금 설계상 항상 rdb_step_ids나
@@ -750,15 +749,39 @@ def vector_search_node(state: PipelineState) -> dict:
     if not vector_steps:
         return {"trace": ["VectorDB 검색: 이번 웨이브에 실행할 Vector 단계가 없어 건너뜀"]}
 
-    step_results = {
-        s["step_id"]: {
-            "engine": "vector",
-            "chunks": [],
-            "note": "VectorDB 미구축 - 라우팅 구조만 존재, 실제 임베딩 검색 없음",
+    question = state.get("question", "")
+    try:
+        query_vector = embed(question)
+        step_results = {}
+        for step in vector_steps:
+            chunks = search_documents(
+                query_vector,
+                top_k=step.get("top_k", 5),
+                target_entities=step.get("target_entities"),
+            )
+            step_results[step["step_id"]] = {
+                "engine": "vector",
+                "chunks": chunks,
+                "count": len(chunks),
+                "query": question,
+            }
+        total = sum(result["count"] for result in step_results.values())
+        return {"step_results": step_results, "trace": [f"VectorDB 검색: {len(vector_steps)}단계, {total}건 조회"]}
+    except Exception as exc:
+        step_results = {
+            step["step_id"]: {
+                "engine": "vector",
+                "chunks": [],
+                "count": 0,
+                "status": "abstain_vector_unavailable",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            for step in vector_steps
         }
-        for s in vector_steps
-    }
-    return {"step_results": step_results, "trace": [f"VectorDB 검색: {len(vector_steps)}단계 (스텁, 미구현)"]}
+        return {
+            "step_results": step_results,
+            "trace": [f"VectorDB 검색 불가: {type(exc).__name__}: {exc}"],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -860,7 +883,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
     - Graph 단계: 어떤 relation(주체 -- 관계 --> 대상)을 탐색했는지(plan에서
       가져옴), 조회 건수, evidence 요약. "chained"(체인 중간 단계, 실제
       조회는 terminal 단계에서 수행됨)는 뺀다.
-    - Vector 단계: 스텁 상태 그대로 note만 남긴다.
+    - Vector 단계: 검색 건수와 query를 근거 요약에 남긴다.
     """
     step_results = state.get("step_results") or {}
     plan_by_id = {s["step_id"]: s for s in state.get("plan") or []}

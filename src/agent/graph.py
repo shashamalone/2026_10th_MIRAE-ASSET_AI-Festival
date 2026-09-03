@@ -34,12 +34,10 @@ vector_search_node)도 이제 자기 엔진의 전체 단계가 아니라 "이�
 2웨이브에 실행되는 경우) 중복 실행이나 누락 없이 정확히 자기 몫만
 처리한다.
 
-[지금 이 상태에서 실제로 도는 경로]
-RDB 검색 노드는 nodes.py에서 실제 원격 API 호출까지 전부 구현되어 있다.
-GraphDB/VectorDB 검색 노드는 라우팅(이 자리로 오는 것과 웨이브 순서)까지만
-맞고 내부 조회 로직은 스텁이다. 그래서 지금 이 그래프를 실행하면 RDB-only
-질문은 끝까지 정상 동작하고, Graph/Vector가 필요한 질문은 해당 단계에서
-빈 결과만 나오지만 "언제(몇 번째 웨이브에) 실행됐는지"는 이미 올바르다.
+[현재 실행 경로]
+RDB·GraphDB·VectorDB 검색 노드는 각각 tools와 infrastructure adapter를
+통해 읽기 전용 통신을 수행한다. 각 adapter의 연결 실패는 해당 엔진의
+결과에 abstain 상태로 남기며, 다른 엔진 결과를 보존한다.
 """
 from __future__ import annotations
 
