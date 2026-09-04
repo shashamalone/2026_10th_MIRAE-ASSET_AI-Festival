@@ -81,6 +81,7 @@ wu_ 계열이 한글이고 결측이 없어 기본값으로 삼았다.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 
@@ -107,13 +108,16 @@ class AttributeSpec:
     # 같게 동작한다 - 기존 카탈로그 항목은 전부 이 필드들을 안 쓰므로
     # 하위호환이 깨지지 않는다.
     #
-    #   join_table: 보강 테이블 전체 이름(스키마 포함). 예: "enriched.etf_kr_enriched"
-    #   join_alias: 그 테이블에 붙일 별칭. 예: "ee"
+    #   join_table: 보강 테이블 전체 이름(스키마 포함). 예: "enriched.product_metric"
+    #               2홉 조인이 필요하면 파생 테이블 "(SELECT ...)"을 그대로 넣어도
+    #               된다 - utils가 "LEFT JOIN {join_table} AS {alias} ON {on}"으로
+    #               펼치기 때문에 서브쿼리도 문법적으로 성립한다("총보수율" 참고).
+    #   join_alias: 그 테이블에 붙일 별칭. 예: "pm"
     #   join_on:    JOIN 조건. 기본 테이블은 항상 "base"로 별칭이 고정된다.
-    #               예: "ee.pd_itm_no = base.pd_itm_no"
+    #               예: "pm.pd_itm_no = base.pd_itm_no"
     #
     # column 값 자체도 join_table을 쓸 때는 별칭을 붙여서 적는다(예:
-    # "ee.charge_rt_final"). 기본 테이블 컬럼은 지금처럼 별칭 없이 적으면
+    # "pm.expense_ratio"). 기본 테이블 컬럼은 지금처럼 별칭 없이 적으면
     # 되고(예: "pd_net_tamt"), utils.format_resolved_schema가 JOIN이 하나
     # 라도 있는 쿼리에서만 자동으로 "base." 접두어를 붙여 준다.
     join_table: str = ""
@@ -160,32 +164,46 @@ DOMAIN_TABLE_INFO: dict[str, dict[str, str]] = {
 # 않는다 - AttributeSpec 쪽에 이미 필요한 값이 다 박혀 있다. 이건 어떤
 # 보강 테이블이 왜 존재하는지 사람이 한눈에 보기 위한 참조용이다).
 #
-# 2026-08-31 기준 실제로 검증하고 연결한 건 국내ETF의 etf_kr_enriched
-# 하나뿐이다("총보수율" 카탈로그 참고). 나머지는 데이터가 확인됐지만
-# (bond_kr_enriched) 아직 카탈로그에 연결하지 않았거나, 관계 테이블
-# (etf_holding 등)이 아직 안 들어와서 연결할 수 없는 상태다.
+# [T-115 / 2026-09-05 실측 정정]
+# 이 아래 내용은 2026-08-31 기준으로 쓰였는데, 그때 참조한 두 테이블은
+# 2026-09-05 현재 배포된 DB(information_schema)에 **존재하지 않는다**.
+#
+#   당시 기록                  현재 live
+#   -------------------------  --------------------------------------------
+#   enriched.etf_kr_enriched   없음. enriched.etf_kr (10컬럼) 이 그 자리다.
+#   enriched.bond_kr_enriched  없음. enriched.bond_kr_offer / bond_kr_product
+#
+# 더 중요한 건 이름이 아니라 데이터다. etf_kr_enriched 가 제공하던 LSEG 보강
+# (charge_rt_final)이 현재 배포본에는 없고, enriched.etf_kr 에도 보수 컬럼이
+# 아예 없다. 총보수율은 이제 enriched.product_metric 의 EXPENSE_RATIO 로만
+# 얻을 수 있는데 국내ETF 커버리지가 67/1,235 = 5.4% 다(아래 "총보수율" 참고).
+# 즉 이름 드리프트가 아니라 커버리지 회귀이며, 보강 복원은 데이터 파이프라인
+# 쪽 별도 과제다.
+#
+# 이 딕셔너리는 사람이 읽는 참조용이지만(코드는 AttributeSpec 을 직접 읽는다),
+# 틀린 참조를 남겨 두면 다음 사람이 또 같은 함정에 빠진다. 그래서 live 기준
+# 으로 고쳐 적고, 사라진 것은 사라졌다고 명시한다.
 # ---------------------------------------------------------------------------
 ENRICHED_TABLE_INFO: dict[str, dict[str, str]] = {
     "국내ETF": {
-        "table": "enriched.etf_kr_enriched",
-        "join_key": "pd_itm_no",
-        "status": "연결됨(총보수율)",
+        "table": "enriched.etf_kr",
+        "join_key": "product_id (pd_itm_no 로도 조인 가능)",
+        "status": "존재. 단 보수 컬럼 없음 - 총보수율은 product_metric 경유",
         "note": (
-            "1,780건, raw.pref01n001과 pd_itm_no 1:1 완전 대응 확인. "
-            "LSEG 정적 메타데이터로 총보수(charge_rt_final), 복제방식(replication), "
-            "기초시장(base_market), 기초자산(base_asset), 환헤지(hedge_type) 보강."
+            "10컬럼(product_id, pd_itm_no, name, ticker, isin, manager, "
+            "base_index, currency, listing_date, delisting_date). "
+            "과거 etf_kr_enriched 가 주던 charge_rt_final/replication/"
+            "base_market/base_asset/hedge_type 보강은 현재 배포본에 없다."
         ),
     },
     "채권": {
-        "table": "enriched.bond_kr_enriched",
-        "join_key": "(pd_no, pd_exg_mkt, info_seq)",
-        "status": "확인됨, 아직 카탈로그 미연결",
+        "table": "enriched.bond_kr_offer, enriched.bond_kr_product",
+        "join_key": "product_id",
+        "status": "존재(이름 변경). 아직 카탈로그 미연결",
         "note": (
-            "21,882건. is_sellable(Y/N)이 만기 경과(49건) 여부로 정확히 계산되어 "
-            "있어, 현재 DOMAIN_SALE_POLICY['채권']의 no_filter(조건 자체를 안 거는) "
-            "방식보다 정밀하게 '판매 가능'을 표현할 수 있다. crd_grd_rank(1=AAA, "
-            "숫자가 클수록 나쁜 등급)는 신용등급 정렬을 CASE WHEN 없이 그 컬럼 "
-            "하나로 처리할 수 있게 해준다. 다음 작업 대상."
+            "과거 bond_kr_enriched 로 기록됐던 보강이 offer/product 두 테이블로 "
+            "분리됐다. is_sellable/crd_grd_rank 가 현재 스키마에도 있는지는 "
+            "확인하지 않았다 - 연결 전에 information_schema 로 먼저 검증할 것."
         ),
     },
 }
@@ -922,20 +940,40 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
         ),
     ),
     "총보수율": AttributeSpec(
-        column="ee.charge_rt_final",
+        # [T-115 / 2026-09-05] 이전 정의는 enriched.etf_kr_enriched 의
+        # charge_rt_final 을 봤는데 그 테이블이 현재 배포본에 없다. 총보수는
+        # 이제 enriched.product_metric 에 EXPENSE_RATIO 로 정규화돼 있다.
+        #
+        # product_metric 은 product_id 로 붙는데 base(raw.pref01n001)에는
+        # product_id 가 없다. 그래서 enriched.etf_kr 를 거쳐 pd_itm_no 로
+        # 되돌아오는 2홉을 파생 테이블 하나로 접어 넣는다(조인 기계가
+        # LEFT JOIN <table> AS <alias> ON <cond> 한 홉만 지원하므로).
+        #
+        # is_available 이 False 인 행은 값이 신뢰 대상이 아니므로 CASE 로
+        # NULL 처리한다 - "값이 있는데 못 믿는" 상태를 만들지 않는다.
+        column="pm.expense_ratio",
         value_type="numeric",
-        join_table="enriched.etf_kr_enriched",
-        join_alias="ee",
-        join_on="ee.pd_itm_no = base.pd_itm_no",
+        join_table=(
+            "(SELECT e.pd_itm_no, "
+            "CASE WHEN m.is_available THEN m.value END AS expense_ratio, "
+            "m.is_available, m.unavailable_reason "
+            "FROM enriched.etf_kr e "
+            "JOIN enriched.product_metric m ON m.product_id = e.product_id "
+            "WHERE m.metric_code = 'EXPENSE_RATIO')"
+        ),
+        join_alias="pm",
+        join_on="pm.pd_itm_no = base.pd_itm_no",
         note=(
-            "원본 cu_charge_rt는 87.8% 결측이라 정렬 기준으로 쓰기 어려웠다. "
-            "LSEG 외부 데이터로 보강한 charge_rt_final을 대신 쓴다(결측 38.3%로 "
-            "크게 개선됨 - 2026-08-31 pd_itm_no 1:1 조인으로 실측 검증 완료). "
-            "주최측 원본 값(cu_charge_rt)이 있으면 그 값을 그대로 쓰고 없을 "
-            "때만 LSEG 값으로 채운 컬럼이다(charge_rt_source='RDB'인 67건 "
-            "전부 원본과 정확히 일치함을 확인했다). 남은 결측 681건 중 545건은 "
-            "ETN(이 값이 원천적으로 없는 상품군)이고 136건만 진짜 ETF인데도 "
-            "LSEG가 못 찾은 경우다."
+            "⚠ 커버리지 5.4%(1,235건 중 67건만 is_available). 정렬·비교의 "
+            "기준으로 쓰면 대부분의 종목이 탈락하므로, 이 값으로 '가장 저렴한 "
+            "ETF' 같은 순위를 내면 표본이 67건뿐이라는 사실을 답변에 반드시 "
+            "밝혀야 한다. "
+            "배경: 원본 cu_charge_rt 자체가 87.8% 결측이고, 그 구멍을 메우던 "
+            "LSEG 보강(charge_rt_final, 결측 38.3%)이 현재 배포본에서 빠졌다. "
+            "남아 있는 67건은 charge_rt_source='RDB'였던 주최측 원본 값이다. "
+            "참고로 해외ETF는 같은 cu_charge_rt 로 93.8%(5,604/5,972)가 나오므로 "
+            "이 결손은 국내ETF 원천 파일(PREF01N001)에 국한된 문제다. "
+            "결측 사유는 파생 테이블의 unavailable_reason 으로 확인할 수 있다."
         ),
     ),
     "기초지수": AttributeSpec(
@@ -1274,9 +1312,11 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
     "국내ETF": [
         "이 테이블에는 ETN(545건)이 섞여 있다. 질문이 ETF만 요구하면 pd_grp_no = 'ETF' 조건을 건다.",
         "반도체, 2차전지 같은 테마 조건은 등호로 풀 수 없다. pd_nm LIKE '%키워드%' 매칭으로만 가능하다.",
-        "총보수율 조건이나 정렬이 필요하면 원본 cu_charge_rt(87.8% 결측) 대신 "
-        "enriched.etf_kr_enriched의 charge_rt_final을 쓴다(카탈로그가 이미 이렇게 "
-        "매핑되어 있고, [해석된 스키마]에 필요한 JOIN 절이 자동으로 포함된다).",
+        "총보수율은 카탈로그가 enriched.product_metric(EXPENSE_RATIO)으로 매핑해 두었고 "
+        "[해석된 스키마]에 필요한 JOIN 절이 자동으로 포함된다. 직접 cu_charge_rt를 "
+        "쓰지 말 것(87.8% 결측). 다만 이 값도 1,235건 중 67건(5.4%)에만 있으므로, "
+        "총보수 기준 정렬·최저가 질의는 표본이 67건이라는 사실을 답변에 함께 밝힌다. "
+        "조건을 만족하는 종목이 없으면 없다고 답하고 다른 컬럼으로 대체하지 않는다.",
         "순자산은 pd_net_tamt를 쓴다. du_last_aum도 있지만 값이 미세하게 다르다.",
     ],
     "해외ETF": [
@@ -1494,3 +1534,69 @@ def resolve_subtype_condition(domain: str, subtype_value: str) -> dict | None:
     매핑이 없으면 None이며, 호출부는 이 경우 조건을 걸지 않고 넘어가야
     한다(억지로 아무 컬럼에나 끼워 맞추면 조용히 틀린 0건 결과가 나온다)."""
     return SUBTYPE_CONDITION_MAP.get(domain, {}).get(subtype_value)
+
+
+# ---------------------------------------------------------------------------
+# 스키마 계약 검증 (T-115)
+#
+# 이 카탈로그는 "의미"의 정본이지 "물리적 존재"의 정본이 아니다. 어떤 테이블이
+# 실제로 있는지는 tools.schema_snapshot 이 live information_schema 에서 읽는다.
+# 둘이 어긋난 채로 돌면 SQL 이 실패하고, 실패한 SQL 을 고치는 nodes._fix_sql 이
+# 다시 이 카탈로그를 근거로 삼기 때문에 같은 오답을 반복한다(수렴 불가).
+# 그래서 어긋남은 쿼리 시점이 아니라 기동 시점에 잡는다.
+# ---------------------------------------------------------------------------
+
+# join_table 이 파생 테이블 "(SELECT ...)" 인 경우, 그 안에서 실제로 읽는
+# 물리 테이블을 여기 적어 둔다. 문자열 파싱으로 추출하면 조용히 틀리므로
+# 손으로 선언하고, 아래 iter_catalog_table_refs 가 이걸 같이 검사한다.
+DERIVED_JOIN_PHYSICAL_REFS: dict[str, list[str]] = {
+    "총보수율": ["enriched.etf_kr", "enriched.product_metric"],
+}
+
+
+def iter_catalog_table_refs() -> set[str]:
+    """카탈로그가 물리적 존재를 전제하는 테이블 전체를 모은다.
+
+    상수를 손으로 나열하지 않고 카탈로그에서 도출한다 - 나열식으로 두면
+    항목이 늘어날 때 검증만 조용히 뒤처진다.
+    """
+    refs: set[str] = set()
+
+    for entry in DOMAIN_TABLE_INFO.values():
+        refs.add(entry["table"])
+
+    for domain_attrs in ATTRIBUTE_CATALOG.values():
+        for concept, spec in domain_attrs.items():
+            if not spec.join_table:
+                continue
+            if spec.join_table.lstrip().startswith("("):
+                # 파생 테이블: 선언된 물리 의존만 검사한다.
+                refs.update(DERIVED_JOIN_PHYSICAL_REFS.get(concept, []))
+            else:
+                refs.add(spec.join_table)
+
+    return refs
+
+
+def assert_schema_contract(snapshot: dict | None = None) -> None:
+    """카탈로그가 참조하는 테이블이 live 에 전부 있는지 확인한다.
+
+    없으면 schema_snapshot.SchemaContractError 를 던진다. 삼키지 말 것 -
+    이 예외는 "곧 실패할 것"이 아니라 "이미 틀린 전제로 돌고 있었다"는 뜻이다.
+
+    ENRICHED_TABLE_INFO 는 사람이 읽는 참조용이라(코드가 직접 읽지 않는다)
+    여기서 검사하지 않는다. 실제로 SQL 에 들어가는 것만 검사한다.
+    """
+    from tools import schema_snapshot
+
+    schema_snapshot.assert_contract(
+        table_refs=sorted(iter_catalog_table_refs()), snapshot=snapshot
+    )
+
+
+# 기동 시점 검사는 기본적으로 켜지 않는다. 라이브러리 import 가 네트워크를
+# 요구하면 오프라인 테스트·정적 분석이 전부 깨지기 때문이다. 에이전트
+# 진입점(nodes 쪽, T-116)에서 RDB_SCHEMA_CONTRACT_CHECK=1 을 주거나
+# assert_schema_contract() 를 직접 부른다.
+if os.environ.get("RDB_SCHEMA_CONTRACT_CHECK") == "1":  # pragma: no cover
+    assert_schema_contract()
