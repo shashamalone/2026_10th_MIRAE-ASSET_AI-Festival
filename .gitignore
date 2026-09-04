@@ -3,7 +3,11 @@
 /data/
 /data_raw/
 /wanggyu/
+/.agents/
 /archive/
+
+AGENTS.md
+CLAUDE.md
 
 lseg_static_metadata.json
 theme_list.json
