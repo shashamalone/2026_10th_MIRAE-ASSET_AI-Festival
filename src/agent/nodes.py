@@ -32,6 +32,8 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 from __future__ import annotations
 
 import json
+import os
+import time
 from typing import Any
 
 from agent.get_clova import _llm_answer, _llm_plan
@@ -42,6 +44,7 @@ from agent.state import ready_step_ids
 
 from agent.graph_logic import graph_orchestrator
 from tools import rdb_schema
+from tools import schema_snapshot
 from agent import utils
 from agent.get_clova import embed
 from tools.vector_search import get_coverage, resolve_product_ids, search_documents
@@ -338,6 +341,124 @@ def _fix_sql(question: str, schema_block: str, real_columns_desc: str, wrong_sql
     )
 
 
+# ---------------------------------------------------------------------------
+# 재시도 루프가 쓰는 "실제 컬럼 목록"과 에러 분류 (T-116)
+#
+# 왜 필요한가: _fix_sql 은 실패한 SQL 을 고치라고 LLM 에게 넘기면서 "실제
+# 컬럼 목록"을 근거로 준다. 그 근거가 지금까지 rdb_schema 상수에서 나왔는데,
+# 그 상수가 틀려서 SQL 이 실패한 경우(2026-09-05 실측: enriched.etf_kr_enriched
+# 는 배포 DB에 없다) 수리 루프는 방금 실패한 것과 같은 오답을 근거로 다시
+# 쓴다. 구조적으로 수렴하지 않고 재시도 예산만 태우며, 실패 1건이 LLM 호출
+# max_retries 건으로 증폭돼 서버 분당 한도(기본 60)를 밀어 올린다.
+# ---------------------------------------------------------------------------
+
+# 서버 rate limit 은 60초 슬라이딩 윈도우다(api.py PUBLIC_RATE_LIMIT_PER_MINUTE).
+#
+# ⚠ 알려진 한계: 이 값은 Retry-After 를 "존중"한 것이 아니라 윈도우 길이를
+# 아는 상태에서의 추정이다. utils.run_sql 이 RuntimeError 로 문자열만 던져
+# 헤더가 여기까지 오지 않기 때문이다. 정확히 하려면 (a) 서버가 Retry-After 를
+# 주고(T-119) (b) utils.run_sql 이 그 값을 예외에 실어 줘야 한다 - (b)는
+# utils.py 라서 이 task 의 write_scope 밖이다.
+#
+# 대기 횟수를 1회로 묶는다. 사용자 질의 경로라서 최대 체감 지연을 60초
+# 안쪽으로 유지해야 하고, 윈도우가 60초이므로 그보다 짧게 기다리면 어차피
+# 다시 429 가 난다.
+_RATE_LIMIT_WAIT_SECONDS = float(os.environ.get("RDB_API_RATE_LIMIT_WAIT", "60"))
+_MAX_RATE_LIMIT_WAITS = 1
+
+
+def _live_column_list(domain: str) -> str:
+    """이 도메인이 SQL 에서 쓸 수 있는 컬럼 목록을 live 스키마 기준으로 만든다.
+
+    컬럼의 존재 여부는 live(information_schema)가 정본이고, 각 컬럼의 설명은
+    카탈로그가 정본이다. 둘을 합쳐서 주되, 카탈로그에만 있고 live 에 없는
+    컬럼은 "쓰지 말 것"이라고 명시한다 - 그게 바로 수리 루프를 무한히 헛돌게
+    만들던 항목이기 때문이다.
+
+    기본 테이블 컬럼만 나열하면 조인으로 들어오는 컬럼(예: 총보수율의
+    pm.expense_ratio)을 LLM 이 "없는 컬럼"으로 오해한다. 그래서 조인이
+    제공하는 별칭 컬럼도 같이 알려 준다.
+
+    **live 근거를 못 얻으면 예외를 던진다.** 예전엔 카탈로그로 조용히
+    폴백했는데, 그러면 이 함수가 존재하는 이유(틀린 카탈로그로 수리하지
+    않기)가 사라진다. 호출부가 이 예외를 받아 수리 자체를 포기한다.
+    """
+    entry = rdb_schema.DOMAIN_TABLE_INFO.get(domain)
+    if not entry:
+        raise schema_snapshot.SnapshotUnavailableError(
+            f"도메인 {domain!r} 의 기본 테이블을 알 수 없어 live 컬럼 목록을 "
+            "만들 수 없다."
+        )
+
+    # 실패는 그대로 전파한다(폴백 금지).
+    snapshot = schema_snapshot.get_snapshot()
+    live_columns = schema_snapshot.get_columns(entry["table"], snapshot)
+
+    catalog_lines = rdb_schema.get_full_column_list(domain)
+    # 카탈로그 줄은 "컬럼명 (설명)" 형태다. 컬럼명으로 색인한다.
+    described: dict[str, str] = {}
+    for line in catalog_lines:
+        described[line.split(" (", 1)[0].strip()] = line
+
+    lines = [
+        f"[{entry['table']} 의 live 실제 컬럼 {len(live_columns)}개 "
+        f"- 이 목록에 없는 컬럼은 DB에 존재하지 않으므로 절대 쓰지 말 것]"
+    ]
+    lines.extend(described.get(col, f"{col} (카탈로그에 설명 없음)") for col in live_columns)
+
+    stale = sorted(set(described) - set(live_columns))
+    if stale:
+        lines.append(
+            "(카탈로그에는 있으나 live 에 없는 컬럼 - 쓰면 반드시 실패한다: "
+            + ", ".join(stale) + ")"
+        )
+
+    # 조인이 추가로 제공하는 컬럼. 해석된 스키마에 JOIN 절이 자동으로 들어가
+    # 있으므로 이 별칭들은 그대로 쓸 수 있다.
+    joined = [
+        f"{spec.column} ({concept}; {spec.join_alias} 조인으로 제공)"
+        for concept, spec in rdb_schema.ATTRIBUTE_CATALOG.get(domain, {}).items()
+        if spec.join_table and "." in spec.column
+    ]
+    if joined:
+        lines.append("[조인으로 추가 제공되는 컬럼 - 그대로 쓸 수 있다]")
+        lines.extend(joined)
+
+    return "\n".join(lines)
+
+
+def _is_rate_limited(error_desc: str) -> bool:
+    """서버 분당 한도에 걸린 응답인지."""
+    return "HTTP 429" in error_desc or "RATE_LIMITED" in error_desc
+
+
+def _is_schema_contract_violation(error_desc: str) -> bool:
+    """실패 원인이 '카탈로그가 없는 것을 가리켜서'인지 판별한다.
+
+    없는 테이블/컬럼을 참조했다는 에러는 두 가지 원인이 있다.
+      (1) LLM 이 없는 이름을 지어냈다  -> 고치라고 시키면 된다.
+      (2) 카탈로그 자체가 틀렸다       -> 고치라고 시켜도 같은 근거를 다시
+          받으므로 영원히 못 고친다.
+    둘을 구분하려고, 그런 에러가 났을 때만 T-115 의 계약 검증을 한 번 돌린다.
+    계약이 깨져 있으면 (2)이므로 재시도하지 않고 즉시 멈춘다.
+    """
+    lowered = error_desc.lower()
+    undefined_object = any(
+        token in lowered
+        for token in ("undefinedtable", "undefinedcolumn", "does not exist", "존재하지")
+    )
+    if not undefined_object:
+        return False
+    try:
+        rdb_schema.assert_schema_contract()
+    except schema_snapshot.SchemaContractError:
+        return True
+    except Exception:
+        # 계약을 확인할 수 없으면 단정하지 않는다(기존 동작 유지).
+        return False
+    return False
+
+
 def _run_sql_with_retry(
     conn, domain: str, question: str, schema_block: str, sql_result: dict, max_retries: int
 ) -> dict:
@@ -354,10 +475,36 @@ def _run_sql_with_retry(
     함수로 분리하면서 그 문제도 같이 없앴다."""
     current_sql = sql_result["sql"]
     assumptions = list(sql_result.get("assumptions", []))
-    real_columns_desc = "\n".join(rdb_schema.get_full_column_list(domain))
+    # [T-116] 근거를 카탈로그 상수가 아니라 live 스키마에서 만든다. 이 한 줄이
+    # 바뀌지 않으면 T-115 의 계약 검증이 있어도 수리 루프는 여전히 틀린 근거로
+    # 돈다.
+    #
+    # live 근거를 못 얻으면 카탈로그로 폴백하지 않는다. 폴백하면 정확히
+    # 예전 동작(틀린 근거로 수리)으로 되돌아가기 때문이다. 대신 "수리 금지"
+    # 상태로 진행한다 - 원래 SQL 은 그대로 한 번 실행해 본다(멀쩡할 수도
+    # 있다). 실패했을 때 근거 없이 고치지 않을 뿐이다.
     attempts_log: list[str] = []
+    try:
+        real_columns_desc = _live_column_list(domain)
+        repair_allowed = True
+        ground_truth_error = ""
+    except Exception as exc:
+        real_columns_desc = ""
+        repair_allowed = False
+        ground_truth_error = str(exc)
+        attempts_log.append(f"(live 스키마 근거 확보 실패 - SQL 수리 비활성화: {exc})")
+        print(
+            "[⚠️ 근거 없음] live 스키마를 확인할 수 없어 SQL 자동 수리를 "
+            f"비활성화합니다(원래 SQL 은 그대로 1회 실행). 원인: {exc}\n"
+        )
 
-    for attempt in range(1, max_retries + 1):
+    # rate limit 대기는 "SQL 을 고쳐 보는 시도"가 아니므로 재시도 예산을
+    # 쓰지 않는다. for 문은 예산과 대기를 구분할 수 없어 while 로 바꿨다.
+    attempt = 0
+    rate_limit_waits = 0
+
+    while attempt < max_retries:
+        attempt += 1
         try:
             # conn.commit()을 여기서 부르지 않는다. Postgres 커넥션이 아니라
             # requests.Session이라 트랜잭션 개념 자체가 없다 - POST 요청
@@ -378,6 +525,50 @@ def _run_sql_with_retry(
             error_desc = utils.describe_pg_error(e)
             first_line = error_desc.splitlines()[0] if error_desc else "(빈 에러 메시지)"
             attempts_log.append(f"시도 {attempt}: 실패 - {first_line}")
+
+            # [T-116] 고쳐서 될 실패인지 먼저 가른다. 아래 두 종류는 LLM 에게
+            # 넘겨도 절대 해결되지 않으므로 재시도 예산을 태우면 안 된다.
+
+            if _is_rate_limited(error_desc):
+                # SQL 이 틀린 게 아니라 서버 한도에 걸린 것이다. 여기서 _fix_sql
+                # 을 부르면 멀쩡한 SQL 을 LLM 이 "고쳐서" 망가뜨리고, 그 호출이
+                # 다시 한도를 밀어 올린다. 같은 SQL 로 기다렸다 다시 친다.
+                if rate_limit_waits >= _MAX_RATE_LIMIT_WAITS:
+                    print(f"[⏳ 한도 초과] {rate_limit_waits}회 대기 후에도 429. 중단합니다.\n")
+                    return {
+                        "rows": [], "sql": current_sql, "assumptions": assumptions,
+                        "attempts": attempt, "attempts_log": attempts_log,
+                        "error": f"서버 분당 요청 한도(429)를 {rate_limit_waits}회 "
+                                 f"대기 후에도 넘지 못했다. 마지막 에러: {error_desc}",
+                    }
+                rate_limit_waits += 1
+                attempt -= 1  # 한도 대기는 'SQL 수정 시도'가 아니므로 예산 미소비
+                attempts_log.append(
+                    f"  (429 - {_RATE_LIMIT_WAIT_SECONDS:.0f}초 대기 후 같은 SQL 재실행, "
+                    f"{rate_limit_waits}/{_MAX_RATE_LIMIT_WAITS})"
+                )
+                print(f"[⏳ 429] 분당 한도. {_RATE_LIMIT_WAIT_SECONDS:.0f}초 대기 후 재시도합니다.\n")
+                time.sleep(_RATE_LIMIT_WAIT_SECONDS)
+                continue
+
+            if _is_schema_contract_violation(error_desc):
+                # 카탈로그가 없는 것을 가리키고 있다. LLM 에게 고치라고 하면
+                # 같은 카탈로그를 근거로 다시 받으므로 영원히 수렴하지 않는다.
+                # 여기서 멈추는 것이 재시도 증폭(=429 발생원)을 끊는 지점이다.
+                attempts_log.append("  (스키마 계약 위반 - 재시도 무의미, 즉시 중단)")
+                print(
+                    "[🛑 스키마 계약 위반] 카탈로그가 배포 DB에 없는 테이블/컬럼을 "
+                    "가리키고 있습니다. SQL 을 고쳐서 해결될 문제가 아니라 재시도를 "
+                    "중단합니다. tools.schema_snapshot 으로 스냅샷을 갱신하고 "
+                    "rdb_schema 카탈로그를 맞추세요.\n"
+                    f"원인(DB 에러):\n{error_desc}\n"
+                )
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": "스키마 계약 위반으로 재시도 중단(카탈로그가 배포 DB와 "
+                             f"어긋남). 마지막 에러: {error_desc}",
+                }
             # error_desc가 여러 줄(예: describe_api_error의 검증 에러 목록)이면
             # 첫 줄만으로는 원인을 알 수 없으므로 전체 내용을 별도로 남긴다.
             # _fix_sql에는 이미 error_desc 전체가 그대로 전달되지만, 사람이
@@ -397,6 +588,22 @@ def _run_sql_with_retry(
                     "rows": [], "sql": current_sql, "assumptions": assumptions,
                     "attempts": attempt, "attempts_log": attempts_log,
                     "error": f"{max_retries}회 재시도 후에도 실패. 마지막 에러: {error_desc}",
+                }
+
+            if not repair_allowed:
+                # live 근거 없이 고치라고 하면 예전과 똑같이 틀린 근거로
+                # 헛돌게 된다. 고치지 않고 정직하게 멈춘다.
+                attempts_log.append("  (live 근거 없음 - 수리하지 않고 중단)")
+                print(
+                    "[🛑 수리 중단] live 스키마 근거가 없어 SQL 을 고치지 "
+                    "않습니다. 근거 없는 수정은 예전의 무한 재시도로 되돌아갑니다.\n"
+                    f"원인(DB 에러):\n{error_desc}\n"
+                )
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": "live 스키마 근거를 얻지 못해 SQL 수리를 중단했다"
+                             f"(근거 실패: {ground_truth_error}). DB 에러: {error_desc}",
                 }
 
             # _fix_sql은 Clova LLM에 네트워크 요청을 보낸다. 이 호출 자체가
@@ -434,6 +641,15 @@ def _run_sql_with_retry(
                 f"수정 이유(LLM 판단): {fix_reason}\n"
                 f"수정된 SQL:\n{fix_result['sql']}\n"
             )
+
+    # max_retries 가 0 이하면 루프가 한 번도 돌지 않는다. 예전 for 문에서도
+    # 같은 구멍이 있었고 그때는 None 이 그대로 호출부로 흘러가 AttributeError
+    # 로 터졌다. 다른 반환 경로와 같은 모양을 돌려준다.
+    return {
+        "rows": [], "sql": current_sql, "assumptions": assumptions,
+        "attempts": 0, "attempts_log": attempts_log,
+        "error": f"재시도 예산이 0 이하라 SQL 을 한 번도 실행하지 않았다(max_retries={max_retries}).",
+    }
 
 
 def _execute_entity_lookup_step(step: dict, conn, max_retries: int) -> dict:
