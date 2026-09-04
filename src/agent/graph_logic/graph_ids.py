@@ -1,7 +1,5 @@
 """
-GraphDB 엔티티 해소에 쓰는 식별자 정규화. 팀원의 gragh-test 노트북
-`kb/ids.py`(셀 29)를 그대로 옮겼다 - 로직 변경 없음, 파일 위치만 우리
-`sql_gen_test/` 평면 구조에 맞게 `kb.ids` 패키지 대신 단일 모듈로 뒀다.
+GraphDB 엔티티 해소에 쓰는 식별자 정규화
 """
 from __future__ import annotations
 

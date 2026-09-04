@@ -11,19 +11,23 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
   SQL을 실행한다. 카탈로그 우선 + LLM 폴백으로 컬럼을 찾고, 값 검증을
   거치고, 자연어 초안 -> SQL 2단계로 쿼리를 생성한다(utils.py의
   헬퍼들을 그대로 쓴다).
-- graph_search_node, vector_search_node: 스텁이다. plan에 해당 엔진
-  단계가 있으면 그 사실만 인지하고 빈 결과를 돌려준다. GraphDB와
-  VectorDB가 아직 구축되지 않아서, 지금은 "이 자리에 실제 조회가
-  들어간다"는 라우팅 구조만 만들어 뒀다. 실제 SPARQL 생성/실행,
-  임베딩 검색은 나중에 이 두 함수 내부만 채우면 된다(그래프 구조
-  자체는 안 바뀐다).
+- graph_search_node: Graph logical plan을 만들고 GraphDB adapter를 통해
+  읽기 전용 SPARQL을 실행한다.
+- vector_search_node: 상위 단계 결과와 intent에서 상품 스코프를 모아
+  product_id로 해소하고, topic별 HyperCLOVA 임베딩으로 pgvector 청크를
+  검색한다. 요청 주제(topics/fields)를 section_type 힌트로 바꿔 검색
+  섹션을 제한하고, 문서 확보 여부(coverage)까지 판정해 ok/low_confidence/
+  no_document/no_product_match/topic_not_covered/no_hit 상태를 남기며,
+  장애는 해당 단계만 abstain한다.
 - merge_results_node: RDB 결과를 모아서 하나의 리스트로 만든다.
   needs_merge_rank(여러 도메인을 합쳐서 다시 정렬해야 하는 교차질의)
   케이스의 정렬 로직은 아직 최소 구현이다 - 도메인마다 정렬 개념이
   실제로 다른 컬럼명으로 풀리기 때문에, 이 완전한 통합 정렬은 후속
   작업으로 남겨 뒀다(아래 함수 docstring에 표시).
 - generate_answer_node: 완전히 동작한다. merged_rows를 LLM에 보여주고
-  자연어 답변을 만든다.
+  자연어 답변을 만든다. 요청 항목(intent.output_requirements)과 Vector
+  단계의 문서 근거 상태(topic_coverage 포함)를 함께 넘겨, 요청하지 않은
+  화제를 덧붙이거나 미확보 주제를 다른 섹션 청크로 대신 답하지 않게 한다.
 """
 from __future__ import annotations
 
@@ -39,6 +43,8 @@ from agent.state import ready_step_ids
 from agent.graph_logic import graph_orchestrator
 from tools import rdb_schema
 from agent import utils
+from agent.get_clova import embed
+from tools.vector_search import get_coverage, resolve_product_ids, search_documents
 
 PipelineState = dict[str, Any]
 
@@ -707,8 +713,11 @@ def graph_search_node(state: PipelineState) -> dict:
             else:
                 result = graph_orchestrator.run(question, frame=frame)
         except Exception as e:
+            # 예외 문구를 note에도 남긴다 - trace만 두면 step_results 조립에서
+            # 버려져 노트북에 status만 보이고 원인을 추적할 수 없었다(2026-09-03).
             result = {"status": "abstain_exception", "rows": [], "evidence": [],
-                      "entity_codes": [], "trace": [f"{type(e).__name__}: {e}"]}
+                      "entity_codes": [], "trace": [f"{type(e).__name__}: {e}"],
+                      "note": f"{type(e).__name__}: {e}"}
 
         step_results[step_id] = {
             "engine": "graph",
@@ -718,6 +727,7 @@ def graph_search_node(state: PipelineState) -> dict:
             "evidence": result.get("evidence", []),
             "entity": result.get("entity"),
             "sparql": result.get("sparql"),
+            "note": result.get("note"),
         }
         trace_msgs.append(
             f"GraphDB 검색 [{step_id}]: status={result.get('status')}, "
@@ -728,20 +738,229 @@ def graph_search_node(state: PipelineState) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 노드 4c: VectorDB 검색 (스텁 - 라우팅 구조만)
+# 노드 4c: VectorDB 검색
 # ---------------------------------------------------------------------------
-def vector_search_node(state: PipelineState) -> dict:
-    """VectorDB가 아직 구축되지 않았다. plan에 vector 단계가 있으면
-    그 사실을 인지하고 빈 결과를 돌려준다. 실제로 채울 부분:
-      1. topics/target_entities로 검색 쿼리 구성
-      2. 임베딩 생성
-      3. 벡터 인덱스에서 유사도 검색, top-k 청크 반환
-    이 함수의 반환 형태만 유지하면 나머지 구조는 안 바뀐다.
+# 0828 실험 노트북에서 확인한 값들. 실제 top1 점수가 0.55~0.68 구간이라
+# 0.45 아래는 "질문과 무관한 문서를 억지로 인용"하는 쪽에 가까웠다.
+VECTOR_SCORE_FLOOR = 0.45
+VECTOR_MAX_TOPICS = 3
+VECTOR_DEFAULT_TOP_K = 5
+VECTOR_SCOPE_LIMIT = 50
+# RDB 결과 행에는 LLM이 고른 컬럼만 담긴다(예: pd_nm, pd_net_tamt만).
+# 코드 컬럼이 아예 없는 경우가 흔해서 이름 컬럼으로도 스코프를 잡아야 한다.
+VECTOR_CODE_KEYS = ("pd_itm_no", "itm_no", "pd_no", "상품코드", "product_id", "code")
+VECTOR_NAME_KEYS = ("pd_nm", "itm_nm", "상품명", "name", "product_name")
+# 요청 주제 ↔ vec.document_chunk.section_type 대조용 힌트. 847/974 문서가
+# 표지 투자위험 요약(risk) 청크뿐이라, 섹션을 제한하지 않으면 '운용 전략'
+# 질문에도 위험 청크가 floor를 넘겨 인용된다(2026-09-03 실측).
+VECTOR_SECTION_HINTS = {
+    "objective_strategy": ("전략", "투자목적", "투자 목적", "운용목표", "운용 목표", "운용방침", "운용 방침"),
+    "risk": ("위험", "리스크"),
+    "base_index": ("기초지수", "기초 지수", "비교지수", "벤치마크", "추적"),
+}
+VECTOR_SECTION_LABELS = {"objective_strategy": "투자목적·운용전략", "risk": "투자위험", "base_index": "기초지수"}
 
-    §5 웨이브 스케줄러: 다른 두 검색 노드와 같은 이유로 ready_step_ids로
-    걸러낸다. vector 단계는 지금 설계상 항상 rdb_step_ids나
-    terminal_graph_step_ids에 의존하므로(plan_query_db.py) 보통 마지막
-    웨이브에서만 준비된다."""
+
+def _section_hints(labels: list[str]) -> dict[str, list[str]]:
+    """요청 주제 라벨을 section_type별로 묶는다(매칭된 섹션만 반환).
+
+    질문 원문은 보지 않는다 - "미래에셋에서 운용하는"처럼 상품명·운용사
+    표현이 '운용'에 걸려 엉뚱한 섹션을 요청하게 되기 때문이다."""
+    hints: dict[str, list[str]] = {}
+    for label in labels:
+        text = str(label)
+        for section, keywords in VECTOR_SECTION_HINTS.items():
+            if any(keyword in text for keyword in keywords):
+                bucket = hints.setdefault(section, [])
+                if text not in bucket:
+                    bucket.append(text)
+    return hints
+
+
+def _vector_scope(state: PipelineState, step: dict) -> tuple[list[str], list[str]]:
+    """이 Vector 단계가 근거를 찾아야 할 상품의 (코드, 이름) 후보를 모은다.
+    intent/step의 product_name 엔티티와 depends_on 단계의 RDB 행·Graph
+    entity_codes가 출처다. 순서를 유지한 채 중복만 제거한다."""
+    codes: list[str] = []
+    names: list[str] = []
+
+    def push(bucket: list[str], value: Any) -> None:
+        text = str(value).strip()
+        if text and text not in bucket:
+            bucket.append(text)
+
+    entity_sources = [
+        (state.get("intent") or {}).get("target_entities") or [],
+        step.get("target_entities") or [],
+    ]
+    for entities in entity_sources:
+        for entity in entities:
+            if entity.get("entity_type") == "product_name":
+                push(names, entity.get("surface_form") or "")
+
+    step_results = state.get("step_results") or {}
+    for dep_id in step.get("depends_on") or []:
+        dep = step_results.get(dep_id) or {}
+        if dep.get("engine") == "rdb":
+            for row in dep.get("rows") or []:
+                for key in VECTOR_CODE_KEYS:
+                    if row.get(key):
+                        push(codes, row[key])
+                for key in VECTOR_NAME_KEYS:
+                    if row.get(key):
+                        push(names, row[key])
+        elif dep.get("engine") == "graph":
+            for code in dep.get("entity_codes") or []:
+                push(codes, code)
+
+    return codes[:VECTOR_SCOPE_LIMIT], names[:VECTOR_SCOPE_LIMIT]
+
+
+def _summarize_coverage(product_ids: list[str], coverage: dict[str, dict]) -> dict[str, int]:
+    """product_coverage 상태를 4분류로 센다. 테이블에 행이 아예 없는
+    상품은 unknown(=문서가 없다고 단정할 수 없음)으로 둔다."""
+    summary = {"matched": 0, "unavailable": 0, "download_failed": 0, "unknown": 0}
+    for product_id in product_ids:
+        status = (coverage.get(product_id) or {}).get("status")
+        if isinstance(status, str) and status.startswith("matched"):
+            summary["matched"] += 1
+        elif status in summary:
+            summary[status] += 1
+        else:
+            summary["unknown"] += 1
+    return summary
+
+
+def _normalize_chunk(chunk: dict) -> dict:
+    """psycopg2는 date 객체를, SQL API는 문자열을 돌려준다. 답변·직렬화
+    단계가 형을 신경 쓰지 않도록 여기서 한 번만 맞춘다."""
+    return {
+        "chunk_id": str(chunk.get("chunk_id")),
+        "document_id": str(chunk.get("document_id") or ""),
+        "section_type": chunk.get("section_type") or "",
+        "citation_text": chunk.get("citation_text") or "",
+        "chunk_text": chunk.get("chunk_text") or "",
+        "score": float(chunk.get("score") or 0.0),
+        "effective_as_of": str(chunk.get("effective_as_of") or ""),
+        "published_at": str(chunk.get("published_at") or ""),
+        "source_url": chunk.get("source_url") or "",
+        "product_ids": list(chunk.get("product_ids") or []),
+    }
+
+
+def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
+    """Vector 단계 하나를 실행한다.
+
+    스코프 해소 -> topics/fields를 section_type 힌트로 변환 -> 섹션 제한
+    검색 -> 상태 판정 순서다. 요청 주제 섹션이 하나도 안 걸리면 결과가
+    없을 때 topic_not_covered로 남기고, 걸린 결과가 있어도 미확보 주제를
+    topic_coverage/note에 적는다."""
+    codes, names = _vector_scope(state, step)
+    product_ids = resolve_product_ids(codes, names) if (codes or names) else []
+    coverage = get_coverage(product_ids) if product_ids else {}
+    summary = _summarize_coverage(product_ids, coverage)
+
+    if (codes or names) and not product_ids:
+        # 상품을 지목했는데 product_master 완전일치에 실패한 경우다. 여기서
+        # 전체 문서로 넓히면 다른 상품의 투자설명서를 그 상품의 근거처럼
+        # 인용하게 되므로(상품명 완전일치 우선·유사명 대체 금지) 검색을
+        # 생략하고 사유만 남긴다.
+        return {
+            "engine": "vector", "status": "no_product_match",
+            "chunks": [], "count": 0, "queries": [],
+            "product_scope": {"codes": codes, "names": names, "product_ids": [], "coverage": summary},
+            "raw_top": [],
+            "topic_coverage": {"requested": {}, "uncovered": {}},
+            "note": f"상품 후보 {len(codes) + len(names)}건을 product_master에서 해소하지 못해 문서 검색 생략",
+        }
+
+    # topic마다 따로 임베딩한다. "투자 위험"과 "기초지수"는 문서 안에서
+    # 서로 다른 section에 있어서 질문 하나로는 한쪽만 걸린다.
+    topics = (step.get("topics") or [])[:VECTOR_MAX_TOPICS]
+    labels = topics + [f for f in (step.get("fields") or []) if f not in topics]
+    hints = _section_hints(labels)
+    section_types = list(hints) or None
+    queries = [f"{question} {topic}".strip() for topic in topics] or [question]
+
+    merged: dict[str, dict] = {}
+    for query in queries:
+        for raw in search_documents(
+            embed(query),
+            top_k=step.get("top_k", VECTOR_DEFAULT_TOP_K),
+            product_ids=product_ids or None,
+            section_types=section_types,
+        ):
+            chunk = _normalize_chunk(raw)
+            previous = merged.get(chunk["chunk_id"])
+            if previous is None or chunk["score"] > previous["score"]:
+                merged[chunk["chunk_id"]] = chunk
+
+    ordered = sorted(merged.values(), key=lambda c: c["score"], reverse=True)
+    raw_top = [(c["chunk_id"], round(c["score"], 3)) for c in ordered[:5]]
+    chunks = [c for c in ordered if c["score"] >= VECTOR_SCORE_FLOOR]
+
+    found = {c["section_type"] for c in chunks}
+    uncovered = {sec: labs for sec, labs in hints.items() if sec not in found}
+
+    missing = summary["unavailable"] + summary["download_failed"]
+    if chunks:
+        status = "ok"
+    elif ordered:
+        status = "low_confidence"
+    elif product_ids and summary["matched"] == 0 and missing > 0:
+        # 상품은 특정했는데 그 상품의 투자설명서 자체가 없는 경우다.
+        # "검색 결과 없음"과 구분해야 답변이 사유를 정확히 말할 수 있다.
+        status = "no_document"
+    elif hints:
+        # 문서는 있으나 요청 주제 섹션이 없다(예: risk 청크만 적재된 문서).
+        status = "topic_not_covered"
+    else:
+        status = "no_hit"
+
+    scope_note = (
+        f"스코프 {len(product_ids)}상품(문서 확보 {summary['matched']}, 미확보 {missing})"
+        if product_ids else "스코프 없음(전체 문서 검색)"
+    )
+    note = f"{scope_note}, 청크 {len(chunks)}건(≥{VECTOR_SCORE_FLOOR})"
+    if uncovered:
+        note += ", 요청 주제 미확보: " + "; ".join(
+            f"{'/'.join(labs)}({VECTOR_SECTION_LABELS[sec]} 섹션 없음)"
+            for sec, labs in uncovered.items()
+        )
+    return {
+        "engine": "vector",
+        "status": status,
+        "chunks": chunks,
+        "count": len(chunks),
+        "queries": queries,
+        "product_scope": {
+            "codes": codes, "names": names,
+            "product_ids": product_ids, "coverage": summary,
+        },
+        "raw_top": raw_top,
+        "topic_coverage": {"requested": hints, "uncovered": uncovered},
+        "note": note,
+    }
+
+
+def vector_search_node(state: PipelineState) -> dict:
+    """Vector 단계별로 상품 스코프를 해소하고 pgvector 근거 청크를 검색한다.
+
+    [흐름] ready_step_ids로 이번 웨이브 몫만 고른 뒤, 단계마다
+    _vector_scope -> resolve_product_ids -> get_coverage -> section 힌트
+    산출 -> topic별 embed+search_documents(섹션 제한) -> chunk_id 중복
+    제거 -> SCORE_FLOOR 필터를 돈다.
+
+    [입출력] state의 question/intent/plan/step_results를 읽고
+    {step_id: {status, chunks, count, queries, product_scope, raw_top,
+    topic_coverage, note}}와 trace를 반환한다. 요청 주제 섹션이 문서에
+    없으면 status=topic_not_covered다.
+
+    [실패·제약] 임베딩/DB 장애는 그 단계만 abstain_vector_unavailable로
+    남기고 다른 단계는 계속 실행한다. vector 단계는 설계상 rdb/graph
+    단계에 의존하므로(plan_query_db.py) 보통 마지막 웨이브에서만 준비된다.
+
+    [구현 상태] 스코프·커버리지·검색·상태 판정까지 실동작한다."""
     plan = state.get("plan") or []
     done = set((state.get("step_results") or {}).keys())
     ready = ready_step_ids(plan, done)
@@ -750,15 +969,34 @@ def vector_search_node(state: PipelineState) -> dict:
     if not vector_steps:
         return {"trace": ["VectorDB 검색: 이번 웨이브에 실행할 Vector 단계가 없어 건너뜀"]}
 
-    step_results = {
-        s["step_id"]: {
-            "engine": "vector",
-            "chunks": [],
-            "note": "VectorDB 미구축 - 라우팅 구조만 존재, 실제 임베딩 검색 없음",
-        }
-        for s in vector_steps
-    }
-    return {"step_results": step_results, "trace": [f"VectorDB 검색: {len(vector_steps)}단계 (스텁, 미구현)"]}
+    question = state.get("question", "")
+    step_results: dict[str, Any] = {}
+    trace_msgs: list[str] = []
+
+    for step in vector_steps:
+        step_id = step["step_id"]
+        # 단계별로 감싼다 - 한 단계의 임베딩/DB 실패가 다른 단계까지
+        # 죽이면 근거를 더 모을 수 있었던 질문도 통째로 답변불가가 된다.
+        try:
+            result = _run_vector_step(state, step, question)
+        except Exception as exc:
+            result = {
+                "engine": "vector", "status": "abstain_vector_unavailable",
+                "chunks": [], "count": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+            trace_msgs.append(f"VectorDB 검색 [{step_id}]: 검색 불가 - {result['error']}")
+        else:
+            scope = result["product_scope"]
+            trace_msgs.append(
+                f"VectorDB 검색 [{step_id}]: status={result['status']}, {result['count']}건 "
+                f"(스코프 {len(scope['product_ids'])}상품, 문서확보 {scope['coverage']['matched']})"
+                + (f", 미확보 주제 {len(result['topic_coverage']['uncovered'])}건"
+                   if result["topic_coverage"]["uncovered"] else "")
+            )
+        step_results[step_id] = result
+
+    return {"step_results": step_results, "trace": trace_msgs}
 
 
 # ---------------------------------------------------------------------------
@@ -776,6 +1014,13 @@ def merge_results_node(state: PipelineState) -> dict:
     그룹 멤버의 step_id는 rows가 비어 있으므로(merged_into만 있음) 여기서
     그냥 순서대로 이어붙이기만 해도 SQL이 만든 순서가 그대로 보존된다.
     Python에서 다시 정렬할 필요가 없다(예전엔 "아직 미구현"이었던 부분).
+
+    [Vector 갱신] vector 단계의 청크도 청크 하나당 한 행씩(_domain="vector")
+    같은 목록에 넣는다. 답변 생성 LLM이 수치 행과 문서 인용을 한 자리에서
+    보고, _build_answer_preview의 도메인별 예산 분배도 그대로 적용받게 하기
+    위해서다. 본문은 400자로 자른다(전문은 step_results에 그대로 남는다).
+    "섹션"에 VECTOR_SECTION_LABELS로 바꾼 section_type 라벨을 담아, 답변
+    생성 LLM이 이 행의 섹션이 질문이 요청한 주제와 같은지 대조할 수 있게 한다.
 
     UNION 결과의 행에는 SELECT 목록 자체에 이미 "domain" 컬럼(리터럴
     문자열)이 들어 있다 - 한 결과 안에 여러 도메인 행이 섞여 있어서
@@ -803,6 +1048,19 @@ def merge_results_node(state: PipelineState) -> dict:
                 tagged["_domain"] = "graph"
                 tagged["_step_id"] = step_id
                 merged_rows.append(tagged)
+        elif result.get("engine") == "vector":
+            for chunk in result.get("chunks") or []:
+                merged_rows.append({
+                    "출처문서": chunk.get("citation_text", ""),
+                    "섹션": VECTOR_SECTION_LABELS.get(chunk.get("section_type", ""), chunk.get("section_type", "")),
+                    "인용": (chunk.get("chunk_text") or "")[:400],
+                    "기준일": chunk.get("effective_as_of", ""),
+                    "출처URL": chunk.get("source_url", ""),
+                    "상품ID": ", ".join(chunk.get("product_ids") or []),
+                    "유사도": round(float(chunk.get("score") or 0.0), 3),
+                    "_domain": "vector",
+                    "_step_id": step_id,
+                })
 
     return {"merged_rows": merged_rows, "trace": [f"결과 합치기: {len(merged_rows)}행"]}
 
@@ -827,6 +1085,42 @@ def _describe_applied_conditions(intent: dict) -> str:
         limit_desc = f", 상위 {sort['limit']}개" if sort.get("limit") else ""
         parts.append(f"{sort['attribute']} {sort['order']} 정렬{limit_desc}")
     return "; ".join(parts) if parts else "(특별한 조건 없음)"
+
+
+def _describe_requested_items(intent: dict) -> str:
+    """intent.output_requirements(fields/narrative_topics)를 답변 LLM에게
+    "이 항목만 다루라"고 보여줄 한 줄로 요약한다. 질문이 요구하지 않은
+    화제(예금자보호 등)까지 답에 섞이는 걸 막는 1차 방어다."""
+    req = intent.get("output_requirements") or {}
+    parts = []
+    fields = req.get("fields") or []
+    if fields:
+        parts.append(f"구조화 값: {', '.join(fields)}")
+    topics = req.get("narrative_topics") or []
+    if topics:
+        parts.append(f"서술 주제: {', '.join(topics)}")
+    return "; ".join(parts) if parts else "(명시된 항목 없음 - 질문 원문을 따른다)"
+
+
+def _describe_vector_status(step_results: dict) -> str:
+    """각 Vector 단계의 status·note/error와, 요청했으나 문서에 없는 주제
+    (topic_coverage.uncovered)를 답변 LLM에게 보여준다. 미확보 주제는
+    행이 없어도 조용히 무시되지 않고 "확인할 수 없음" 사유로 이어져야
+    하므로, 검색 결과가 비어 있는 이유를 여기서 명시적으로 전달한다."""
+    lines: list[str] = []
+    for step_id, result in (step_results or {}).items():
+        if result.get("engine") != "vector":
+            continue
+        detail = result.get("note") or result.get("error") or ""
+        line = f"{step_id}: status={result.get('status')}, {detail}"
+        uncovered = (result.get("topic_coverage") or {}).get("uncovered") or {}
+        if uncovered:
+            line += ", 미확보 주제: " + ", ".join(
+                f"{'/'.join(labels)}({VECTOR_SECTION_LABELS.get(sec, sec)} 섹션 없음)"
+                for sec, labels in uncovered.items()
+            )
+        lines.append(line)
+    return "\n".join(lines) if lines else "(문서 검색 단계 없음)"
 
 
 def _describe_sql_assumptions(step_results: dict) -> str:
@@ -860,7 +1154,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
     - Graph 단계: 어떤 relation(주체 -- 관계 --> 대상)을 탐색했는지(plan에서
       가져옴), 조회 건수, evidence 요약. "chained"(체인 중간 단계, 실제
       조회는 terminal 단계에서 수행됨)는 뺀다.
-    - Vector 단계: 스텁 상태 그대로 note만 남긴다.
+    - Vector 단계: 검색 건수와 query를 근거 요약에 남긴다.
     """
     step_results = state.get("step_results") or {}
     plan_by_id = {s["step_id"]: s for s in state.get("plan") or []}
@@ -896,7 +1190,17 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 f"{len(result.get('rows') or [])}건{evidence_note}"
             )
         elif engine == "vector":
-            parts.append(f"[Vector] {result.get('note', '미구현')}")
+            if result.get("status") == "chained":
+                continue
+            # abstain/no_document이면 note 대신 error를 붙인다 - 답변 LLM이
+            # "문서 미확보"를 사유로 말할 수 있어야 한다.
+            detail = result.get("note") or result.get("error") or ""
+            segments = [f"[Vector] status={result.get('status')}, {result.get('count', 0)}건, {detail}"]
+            segments.extend(
+                f"인용: {c.get('citation_text')}({c.get('effective_as_of')})"
+                for c in (result.get("chunks") or [])[:2]
+            )
+            parts.append(", ".join(segments))
 
     return " | ".join(parts) if parts else "참조 없음"
 
@@ -961,7 +1265,14 @@ def generate_answer_node(state: PipelineState) -> dict:
 
     # 3. 예외 처리: 데이터가 없는 경우
     if not merged_rows:
-        reason = f" ({'; '.join(blocking_reasons)})" if blocking_reasons else ""
+        # 서술형 질문은 blocking_reasons가 비어 있어도 "문서 미확보" 때문에
+        # 답을 못 하는 경우가 있다. 그 사유를 그대로 답변에 남긴다.
+        reasons = list(blocking_reasons)
+        for result in (state.get("step_results") or {}).values():
+            if result.get("engine") == "vector" and result.get("status") not in (None, "ok"):
+                detail = result.get("note") or result.get("error") or ""
+                reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
+        reason = f" ({'; '.join(reasons)})" if reasons else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
         
         final_response = {
@@ -978,6 +1289,8 @@ def generate_answer_node(state: PipelineState) -> dict:
     preview = _build_answer_preview(merged_rows)
     rows_text = json.dumps(preview, ensure_ascii=False, default=str, indent=2)
     applied_conditions = _describe_applied_conditions(intent)
+    requested_items = _describe_requested_items(intent)
+    vector_status = _describe_vector_status(state.get("step_results") or {})
     sql_assumptions = _describe_sql_assumptions(state.get("step_results") or {})
     # §10: think_trace를 LLM이 매번 새로 지어내지 않고, 파이프라인이 각
     # 노드에서 실제로 쌓아 온 실행 기록(질의 분석 -> plan 수립 -> 엔진별
@@ -993,6 +1306,8 @@ def generate_answer_node(state: PipelineState) -> dict:
             (
                 "human",
                 f"[질문]\n{question}\n\n"
+                f"[질문이 요구한 항목] (answer는 이 항목만 다룬다)\n{requested_items}\n\n"
+                f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
                 f"[이미 SQL로 적용된 조건] (아래 데이터는 이 조건을 전부 만족하는 행만 남은 결과다. "
                 f"이 조건에 쓰인 컬럼이 데이터에 안 보여도 이미 만족된 것이니 다시 확인하지 마라)\n"
                 f"{applied_conditions}\n\n"

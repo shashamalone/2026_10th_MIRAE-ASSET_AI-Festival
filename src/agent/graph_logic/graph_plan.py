@@ -83,7 +83,7 @@ def _populated(uri: str) -> bool:
     쓰면 형태가 멀쩡한 plan이 조용히 0행이 되고, LLM은 오류를 못 받아 고칠
     기회가 없다. predicate 인덱스 조회라 비용은 무시할 수준이고 프로세스당
     1회만 돈다."""
-    import graph_engine      # 지연 import — 순수 TBox 테스트는 store가 필요 없다.
+    from agent.graph_logic import graph_engine  # 지연 import — 순수 TBox 테스트는 store가 필요 없다.
     try:
         return bool(graph_engine.sparql(f"SELECT ?o WHERE {{ ?s {_term(uri)} ?o }} LIMIT 1"))
     except Exception:

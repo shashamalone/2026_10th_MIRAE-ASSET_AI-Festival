@@ -522,6 +522,9 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                 "engine": "vector",
                 "depends_on": list(upstream),
                 "topics": narrative_topics,
+                # intent가 "투자 위험"/"운용 전략"을 narrative_topics 대신
+                # output_requirements.fields에 넣는 경우가 많아 함께 넘긴다.
+                "fields": fields,
                 "target_entities": target_entities,
             }
         )

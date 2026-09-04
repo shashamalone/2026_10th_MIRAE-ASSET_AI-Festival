@@ -1,0 +1,75 @@
+{
+ "current": {
+  "p50": 24998.2,
+  "p95": 144006.4
+ },
+ "steps": [
+  {
+   "action": "A1 Graph seed 인덱스",
+   "saving_p50": 0,
+   "saving_mean": 10873.434653465347,
+   "saving_p95_run": 80453.5,
+   "p50_after": 24657.9,
+   "p95_after": 70301.29999999999,
+   "max_after": 96291.99999999999,
+   "over15": 91
+  },
+  {
+   "action": "A2 verify_intent 제거",
+   "saving_p50": 5029.4,
+   "saving_mean": 5697.1287128712875,
+   "saving_p95_run": 10887.0,
+   "p50_after": 19499.199999999997,
+   "p95_after": 58975.19999999999,
+   "max_after": 84930.69999999998,
+   "over15": 80
+  },
+  {
+   "action": "A3 draft+concept LLM 제거",
+   "saving_p50": 7403.299999999999,
+   "saving_mean": 8801.337623762376,
+   "saving_p95_run": 16388.2,
+   "p50_after": 11970.699999999988,
+   "p95_after": 35820.499999999985,
+   "max_after": 73020.19999999998,
+   "over15": 28
+  },
+  {
+   "action": "A4 SQL fix 재시도 제거",
+   "saving_p50": 0,
+   "saving_mean": 1596.780198019802,
+   "saving_p95_run": 8820.3,
+   "p50_after": 10625.900000000003,
+   "p95_after": 24575.8,
+   "max_after": 63406.499999999985,
+   "over15": 25
+  },
+  {
+   "action": "A5 RDB 도메인 병렬",
+   "saving_p50": 0,
+   "saving_mean": 1302.9821782178217,
+   "saving_p95_run": 11026.7,
+   "p50_after": 10125.900000000001,
+   "p95_after": 20158.4,
+   "max_after": 60701.29999999999,
+   "over15": 20
+  },
+  {
+   "action": "A6 generate 4s 상한",
+   "saving_p50": 0,
+   "saving_mean": 893.0524752475247,
+   "saving_p95_run": 5148.299999999999,
+   "p50_after": 9984.199999999999,
+   "p95_after": 17595.099999999995,
+   "max_after": 55667.39999999999,
+   "over15": 12
+  }
+ ],
+ "remaining_over15": [
+  "Q20",
+  "Q23",
+  "Q24",
+  "Q27",
+  "Q28"
+ ]
+}

@@ -1,0 +1,3223 @@
+[run] 35문항 x 4회차 -> test\pipline-test\latency\traces_full.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+
+===== [Q1 r1] tokens=59993 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, buyable_quantity, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND pd_nm LIKE '%에스케이하이닉스224-2%'
+
+[done] Q1 r1 a1 status=ok e2e=23.6s llm=6 tok=16100 rem=52/32781 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+
+===== [Q2 r1] tokens=32774 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%'
+
+[done] Q2 r1 a1 status=ok e2e=21.4s llm=6 tok=15947 rem=44/5674 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754,"srf
+[guard] remaining=43 tokens=5667 -> 13.5s 대기
+
+===== [Q3 r1] tokens=59993 | 현대해상화재보험7(후)(콜/후)의 채권 종류, 발행사, 신용등급, 만기구분, 듀레이션을 알려줘. 원본 등급값
+[done] Q3 r1 a1 status=ok e2e=14.4s llm=3 tok=11091 rem=55/43470 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_hit: 스코프 1상품(문서 확보 0, 미확보 0), 청크 0건(≥0.45))
+
+===== [Q4 r1] tokens=43463 | KODEX 200의 운용사, 기초지수, 현재 AUM, NAV, 종가, 괴리율과 1년 수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y, pd_itm_no, du_base_dt FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "du_base_dt" does not exist
+LINE 1: ...st_nav, du_clpr, du_diff_rt, du_er_1y, pd_itm_no, du_base_dt...
+                                                             ^
+HINT:  Perhaps you meant to reference the column "pref01n001.fn_base_dt".
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 컬럼 'du_base_dt'가 정의되지 않아 제거함
+수정된 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y, pd_itm_no FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y, pd_itm_no FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%' AND pd_grp_no = 'ETF'
+
+[done] Q4 r1 a1 status=ok e2e=23.7s llm=7 tok=22443 rem=46/7855 | 조건에 맞는 상품이 없습니다.
+[guard] remaining=45 tokens=7848 -> 20.5s 대기
+
+===== [Q5 r1] tokens=59993 | TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, wu_inv_ast_type, wu_inv_rgn, cu_strtegy, cu_charge_rt, du_er_1m, du_er_3m, du_er_6m FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%' AND pd_grp_no = 'ETF'
+
+[done] Q5 r1 a1 status=ok e2e=22.4s llm=6 tok=16891 rem=52/31853 | 투자자산군 | 투자지역 | 운용전략 | 복제방식 | 총보수 | 1개월 수익률 | 3개월 수익률 | 6개월 수익률
+주식 | 미국 | 실물복제 | - | - | 1.84 | 2.37 
+
+===== [Q6 r1] tokens=31846 | VOO의 정식 상품명, 기초지수, 운용사, 총보수, AUM, 현재가와 거래량을 알려줘. ISIN, 가격 기준
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): WHERE 절에서 잘못된 컬럼(pd_nm 대신 pd_abrv_nm 사용)
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼 별칭에 한글 사용 시 SQL 구문 오류 발생
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[done] Q6 r1 a1 status=ok e2e=20.5s llm=7 tok=18111 rem=43/450 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=42 tokens=443 -> 16.5s 대기
+
+===== [Q7 r1] tokens=59993 | BND의 투자자산 유형, 투자지역, 기초지수, 지수 복제방식, 운용전략과 총보수를 알려줘. 상품번호와 전략 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, prfd_ty_desc, idx_bsis_nm, idx_plcm_mthd_desc, mgn_strat_desc, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r as total_commission FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "prfd_ty_desc" does not exist
+LINE 1: SELECT itm_nm, fd_ivst_rgn_desc, prfd_ty_desc, idx_bsis_nm, ...
+                                         ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 원래 SQL에서 사용된 'prfd_ty_desc', 'idx_bsis_nm', 'idx_plcm_mthd_desc', 'mgn_strat_desc'라는 컬럼들은 실제 테이블에 존재하지 않음; 대체 가능한 컬럼으로는 'zrin_btyp_nm', 'bmrk_nm', 'prfd_attr_search_text', 'han_clas_nm' 등이 있음
+수정된 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, han_clas_nm AS 운용전략, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS 총보수 FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, han_clas_nm AS 운용전략, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS 총보수 FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼명에 띄어쓰기가 포함되어 있어서 발생한 구문 오류
+수정된 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, han_clas_nm AS 운용전략, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS 총보수 FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, han_clas_nm AS 운용전략, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS 총보수 FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[done] Q7 r1 a1 status=ok e2e=24.8s llm=7 tok=21570 rem=51/25386 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=50 tokens=25379 -> 34.5s 대기
+
+===== [Q8 r1] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모' AND itm_nm LIKE '%미래에셋코어테크증권자투자신탁(주식) 종류A%' AND fd_nast_suma IS NOT NULL AND fd_mm1_ern_r IS NOT NULL AND fd_mm3_ern_r IS NOT NULL AND fd_mm6_ern_r IS NOT NULL AND fd_yr1_ern_r IS NOT NULL
+
+[done] Q8 r1 a1 status=ok e2e=25.1s llm=6 tok=16714 rem=52/32373 | [{"fund_type":"주식형","net_asset":"734810470588.0000","one_month_return":"3.32","three_month_return":"
+
+===== [Q9 r1] tokens=32366 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no FROM raw.prfd01n001 WHERE or_attr_desc = 'MMF' AND itm_nm LIKE '%삼성 베스트 MMF 법인 제1호%'
+
+[done] Q9 r1 a1 status=ok e2e=17.7s llm=6 tok=15681 rem=44/5326 | 벤치마크: CALL
+통화: KRW
+투자지역: 국내
+개인·법인 구분: 법인
+위험등급: 매우 낮은 위험
+순자산: 2190033836274.0000
+상품 식별번호: KR501441005
+[guard] remaining=43 tokens=5319 -> 16.5s 대기
+
+===== [Q10 r1] tokens=59993 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·
+  [Warning] 값이 비어있는 조건 무시됨: 모펀드 ID
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, itm_no, sale_yn, fd_nast_suma, fd_yr1_ern_r, rptt_ksd_itm_no FROM raw.prfd01n001 WHERE itm_nm LIKE '%우리반도체BIG2플러스%' AND (itm_nm LIKE '%C-P%' OR itm_nm LIKE '%C-Pe%') AND fd_nast_suma IS NOT NULL ORDER BY fd_nast_suma DESC LIMIT 1
+
+[done] Q10 r1 a1 status=ok e2e=80.0s llm=6 tok=17148 rem=55/44146 | 동일한 모펀드 여부를 확인하기 위해 대표종목번호(rptt_ksd_itm_no)를 비교하였으나, 현재 제공된 데이터에는 'C-P' 클래스 정보가 없어 직접적인 비교가 불가능합니다. 
+
+===== [Q11 r1] tokens=44139 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_pbcm AS 발행사, crd_grd AS 원등급, mat_dt AS 만기일, buy_yield AS 매수수익률, buyable_quantity AS 매수가능수량, sale_yield_base_dt AS 기준일 FROM raw.prbd01n001 WHERE buyable_quantity >= 0 AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND buyable_quantity IS NOT NULL ORDER BY buyable_quantity DESC
+
+[done] Q11 r1 a1 status=exception e2e=55.1s llm=6 tok=15495 rem=59/59993 | 
+
+===== [Q12 r1] tokens=59986 | 현재 판매 중이고 거래정지가 아니며 연금거래가 가능한 국내 ETF를 찾아줘. 상품명, 연금 위험구분, 상품 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pen_risk_nm, pd_risk_nm, pd_net_tamt, ref_base_dt FROM raw.pref01n001 WHERE pd_sale_yn = '판매 중' AND pd_tr_yn = '거래정지 아님' AND pd_pen_tr_yn = '가능' AND pd_grp_no = 'ETF'
+
+[done] Q12 r1 a1 status=ok e2e=23.5s llm=5 tok=15268 rem=52/35815 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q13 r1] tokens=35808 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity = '가능' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: "가능"
+LINE 1: ...AND remaining_days <= 1095 AND buyable_quantity = '가능' AND...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 매수가능수량이 '가능'이어야 한다는 조건에서 '가능'은 문자열이므로 정확한 비교를 위해 '!=' ''로 변경
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: ""
+LINE 1: ...ND remaining_days <= 1095 AND buyable_quantity != '' AND buy...
+                                                             ^
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 2: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q13 r1 a1 status=rate_limited e2e=28.7s llm=7 tok=20244 rem=43/4883 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=42 tokens=4876 -> 6.5s 대기
+
+===== [Q13 r1 retry] tokens=59993 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity = '가능' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: "가능"
+LINE 1: ...AND remaining_days <= 1095 AND buyable_quantity = '가능' AND...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 매수가능수량이 '가능'이어야 한다는 조건에서 '가능'은 문자열이므로 정확한 비교를 위해 '!=' ''로 변경
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: ""
+LINE 1: ...ND remaining_days <= 1095 AND buyable_quantity != '' AND buy...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): buyable_quantity가 빈 문자열이 아닌 경우를 찾으려고 했지만, buyable_quantity는 숫자형이므로 빈 문자열이 될 수 없습니다. 따라서 buyable_quantity > 0으로 변경하여 유효한 값을 가진 경우만 선택하도록 했습니다.
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity > 0 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity > 0 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+[done] Q13 r1 a2 status=ok e2e=37.6s llm=8 tok=26790 rem=50/18898 | [
+  {
+    "등급 서열 규칙": "AA-",
+    "잔존일수": 532,
+    "수익률": 3.992,
+    "매수가능수량": 868574000
+  },
+  {
+   
+[guard] remaining=49 tokens=18891 -> 22.5s 대기
+
+===== [Q14 r1] tokens=59993 | 담보부 또는 보증채 중 AAA 등급인 종목을 발행잔액 순으로 정리해줘. 상품번호, 발행사, 담보 유형, 원신
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_no, pd_pbcm, crd_grd, isu_bal_amt, info_base_dt FROM raw.prbd01n001 WHERE crd_grd IN ('AAA') AND isu_bal_amt IS NOT NULL ORDER BY isu_bal_amt DESC
+
+[done] Q14 r1 a1 status=ok e2e=22.3s llm=6 tok=18406 rem=52/30501 | [{"pd_no":"KR381006GFB8","pd_pbcm":"농협은행","crd_grd":"AAA","isu_bal_amt":1210000000000,"info_base_dt"
+
+===== [Q15 r1] tokens=30494 | 해외주식에 투자하는 패시브·실물복제·정방향 ETF 중 순자산 1조 원 이상인 상품을 1년 수익률 순으로 5개
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_charge_rt, cu_base_index, du_last_aum, du_base_dt_match_yn FROM raw.pref02n001 WHERE du_last_aum >= 1000000000000 AND du_er_1d IS NOT NULL ORDER BY du_er_1d DESC LIMIT 5
+
+[done] Q15 r1 a1 status=ok e2e=19.5s llm=5 tok=13455 rem=45/7818 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=44 tokens=7811 -> 17.5s 대기
+
+===== [Q16 r1] tokens=59993 | 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품을 찾아 6개월 수익률, 총보수, 위험등급을 비교
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 5000000000000 AND du_er_6m IS NOT NULL ORDER BY du_er_6m DESC
+
+[done] Q16 r1 a1 status=ok e2e=25.2s llm=6 tok=17746 rem=52/31253 | 조건에 맞는 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품들의 비교 결과는 다음과 같습니다:
+
+1. 삼성 KODEX 머니마켓액티브증권상장지수투자신탁[채권]
+   - 
+
+===== [Q17 r1] tokens=31246 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AND du_last_aum >= '10000' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.05%"
+LINE 1: ...curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): cu_charge_rt는 숫자형이므로 작은따옴표를 제거하고 숫자형으로 변경하여 비교
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+[done] Q17 r1 a1 status=rate_limited e2e=21.9s llm=7 tok=16500 rem=43/3611 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=42 tokens=3604 -> 11.5s 대기
+
+===== [Q17 r1 retry] tokens=59993 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AND du_last_aum >= '10000000' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.05%"
+LINE 1: ...curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): cu_charge_rt는 숫자형이므로 작은따옴표를 제거하고 숫자형으로 변경하였습니다.; du_last_aum는 천 단위로 표현되므로 '1천억 달러'를 100000000000으로 변환하여 사용하였습니다.
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+[done] Q17 r1 a2 status=ok e2e=26.1s llm=7 tok=19740 rem=51/27145 | [
+[guard] remaining=50 tokens=27138 -> 33.5s 대기
+
+===== [Q18 r1] tokens=59993 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.10%"
+LINE 1: ..._vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 숫자 타입의 연산에서는 숫자 값을 사용해야 하므로, '0.10%'를 숫자 값 0.10으로 변경하여 비교
+수정된 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+[done] Q18 r1 a1 status=ok e2e=29.4s llm=7 tok=19188 rem=51/28099 | [
+  {
+    "pd_nm": "Vanguard 500 Index Fund;ETF",
+    "cu_base_index": "S&P 500 TR",
+    "wu_inv_rgn
+[guard] remaining=50 tokens=28092 -> 30.5s 대기
+
+===== [Q19 r1] tokens=59993 | 판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, exchdg_yn, fd_ivst_rgn_desc, zrin_fd_ivst_risk_grd_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE sale_yn = '판매 중' AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r >= 0 AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma >= 1000000000000 AND fd_nast_suma IS NOT NULL ORDER BY fd_yr1_ern_r DESC
+
+[done] Q19 r1 a1 status=ok e2e=23.4s llm=5 tok=15267 rem=53/35797 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q20 r1] tokens=35790 | 국내 반도체에 투자하는 ETF와 공모펀드를 통합 검색해 순자산 상위 상품을 비교해줘. 단순히 이름에 반도체가
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%반도체%'
+  UNION ALL
+SELECT itm_no AS code, itm_nm AS name, '펀드' AS domain, fd_nast_suma AS sort_value FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모'
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q20 r1 a1 status=ok e2e=33.2s llm=7 tok=19270 rem=44/3957 | 순자산 상위 상품으로는 미래에셋 TIGER 반도체TOP10증권상장지수투자신탁(주식)이 있으며, 해당 상품의 정보는 다음과 같음:
+
+- **기초지수**: FnGuide AI 반도체 
+[guard] remaining=43 tokens=3950 -> 2.5s 대기
+
+===== [Q21 r1] tokens=59993 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_itm_no AS 상품번호, pd_sale_yn AS 상장여부 FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX200%'
+
+[done] Q21 r1 a1 status=rate_limited e2e=44.9s llm=14 tok=38226 rem=44/1026 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=43 tokens=1019 -> 14.5s 대기
+
+===== [Q21 r1 retry] tokens=59993 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_itm_no, pd_itm_no_ma, pd_sale_yn FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX200%';
+
+[done] Q21 r1 a2 status=rate_limited e2e=42.8s llm=14 tok=38065 rem=44/1096 | 
+[guard] remaining=43 tokens=1089 -> 17.5s 대기
+
+===== [Q22 r1] tokens=59993 | 캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘. ETF→편입증권→기업 경로를 사용하고, ETF명·티커·
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm FROM raw.pref02n001 WHERE (조건 없음);
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "없음"
+LINE 1: ...LECT pd_nm, pd_abrv_nm FROM raw.pref02n001 WHERE (조건 없음)
+                                                                  ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): WHERE 절이 비어 있어서 발생한 구문 오류
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm FROM raw.pref02n001
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm FROM raw.pref02n001
+
+[done] Q22 r1 a1 status=ok e2e=27.0s llm=7 tok=17719 rem=51/29050 | 조건에 맞는 중국 반도체 ETF 및 관련된 세부 정보는 제공된 데이터로는 확인할 수 없습니다.
+[guard] remaining=50 tokens=29043 -> 32.5s 대기
+
+===== [Q23 r1] tokens=59993 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS 편입 기업, wu_inv_ast_type AS 산업/테마, du_vlty_base_dt AS 사건일, ref_base_index AS 문서명, ref_geo_focus AS 인용 근거 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no WHERE du_vlty_6m BETWEEN '20230101' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "티커"
+LINE 1: SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS...
+                                                 ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): WHERE 절에서 '티커'라는 잘못된 컬럼명이 사용되었으므로 이를 제거하여 SQL 구문을 수정함.
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS 편입 기업, wu_inv_ast_type AS 산업/테마, du_vlty_base_dt AS 사건일, ref_base_index AS 문서명, ref_geo_focus AS 인용 근거 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no WHERE du_vlty_6m BETWEEN '20230101' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS 편입 기업, wu_inv_ast_type AS 산업/테마, du_vlty_base_dt AS 사건일, ref_base_index AS 문서명, ref_geo_focus AS 인용 근거 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no WHERE du_vlty_6m BETWEEN '20230101' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "티커"
+LINE 1: SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS...
+                                                 ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): WHERE 절에서 '티커'라는 잘못된 컬럼명이 사용되었으므로 이를 제거하여 SQL 구문을 수정함
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS 편입 기업, wu_inv_ast_type AS 산업/테마, du_vlty_base_dt AS 사건일, ref_base_index AS 문서명, ref_geo_focus AS 인용 근거 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no WHERE du_vlty_6m BETWEEN '20230101' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS 편입 기업, wu_inv_ast_type AS 산업/테마, du_vlty_base_dt AS 사건일, ref_base_index AS 문서명, ref_geo_focus AS 인용 근거 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no WHERE du_vlty_6m BETWEEN '20230101' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "티커"
+LINE 1: SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS...
+                                                 ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "티커"
+LINE 1: SELECT pd_nm AS 상품명, pd_ticker AS ETF 티커, cu_strtegy AS...
+                                                 ^
+
+[done] Q23 r1 a1 status=ok e2e=82.7s llm=9 tok=30716 rem=55/38657 | [{"etf_code":"KR70102X0002","etf_name":"ACE 유럽방산TOP10"},{"etf_code":"KR7494840002","etf_name":"TIGER
+
+===== [Q24 r1] tokens=38650 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%에코프로%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: SELECT pd_nm FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_e...
+                                                   ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd 구문이 잘못되었습니다. 해당 테이블이 존재하지 않으므로 제거하였습니다.
+수정된 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%에코프로%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%에코프로%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+[done] Q24 r1 a1 status=ok e2e=51.1s llm=8 tok=28134 rem=55/37855 | 해당 질문에 대한 답변을 제공할 수 없습니다.
+
+===== [Q25 r1] tokens=37848 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE itm_nm LIKE '%국민성장펀드%' AND prvo_pbff_desc = '공모'
+
+[done] Q25 r1 a1 status=ok e2e=18.8s llm=5 tok=14121 rem=48/14506 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=47 tokens=14499 -> 30.5s 대기
+
+===== [Q26 r1] tokens=59993 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 등급, applied_yield AS 수익률 
+FROM raw.prbd01n001 
+WHERE std_pd_mcls_nm = '회사채';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm as 상품명, pd_risk_nm as 등급, du_er_1d as 수익률, du_last_aum as AUM FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.etf_cd WHERE 발행사 = 'SK하이닉스' AND 기업 = 'SK하이닉스' AND (pd_grp_no = 'ETF' OR pd_grp_no = '공모펀드')
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ... du_last_aum as AUM FROM raw.pref01n001 LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LEFT JOIN enriched.etf_kr_enriched 부분이 DB 에러를 발생시켰으므로 제거함; 발행사와 기업의 조건이 동일하므로 하나로 통합하여 사용함
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type LIKE '%채권%' OR wu_inv_ast_type LIKE '%혼합자산%') AND pd_nm LIKE '%SK하이닉스%', 기업 = 'SK하이닉스'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type LIKE '%채권%' OR wu_inv_ast_type LIKE '%혼합자산%') AND pd_nm LIKE '%SK하이닉스%', 기업 = 'SK하이닉스'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 1: ...e LIKE '%혼합자산%') AND pd_nm LIKE '%SK하이닉스%', 기업 = '...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): WHERE 절에서 '기업 = ' 부분은 잘못된 구문으로, 해당 부분을 제거하여 SQL 구문을 올바르게 수정함.
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type LIKE '%채권%' OR wu_inv_ast_type LIKE '%혼합자산%') AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type LIKE '%채권%' OR wu_inv_ast_type LIKE '%혼합자산%') AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE (발행사 = 'SK하이닉스' OR itm_nm LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma IS NOT NULL
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 1: ..., fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE (발행사 = '...
+                                                            ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사라는 컬럼은 존재하지 않으므로, 대신 종목명과 운용사 종목번호를 사용하여 SK하이닉스와 관련된 상품을 찾도록 변경함
+수정된 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE (itm_nm LIKE '%SK하이닉스%' OR mtco_itm_no LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma IS NOT NULL
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE (itm_nm LIKE '%SK하이닉스%' OR mtco_itm_no LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma IS NOT NULL
+
+[done] Q26 r1 a1 status=ok e2e=142.8s llm=15 tok=43962 rem=46/2243 | 발행사와 관련된 채권 정보:
+
+1. 퍼스트파이브지제팔십사차유동화전문1-14
+   - 등급: AAA
+   - 수익률: 3.714%
+
+2. POSCO314-1
+   - 등급: AA+
+
+[guard] remaining=45 tokens=2236 -> 1.5s 대기
+
+===== [Q27 r1] tokens=59993 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_no, pd_nm FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, credit_rating, maturity_date, allocation_ratio FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND (pd_grp_no = 'ETF')
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...e, allocation_ratio FROM raw.pref01n001 LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): enriched.etf_kr_enriched 테이블이 존재하지 않아 LEFT JOIN을 제거하고 기본 테이블에서만 데이터를 조회
+수정된 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND (pd_grp_no = 'ETF')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND (pd_grp_no = 'ETF')
+
+[done] Q27 r1 a1 status=ok e2e=63.1s llm=10 tok=27713 rem=58/55291 | 요청하신 정보 중 모자회사 관계의 공식 근거, 채권 신용등급·만기, ETF 편입비중은 제공된 데이터로는 확인할 수 없습니다. 또한, 배터리산업 위험요인에 대한 문서도 확인할 수 없
+
+===== [Q28 r1] tokens=55284 | 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품을 비교하고, 일반 지수형과 커버드콜형의 위
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%엔비디아%'
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value FROM raw.pref02n001
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q28 r1 a1 status=ok e2e=46.6s llm=7 tok=20305 rem=49/23312 | 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품으로는 다음과 같습니다:
+
+### 국내 ETF 
+1. **ACE 엔비디아채권혼합**
+   - 순자산: 232,627
+[guard] remaining=48 tokens=23305 -> 10.5s 대기
+
+===== [Q29 r1] tokens=59993 | VOO, IVV, SPY가 같은 S&P 500 계열 지수를 추종하는지 확인하고 편입종목 중복률과 상위 기업 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, du_base_dt_match_yn, cu_charge_rt, du_last_aum FROM raw.pref02n001 WHERE pd_nm LIKE '%VOO%' OR pd_nm LIKE '%IVV%' OR pd_nm LIKE '%SPY%';
+
+[done] Q29 r1 a1 status=ok e2e=35.8s llm=6 tok=16243 rem=52/33042 | 
+
+===== [Q30 r1] tokens=33035 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일
+FROM raw.pref01n001
+JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd
+WHERE raw.pref01n001.pd_grp_no = 'ETF'
+AND raw.pref01n001.pd_nm LIKE '%반도체%'
+ORDER BY (중복 비율) DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 6: ORDER BY (중복 비율) DESC
+                       ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 주문에 잘못된 '중복 비율' 표현이 있어 이를 제거하여 SQL 구문을 수정함
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 1: ...ND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+                                                                  ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): ORDER BY 절에서 '중복 비율'이라는 표현은 SQL 구문에 맞지 않으므로, 특정 열 이름인 'raw.pref01n001.pd_nm'으로 변경하여 오류를 해결함.
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[done] Q30 r1 a1 status=ok e2e=42.4s llm=11 tok=32231 rem=55/39254 | 요청하신 정보 중 편입기준일, 중복도 계산식, 기업관계 및 위험문서 근거에 대한 구체적인 데이터는 현재 제공된 자료로는 확인할 수 없습니다. 따라서 다음과 같이 답변을 드립니다:
+
+
+===== [Q31 r1] tokens=39247 | 신용등급이 AAAA인 매수 가능 채권을 찾아 상품번호와 신용평가 근거를 제시해줘.
+[done] Q31 r1 a1 status=ok e2e=10.6s llm=3 tok=10842 rem=50/22805 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=49 tokens=22798 -> 32.5s 대기
+
+===== [Q32 r1] tokens=59993 | 2026-08-24 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, connect_doc, post_dt, penetration_rate FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모' AND (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) IS NOT NULL ORDER BY (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "connect_doc" does not exist
+LINE 1: SELECT itm_nm, connect_doc, post_dt, penetration_rate FROM r...
+                       ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 연결근거문서(connect_doc)라는 컬럼은 실제 데이터에 존재하지 않으므로 빈 문자열로 대체하였습니다.
+수정된 SQL:
+SELECT itm_nm AS 상품명, '' AS 연결근거문서, post_dt AS 발표일, penetration_rate AS 편입비중 FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모' AND (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) IS NOT NULL ORDER BY (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, '' AS 연결근거문서, post_dt AS 발표일, penetration_rate AS 편입비중 FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모' AND (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) IS NOT NULL ORDER BY (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) DESC
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "post_dt" does not exist
+LINE 1: SELECT itm_nm AS 상품명, '' AS 연결근거문서, post_dt AS 발표...
+                                                     ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 발표일을 나타내는 컬럼명이 잘못 지정되어 있어서 올바른 컬럼명(fd_price_bas_dt)으로 변경하였습니다.
+수정된 SQL:
+SELECT itm_nm AS 상품명, '' AS 연결근거문서, fd_price_bas_dt AS 발표일, zrin_fd_cmst_rt AS 편입비중 FROM raw.prfd01n001 WHERE fd_price_bas_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모' AND (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) IS NOT NULL ORDER BY (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, '' AS 연결근거문서, fd_price_bas_dt AS 발표일, zrin_fd_cmst_rt AS 편입비중 FROM raw.prfd01n001 WHERE fd_price_bas_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모' AND (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) IS NOT NULL ORDER BY (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) DESC
+
+[done] Q32 r1 a1 status=ok e2e=26.9s llm=7 tok=21386 rem=51/25576 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=50 tokens=25569 -> 32.5s 대기
+
+===== [Q33 r1] tokens=59993 | KODEX AI로봇 ETF의 수익률과 편입종목을 공식 문서 근거로 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1d FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX AI로봇 ETF%' AND pd_grp_no = 'ETF'
+
+[done] Q33 r1 a1 status=ok e2e=14.6s llm=5 tok=14079 rem=53/36407 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q34 r1] tokens=36400 | TIGER 미국S&P500의 2027년 확정 연간수익률을 데이터 근거와 함께 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1y FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%' AND pd_grp_no = 'ETF'
+
+[done] Q34 r1 a1 status=ok e2e=17.2s llm=6 tok=15810 rem=45/9128 | 미래에셋 TIGER 미국S&P500 관련 다양한 상품들의 최근 1년간 수익률은 다음과 같습니다:
+
+1. 미래에셋 TIGER 미국S&P500증권상장지수투자신탁(주식-파생형)(H): 
+[guard] remaining=44 tokens=9121 -> 27.5s 대기
+
+===== [Q35 r1] tokens=59993 | VOO가 직접 발행한 회사채의 신용등급과 만기일을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_nm, crd_grd, mat_dt FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+[done] Q35 r1 a1 status=ok e2e=19.4s llm=5 tok=13247 rem=53/37210 | 조건에 맞는 회사채 정보가 없습니다.
+
+===== [Q1 r2] tokens=37203 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, buyable_quantity, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND pd_nm LIKE '%에스케이하이닉스224-2%'
+
+[done] Q1 r2 a1 status=ok e2e=26.9s llm=6 tok=16564 rem=45/9767 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+[guard] remaining=44 tokens=9760 -> 12.5s 대기
+
+===== [Q2 r2] tokens=59993 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%'
+
+[done] Q2 r2 a1 status=ok e2e=20.8s llm=6 tok=15820 rem=52/32953 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754,"srf
+
+===== [Q3 r2] tokens=32946 | 현대해상화재보험7(후)(콜/후)의 채권 종류, 발행사, 신용등급, 만기구분, 듀레이션을 알려줘. 원본 등급값
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, bd_knd, pd_pbcm, crd_grd, dur FROM raw.prbd01n001 WHERE pd_nm LIKE '%현대해상화재보험7(후)(콜/후)%
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: unterminated quoted string at or near "'%현대해상화재보험7(후)(콜/후)%"
+LINE 1: ...crd_grd, dur FROM raw.prbd01n001 WHERE pd_nm LIKE '%현대해상...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LIKE 절의 문자열이 제대로 닫히지 않아 발생한 구문 오류
+수정된 SQL:
+SELECT pd_nm, bd_knd, pd_pbcm, crd_grd, dur FROM raw.prbd01n001 WHERE pd_nm LIKE '%현대해상화재보험7(후)(콜/후)%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, bd_knd, pd_pbcm, crd_grd, dur FROM raw.prbd01n001 WHERE pd_nm LIKE '%현대해상화재보험7(후)(콜/후)%'
+
+[done] Q3 r2 a1 status=ok e2e=19.5s llm=7 tok=18674 rem=43/807 | {"채권 종류":"보험회사채","발행사":"현대해상화재보험(주)","신용등급":"AA0","듀레이션":4.3459}
+[guard] remaining=42 tokens=800 -> 18.5s 대기
+
+===== [Q4 r2] tokens=59993 | KODEX 200의 운용사, 기초지수, 현재 AUM, NAV, 종가, 괴리율과 1년 수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%'
+
+[done] Q4 r2 a1 status=ok e2e=19.4s llm=6 tok=17643 rem=52/30942 | 조건에 맞는 상품이 없습니다.
+
+===== [Q5 r2] tokens=30935 | TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, wu_inv_ast_type, wu_inv_rgn, cu_strtegy, cu_charge_rt, du_er_1m, du_er_3m, du_er_6m FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%' AND pd_grp_no = 'ETF'
+
+[done] Q5 r2 a1 status=ok e2e=24.2s llm=6 tok=16977 rem=44/2786 | {'투자자산군': ['주식'], '투자지역': ['미국'], '운용전략': ['실물복제'], '총보수': [], '1개월 수익률': ['1.84', '-3.93', '-2.97',
+[guard] remaining=43 tokens=2779 -> 15.5s 대기
+
+===== [Q6 r2] tokens=59993 | VOO의 정식 상품명, 기초지수, 운용사, 총보수, AUM, 현재가와 거래량을 알려줘. ISIN, 가격 기준
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, cu_fund_mgmt_co, cu_charge_rt, du_last_aum, ru_mkt_price, ru_mkt_volume, pd_isin_cd, du_clpr_base_dt, du_upt_dt FROM raw.pref02n001 WHERE pd_nm LIKE '%VOO%';
+
+[done] Q6 r2 a1 status=ok e2e=18.1s llm=5 tok=13073 rem=53/37655 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q7 r2] tokens=37648 | BND의 투자자산 유형, 투자지역, 기초지수, 지수 복제방식, 운용전략과 총보수를 알려줘. 상품번호와 전략 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, itm_no FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+[done] Q7 r2 a1 status=ok e2e=17.8s llm=5 tok=13968 rem=46/14343 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=45 tokens=14336 -> 22.5s 대기
+
+===== [Q8 r2] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모' AND itm_nm LIKE '%미래에셋코어테크증권자투자신탁(주식) 종류A%' AND fd_nast_suma IS NOT NULL AND fd_mm1_ern_r IS NOT NULL AND fd_mm3_ern_r IS NOT NULL AND fd_mm6_ern_r IS NOT NULL AND fd_yr1_ern_r IS NOT NULL
+
+[done] Q8 r2 a1 status=ok e2e=30.2s llm=6 tok=16821 rem=52/32372 | [{"itm_nm":"미래에셋코어테크증권자투자신탁(주식) 종류A","or_attr_desc":"주식형","fd_nast_suma":"734810470588.0000","fd_mm1
+
+===== [Q9 r2] tokens=32365 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no FROM raw.prfd01n001 WHERE or_attr_desc = 'MMF' AND itm_nm LIKE '%삼성 베스트 MMF 법인 제1호%'
+
+[done] Q9 r2 a1 status=ok e2e=19.8s llm=6 tok=16077 rem=44/4980 | {"벤치마크": "CALL", "통화": "KRW", "투자지역": "국내", "개인\u002f법인 구분": "법인", "위험등급": "매우 낮은 위험", "순자산": "21900
+[guard] remaining=43 tokens=4973 -> 8.5s 대기
+
+===== [Q10 r2] tokens=59993 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·
+  [Warning] 값이 비어있는 조건 무시됨: 모펀드 ID
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, itm_no, sale_yn, fd_nast_suma, fd_yr1_ern_r, rptt_ksd_itm_no FROM raw.prfd01n001 WHERE itm_nm LIKE '%우리반도체BIG2플러스%' AND (itm_nm LIKE '%C-P%' OR itm_nm LIKE '%C-Pe%') AND fd_nast_suma IS NOT NULL ORDER BY fd_nast_suma DESC LIMIT 1
+
+[done] Q10 r2 a1 status=ok e2e=114.8s llm=6 tok=17245 rem=55/44097 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스에 대한 정보는 다음과 같습니다. 다만, 현재 데이터로는 두 클래스가 동일한 모펀드의 클래스인지 여부를 확인할 수 없으며, C-P 
+
+===== [Q11 r2] tokens=44090 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_pbcm AS 발행사, crd_grd AS 원등급, mat_dt AS 만기일, buy_yield AS 매수수익률, buyable_quantity AS 매수가능수량, sale_yield_base_dt AS 기준일 FROM raw.prbd01n001 WHERE buyable_quantity >= 0 AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND buyable_quantity IS NOT NULL ORDER BY buyable_quantity DESC
+
+[done] Q11 r2 a1 status=ok e2e=27.7s llm=6 tok=19170 rem=47/14151 | [
+  {
+    "상품명": "한국지역난방공사 45-2",
+    "발행사": "한국지역난방공사(주)",
+    "원등급": "AAA",
+    "만기일": "20300303",
+[guard] remaining=46 tokens=14144 -> 11.5s 대기
+
+===== [Q12 r2] tokens=59993 | 현재 판매 중이고 거래정지가 아니며 연금거래가 가능한 국내 ETF를 찾아줘. 상품명, 연금 위험구분, 상품 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pen_risk_nm, pd_risk_nm, pd_net_tamt, ref_base_dt FROM raw.pref01n001 WHERE pd_sale_yn = '판매 중' AND pd_tr_yn = '거래정지 아님' AND pd_pen_tr_yn = '가능' AND pd_grp_no = 'ETF'
+
+[done] Q12 r2 a1 status=ok e2e=24.5s llm=5 tok=15216 rem=53/35817 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q13 r2] tokens=35810 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity = '가능' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: "가능"
+LINE 1: ...AND remaining_days <= 1095 AND buyable_quantity = '가능' AND...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 매수가능수량이 '가능'이어야 한다는 조건에서 '가능' 문자열을 사용했지만, 이는 잘못된 접근이므로 이를 제거하고 빈 문자열이 아닌 경우를 선택하도록 변경함
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: ""
+LINE 1: ...ND remaining_days <= 1095 AND buyable_quantity != '' AND buy...
+                                                             ^
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 2: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q13 r2 a1 status=rate_limited e2e=28.8s llm=7 tok=20020 rem=44/5000 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=43 tokens=4993 -> 5.5s 대기
+
+===== [Q13 r2 retry] tokens=59993 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity = '가능' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: "가능"
+LINE 1: ...AND remaining_days <= 1095 AND buyable_quantity = '가능' AND...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 매수가능수량이 '가능'이어야 한다는 조건에서 '가능'은 문자열이므로 정확한 비교를 위해 '!=' ''로 변경
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity != '' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: ""
+LINE 1: ...ND remaining_days <= 1095 AND buyable_quantity != '' AND buy...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): buyable_quantity의 빈 문자열 비교를 수치 비교로 변경하여 유효한 매수가능수량이 있는지 확인
+수정된 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity > 0 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buyable_quantity > 0 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+[done] Q13 r2 a2 status=ok e2e=40.2s llm=8 tok=26717 rem=50/18933 | [
+  {
+    "pd_nm": "CJ대한통운98-3",
+    "crd_grd": "AA-",
+    "remaining_days": 532,
+    "buy_yield": 3
+[guard] remaining=49 tokens=18926 -> 19.5s 대기
+
+===== [Q14 r2] tokens=59993 | 담보부 또는 보증채 중 AAA 등급인 종목을 발행잔액 순으로 정리해줘. 상품번호, 발행사, 담보 유형, 원신
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_no, pd_pbcm, crd_grd, isu_bal_amt, info_base_dt FROM raw.prbd01n001 WHERE crd_grd IN ('AAA') AND isu_bal_amt IS NOT NULL ORDER BY isu_bal_amt DESC
+
+[done] Q14 r2 a1 status=ok e2e=25.3s llm=6 tok=18572 rem=52/30467 | [{"pd_nm":"농업금융채권(은행) 2025-11이1Y-F(변동)","pd_no":"KR381006GFB8","pd_pbcm":"농협은행","crd_grd":"AAA","isu
+
+===== [Q15 r2] tokens=30460 | 해외주식에 투자하는 패시브·실물복제·정방향 ETF 중 순자산 1조 원 이상인 상품을 1년 수익률 순으로 5개
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_charge_rt, cu_base_index, du_last_aum, du_base_dt_match_yn FROM raw.pref02n001 WHERE du_last_aum >= 10000000000 AND du_er_1d IS NOT NULL ORDER BY du_er_1d DESC LIMIT 5
+
+[done] Q15 r2 a1 status=ok e2e=22.7s llm=6 tok=15498 rem=44/3758 | [
+[guard] remaining=43 tokens=3751 -> 10.5s 대기
+
+===== [Q16 r2] tokens=59993 | 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품을 찾아 6개월 수익률, 총보수, 위험등급을 비교
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.etf_kr_enriched AS charge ON base.pd_cd = charge.pd_cd WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL ORDER BY du_er_6m DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): JOIN하려 했던 enriched.etf_kr_enriched 테이블이 존재하지 않아 제거하고 기본 테이블에서만 데이터를 조회
+수정된 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL ORDER BY du_er_6m DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL ORDER BY du_er_6m DESC
+
+[done] Q16 r2 a1 status=ok e2e=25.1s llm=7 tok=24323 rem=51/22536 | 
+[guard] remaining=50 tokens=22529 -> 34.5s 대기
+
+===== [Q17 r2] tokens=59993 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AND du_last_aum >= '100000000000000000' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.05%"
+LINE 1: ...curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): cu_charge_rt는 문자열 형태로 저장되므로 이를 수치형으로 변환하여 비교해야 한다.; du_last_aum 역시 수치형으로 비교해야 하므로 형변환 필요
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE CAST(cu_charge_rt AS NUMERIC) <= 0.05 AND du_last_aum >= 100000000000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE CAST(cu_charge_rt AS NUMERIC) <= 0.05 AND du_last_aum >= 100000000000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+[done] Q17 r2 a1 status=ok e2e=21.8s llm=6 tok=16510 rem=52/32354 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q18 r2] tokens=32347 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.10%"
+LINE 1: ..._vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 숫자 타입의 연산에서는 숫자 값을 사용해야 하므로 '0.10%' 대신 0.10을 사용하여 타입 불일치를 해결함.
+수정된 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+[done] Q18 r2 a1 status=ok e2e=22.0s llm=7 tok=18705 rem=43/453 | [
+[guard] remaining=42 tokens=446 -> 14.5s 대기
+
+===== [Q19 r2] tokens=59993 | 판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, exchdg_yn, fd_ivst_rgn_desc, zrin_fd_ivst_risk_grd_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE sale_yn = '판매 중' AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r >= 0 AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma >= 1000000000000 AND fd_nast_suma IS NOT NULL ORDER BY fd_yr1_ern_r DESC
+
+[done] Q19 r2 a1 status=ok e2e=22.0s llm=5 tok=15161 rem=53/35813 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q20 r2] tokens=35806 | 국내 반도체에 투자하는 ETF와 공모펀드를 통합 검색해 순자산 상위 상품을 비교해줘. 단순히 이름에 반도체가
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%반도체%'
+  UNION ALL
+SELECT itm_no AS code, itm_nm AS name, '펀드' AS domain, fd_nast_suma AS sort_value FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모'
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q20 r2 a1 status=ok e2e=34.8s llm=7 tok=19277 rem=44/3966 | 순자산 상위 상품으로는 미래에셋 TIGER 반도체TOP10증권상장지수투자신탁(주식)이 있으며, 해당 상품의 정보는 다음과 같음:
+
+- **기초지수**: FnGuide AI 반도체 
+[guard] remaining=43 tokens=3959 -> 2.5s 대기
+
+===== [Q21 r2] tokens=59993 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_itm_no, pd_itm_no_ma, pd_sale_yn FROM raw.pref01n001 WHERE pd_nm = 'KODEX200'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, itm_no AS 상품번호, rptt_ksd_itm_no AS 대표종목번호, ofsfd_yn AS 상장_여부 FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모' AND itm_nm = 'KODEX200'
+
+[done] Q21 r2 a1 status=ok e2e=31.9s llm=9 tok=25318 rem=49/17803 | 현재 제공된 데이터로는 KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유에 대해 구조화된 정보(상품번호, 대표종목번호, 상장 여부)를 제공할 수 없으며,
+[guard] remaining=48 tokens=17796 -> 27.5s 대기
+
+===== [Q22 r2] tokens=59993 | 캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘. ETF→편입증권→기업 경로를 사용하고, ETF명·티커·
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_abrv_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001
+
+[done] Q22 r2 a1 status=ok e2e=121.3s llm=6 tok=16466 rem=55/45195 | 조건에 맞는 ETF 정보가 부족하여 답변을 제공할 수 없습니다.
+
+===== [Q23 r2] tokens=45188 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm as 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co 
+FROM raw.pref01n001 
+JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no 
+WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE 
+AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') 
+AND wu_inv_ast_type LIKE '%우주항공%' 
+AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 3: JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = ...
+             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): enriched.etf_kr_enriched 테이블이 존재하지 않아 JOIN 부분을 제거함
+수정된 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "2023-01-01"
+LINE 1: ...t_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-0...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): du_vlty_6m 컬럼은 날짜 형식이 아니므로, 사건 발생 시점을 cu_upt_dt 컬럼으로 변경하여 최근 6개월 간의 데이터를 조회
+수정된 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE cu_upt_dt >= '2023-01-01' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE cu_upt_dt >= '2023-01-01' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+[done] Q23 r2 a1 status=ok e2e=146.0s llm=9 tok=30608 rem=52/26466 | [{"etf_code":"KR70102X0002","etf_name":"ACE 유럽방산TOP10"},{"etf_code":"KR7494840002","etf_name":"TIGER
+[guard] remaining=51 tokens=26459 -> 25.5s 대기
+
+===== [Q24 r2] tokens=59993 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%에코프로%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+[done] Q24 r2 a1 status=ok e2e=38.4s llm=6 tok=19694 rem=52/29578 | 위험요인 문서 인용문:
+
+[집합투자기구 위험등급 분류기준 및 상세설명]
+위험등급 | 분류기준 | 상세설명(주)
+1등급 | 매우높은위험 | ①레버리지 등 수익구조가 특수하여 투자시 
+[guard] remaining=51 tokens=29571 -> 20.5s 대기
+
+===== [Q25 r2] tokens=59993 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE itm_nm LIKE '%국민성장펀드%' AND prvo_pbff_desc = '공모'
+
+[done] Q25 r2 a1 status=ok e2e=19.5s llm=5 tok=14105 rem=53/36657 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q26 r2] tokens=36650 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, applied_yield FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE 발행사 = 'SK하이닉스' AND 기업 = 'SK하이닉스' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ... du_last_aum AS AUM FROM raw.pref01n001 LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LEFT JOIN enriched.etf_kr_enriched 테이블이 존재하지 않아 제거함; 발행사와 기업이 모두 'SK하이닉스'이므로, 상품명에 'SK하이닉스'가 포함된 ETF를 찾기 위해 LIKE 사용
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT * 
+    FROM raw.prfd01n001 
+    WHERE 발행사 = 'SK하이닉스'
+),
+sk_hynix_funds AS (
+    SELECT * 
+    FROM raw.prfd01n001 
+    WHERE (or_co_xtn_itt_cd LIKE '%SK하이닉스%' OR itm_nm LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모'
+)
+
+SELECT 
+    COALESCE(sk_hynix_bond.itm_nm, sk_hynix_funds.itm_nm) AS itm_nm,
+    COALESCE(sk_hynix_bond.zrin_fd_ivst_risk_grd_nm, sk_hynix_funds.zrin_fd_ivst_risk_grd_nm) AS zrin_fd_ivst_risk_grd_nm,
+    COALESCE(sk_hynix_bond.fd_yr1_ern_r, sk_hynix_funds.fd_yr1_ern_r) AS fd_yr1_ern_r,
+    COALESCE(sk_hynix_bond.zrin_dmst_stk_cmst_rt, sk_hynix_funds.zrin_dmst_stk_cmst_rt) AS zrin_dmst_stk_cmst_rt,
+    COALESCE(sk_hynix_bond.fd_nast_suma, sk_hynix_funds.fd_nast_suma) AS fd_nast_suma
+FROM sk_hynix_bond FULL OUTER JOIN sk_hynix_funds ON TRUE
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 4:     WHERE 발행사 = 'SK하이닉스'
+                  ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사 대신 운용사 종목번호(mtco_itm_no)로 대체
+수정된 SQL:
+WITH sk_hynix_bond AS (
+    SELECT *
+    FROM raw.prfd01n001
+    WHERE mtco_itm_no LIKE '%SK하이닉스%'
+),
+sk_hynix_funds AS (
+    SELECT *
+    FROM raw.prfd01n001
+    WHERE (or_co_xtn_itt_cd LIKE '%SK하이닉스%' OR itm_nm LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모'
+)
+
+SELECT 
+    COALESCE(sk_hynix_bond.itm_nm, sk_hynix_funds.itm_nm) AS itm_nm,
+    COALESCE(sk_hynix_bond.zrin_fd_ivst_risk_grd_nm, sk_hynix_funds.zrin_fd_ivst_risk_grd_nm) AS zrin_fd_ivst_risk_grd_nm,
+    COALESCE(sk_hynix_bond.fd_yr1_ern_r, sk_hynix_funds.fd_yr1_ern_r) AS fd_yr1_ern_r,
+    COALESCE(sk_hynix_bond.zrin_dmst_stk_cmst_rt, sk_hynix_funds.zrin_dmst_stk_cmst_rt) AS zrin_dmst_stk_cmst_rt,
+    COALESCE(sk_hynix_bond.fd_nast_suma, sk_hynix_funds.fd_nast_suma) AS fd_nast_suma
+FROM sk_hynix_bond FULL OUTER JOIN sk_hynix_funds ON TRUE
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT *
+    FROM raw.prfd01n001
+    WHERE mtco_itm_no LIKE '%SK하이닉스%'
+),
+sk_hynix_funds AS (
+    SELECT *
+    FROM raw.prfd01n001
+    WHERE (or_co_xtn_itt_cd LIKE '%SK하이닉스%' OR itm_nm LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모'
+)
+
+SELECT 
+    COALESCE(sk_hynix_bond.itm_nm, sk_hynix_funds.itm_nm) AS itm_nm,
+    COALESCE(sk_hynix_bond.zrin_fd_ivst_risk_grd_nm, sk_hynix_funds.zrin_fd_ivst_risk_grd_nm) AS zrin_fd_ivst_risk_grd_nm,
+    COALESCE(sk_hynix_bond.fd_yr1_ern_r, sk_hynix_funds.fd_yr1_ern_r) AS fd_yr1_ern_r,
+    COALESCE(sk_hynix_bond.zrin_dmst_stk_cmst_rt, sk_hynix_funds.zrin_dmst_stk_cmst_rt) AS zrin_dmst_stk_cmst_rt,
+    COALESCE(sk_hynix_bond.fd_nast_suma, sk_hynix_funds.fd_nast_suma) AS fd_nast_suma
+FROM sk_hynix_bond FULL OUTER JOIN sk_hynix_funds ON TRUE
+
+[done] Q26 r2 a1 status=ok e2e=176.7s llm=14 tok=39183 rem=47/8377 | 
+[guard] remaining=46 tokens=8370 -> 11.5s 대기
+
+===== [Q27 r2] tokens=59993 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_no, pd_nm, crd_grd FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+AND (pd_nm LIKE '%배터리%' OR pd_nm LIKE '%LG에너지솔루션%')
+
+[done] Q27 r2 a1 status=ok e2e=96.8s llm=10 tok=27011 rem=51/27083 | 검색된 데이터에는 LG에너지솔루션 및 그 자회사가 발행한 채권과 관련된 정보가 부족하여 구체적인 답변을 제공할 수 없습니다.
+[guard] remaining=50 tokens=27076 -> 34.5s 대기
+
+===== [Q28 r2] tokens=59993 | 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품을 비교하고, 일반 지수형과 커버드콜형의 위
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%엔비디아%'
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value FROM raw.pref02n001
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+[done] Q28 r2 a1 status=ok e2e=36.7s llm=7 tok=17104 rem=51/30580 | 검색된 데이터에는 다음과 같은 정보가 포함되어 있습니다:
+
+1. TIGER 엔비디아미국채커버드콜밸런스(합성)
+   - 코드: KR70000D0009
+   
+2. ACE 엔비디아채권
+
+===== [Q29 r2] tokens=30573 | VOO, IVV, SPY가 같은 S&P 500 계열 지수를 추종하는지 확인하고 편입종목 중복률과 상위 기업 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, ref_base_index, cu_base_index, cu_charge_rt, du_last_aum FROM raw.pref01n001 WHERE pd_nm LIKE '%VOO%' OR pd_nm LIKE '%IVV%' OR pd_nm LIKE '%SPY%';
+
+[done] Q29 r2 a1 status=ok e2e=37.0s llm=5 tok=15373 rem=56/47833 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 3건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q30 r2] tokens=47826 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일
+FROM raw.pref01n001
+JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd
+WHERE raw.pref01n001.pd_grp_no = 'ETF'
+AND raw.pref01n001.pd_nm LIKE '%반도체%'
+ORDER BY (중복 비율) DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 6: ORDER BY (중복 비율) DESC
+                       ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 주문에 잘못된 '중복 비율' 표현이 있어 이를 제거하여 SQL 구문을 수정함
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 1: ...ND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+                                                                  ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): ORDER BY 절에서 '중복 비율'이라는 표현은 SQL 구문에 맞지 않으므로, 특정 열 이름인 'raw.pref01n001.pd_nm'으로 변경하여 오류를 해결함.
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[done] Q30 r2 a1 status=rate_limited e2e=38.7s llm=11 tok=29030 rem=43/313 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=42 tokens=306 -> 8.5s 대기
+
+===== [Q30 r2 retry] tokens=59993 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_lstg_dt FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%반도체%';
+
+[done] Q30 r2 a2 status=ok e2e=32.6s llm=9 tok=23438 rem=49/19840 | 죄송하지만, 제공된 데이터로는 요청하신 정보를 제공할 수 없습니다. 중복도 계산식, 기업관계, 위험문서 근거 등의 정보가 포함되어 있지 않으며, 중복 노출이 큰 기업의 자회사 및 
+[guard] remaining=48 tokens=19833 -> 27.5s 대기
+
+===== [Q31 r2] tokens=59993 | 신용등급이 AAAA인 매수 가능 채권을 찾아 상품번호와 신용평가 근거를 제시해줘.
+[done] Q31 r2 a1 status=ok e2e=10.4s llm=3 tok=10842 rem=55/43551 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q32 r2] tokens=43544 | 2026-08-24 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE (sale_dt >= '20260824') AND (itm_nm LIKE '%Kimi%') AND (prvo_pbff_desc = '공모')
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "sale_dt" does not exist
+LINE 1: SELECT itm_nm FROM raw.prfd01n001 WHERE (sale_dt >= '2026082...
+                                                 ^
+HINT:  Perhaps you meant to reference the column "prfd01n001.sale_yn".
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 날짜 조건으로 사용할 수 있는 유일한 컬럼은 'fd_price_bas_dt'이므로 이를 사용
+수정된 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE (fd_price_bas_dt >= '20260824') AND (itm_nm LIKE '%Kimi%') AND (prvo_pbff_desc = '공모')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE (fd_price_bas_dt >= '20260824') AND (itm_nm LIKE '%Kimi%') AND (prvo_pbff_desc = '공모')
+
+[done] Q32 r2 a1 status=ok e2e=26.4s llm=6 tok=17337 rem=47/14899 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=46 tokens=14892 -> 21.5s 대기
+
+===== [Q33 r2] tokens=59993 | KODEX AI로봇 ETF의 수익률과 편입종목을 공식 문서 근거로 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1d FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX AI로봇 ETF%' AND pd_grp_no = 'ETF'
+
+[done] Q33 r2 a1 status=ok e2e=14.8s llm=5 tok=14118 rem=53/36392 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q34 r2] tokens=36385 | TIGER 미국S&P500의 2027년 확정 연간수익률을 데이터 근거와 함께 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref02n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%'
+
+[done] Q34 r2 a1 status=ok e2e=15.5s llm=5 tok=12545 rem=46/14405 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=45 tokens=14398 -> 28.5s 대기
+
+===== [Q35 r2] tokens=59993 | VOO가 직접 발행한 회사채의 신용등급과 만기일을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_nm, crd_grd, mat_dt FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+[done] Q35 r2 a1 status=ok e2e=23.1s llm=5 tok=13247 rem=53/37210 | 조건에 맞는 회사채 정보가 없습니다.
+
+===== [Q1 r3] tokens=37203 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, buyable_quantity, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND pd_nm LIKE '%에스케이하이닉스224-2%'
+
+[done] Q1 r3 a1 status=ok e2e=24.7s llm=6 tok=16348 rem=45/9858 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+[guard] remaining=44 tokens=9851 -> 11.5s 대기
+
+===== [Q2 r3] tokens=59993 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: unterminated quoted string at or near "'%국고채권 02000-3106(21-5)%"
+LINE 1: ...01 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LIKE 절에서 사용된 문자열이 제대로 닫히지 않아 발생한 구문 오류
+수정된 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%'
+
+[done] Q2 r3 a1 status=ok e2e=23.7s llm=7 tok=19419 rem=51/27487 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754.0,"s
+[guard] remaining=50 tokens=27480 -> 35.5s 대기
+
+===== [Q3 r3] tokens=59993 | 현대해상화재보험7(후)(콜/후)의 채권 종류, 발행사, 신용등급, 만기구분, 듀레이션을 알려줘. 원본 등급값
+[done] Q3 r3 a1 status=ok e2e=14.1s llm=3 tok=11091 rem=55/43470 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_hit: 스코프 1상품(문서 확보 0, 미확보 0), 청크 0건(≥0.45))
+
+===== [Q4 r3] tokens=43463 | KODEX 200의 운용사, 기초지수, 현재 AUM, NAV, 종가, 괴리율과 1년 수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%' AND pd_grp_no = 'ETF'
+
+[done] Q4 r3 a1 status=ok e2e=18.6s llm=6 tok=17734 rem=47/14384 | 조건에 맞는 상품이 없습니다.
+[guard] remaining=46 tokens=14377 -> 26.5s 대기
+
+===== [Q5 r3] tokens=59993 | TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, wu_inv_ast_type, wu_inv_rgn, cu_strtegy, cu_charge_rt, du_er_1m, du_er_3m, du_er_6m FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%' AND pd_grp_no = 'ETF'
+
+[done] Q5 r3 a1 status=ok e2e=21.1s llm=6 tok=16907 rem=52/31845 | 투자자산군 | 투자지역 | 운용전략 | 복제방식 | 총보수 | 1개월 수익률 | 3개월 수익률 | 6개월 수익률
+주식 | 미국 | 실물복제 | - | - | 1.84 | 2.37 
+
+===== [Q6 r3] tokens=31838 | VOO의 정식 상품명, 기초지수, 운용사, 총보수, AUM, 현재가와 거래량을 알려줘. ISIN, 가격 기준
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): WHERE 절에서 잘못된 컬럼(pd_nm 대신 pd_abrv_nm 사용)
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼 별칭에 한글 사용 시 SQL 구문 오류 발생
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index AS 기초지수, cu_fund_mgmt_co AS 운용사, cu_charge_rt AS 총보수, du_last_aum AS AUM, ru_mkt_price AS 현재가, du_vol_1d AS 거래량 FROM raw.pref02n001 WHERE pd_abrv_nm LIKE '%VOO%'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "상품명"
+LINE 1: SELECT pd_nm AS 상품명, pd_nm AS 정식 상품명, cu_base_index ...
+                                              ^
+
+[done] Q6 r3 a1 status=ok e2e=25.0s llm=7 tok=18133 rem=43/433 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=42 tokens=426 -> 12.5s 대기
+
+===== [Q7 r3] tokens=59993 | BND의 투자자산 유형, 투자지역, 기초지수, 지수 복제방식, 운용전략과 총보수를 알려줘. 상품번호와 전략 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, prfd_ty_desc, idx_bsis_nm, idx_plcm_mthd_desc, mgn_strg_tm, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r as total_commission, src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "prfd_ty_desc" does not exist
+LINE 1: SELECT itm_nm, fd_ivst_rgn_desc, prfd_ty_desc, idx_bsis_nm, ...
+                                         ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 원래 SQL에서 'prfd_ty_desc', 'idx_bsis_nm', 'idx_plcm_mthd_desc', 'mgn_strg_tm' 등의 컬럼이 정의되지 않아 에러가 발생했으며, 이를 대체 가능한 컬럼(zrin_btyp_nm, bmrk_nm, prfd_attr_search_text)으로 변경하여 문제를 해결함.
+수정된 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, prfd_attr_search_text AS 운용전략, (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) AS 총보수, src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, prfd_attr_search_text AS 운용전략, (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) AS 총보수, src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼명에 띄어쓰기가 포함되어 있을 경우 백틱(``)으로 감싸야 하지만 그렇지 않아 발생한 구문 오류
+수정된 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, prfd_attr_search_text AS 운용전략, (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) AS 총보수, src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, fd_ivst_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk_nm AS 기초지수, prfd_attr_search_text AS 지수 복제방식, prfd_attr_search_text AS 운용전략, (sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r) AS 총보수, src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "유형"
+LINE 1: ...st_rgn_desc AS 투자지역, zrin_btyp_nm AS 투자자산 유형, bmrk...
+                                                             ^
+
+[done] Q7 r3 a1 status=ok e2e=25.3s llm=7 tok=21606 rem=51/25365 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=50 tokens=25358 -> 34.5s 대기
+
+===== [Q8 r3] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모' AND itm_nm LIKE '%미래에셋코어테크증권자투자신탁(주식) 종류A%' AND fd_nast_suma IS NOT NULL AND fd_mm1_ern_r IS NOT NULL AND fd_mm3_ern_r IS NOT NULL AND fd_mm6_ern_r IS NOT NULL AND fd_yr1_ern_r IS NOT NULL
+
+[done] Q8 r3 a1 status=ok e2e=26.7s llm=6 tok=16664 rem=52/32389 | [{"fund_type":"주식형","net_asset":"734810470588.0000","one_month_return":"3.32","three_month_return":"
+
+===== [Q9 r3] tokens=32382 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no FROM raw.prfd01n001 WHERE or_attr_desc = 'MMF' AND itm_nm LIKE '%삼성 베스트 MMF 법인 제1호%' AND fd_nast_suma IS NOT NULL
+
+[done] Q9 r3 a1 status=ok e2e=18.5s llm=6 tok=15749 rem=44/5309 | 벤치마크: CALL
+통화: KRW
+투자지역: 국내
+개인·법인 구분: 법인
+위험등급: 매우 낮은 위험
+순자산: 2190033836274.0000
+상품 식별번호: KR501441005
+[guard] remaining=43 tokens=5302 -> 13.5s 대기
+
+===== [Q10 r3] tokens=59993 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·
+  [Warning] 값이 비어있는 조건 무시됨: 모펀드 ID
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, itm_no, sale_yn, fd_nast_suma, fd_yr1_ern_r, rptt_ksd_itm_no FROM raw.prfd01n001 WHERE itm_nm LIKE '%우리반도체BIG2플러스%' AND (itm_nm LIKE '%C-P%' OR itm_nm LIKE '%C-Pe%') AND fd_nast_suma IS NOT NULL ORDER BY fd_nast_suma DESC LIMIT 1
+
+[done] Q10 r3 a1 status=ok e2e=152.8s llm=6 tok=17148 rem=55/44155 | 동일한 모펀드에 속하는지를 확인하는 정보는 제공되지 않았으며, Class C-P에 대한 데이터도 발견되지 않았습니다. 따라서 두 클래스가 동일한 모펀드인지 여부를 확인할 수 없습니
+
+===== [Q11 r3] tokens=44148 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, mat_dt, buy_yield, buyable_quantity, sale_yield_base_dt FROM raw.prbd01n001 WHERE buyable_quantity >= 0 AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+
+[done] Q11 r3 a1 status=ok e2e=31.9s llm=6 tok=18828 rem=47/14713 | [
+  {
+    "상품명": "한국전력공사채권1012",
+    "발행사": "한국전력공사(주)",
+    "원등급": "AAA",
+    "만기일": "20291219",
+  
+[guard] remaining=46 tokens=14706 -> 11.5s 대기
+
+===== [Q12 r3] tokens=59993 | 현재 판매 중이고 거래정지가 아니며 연금거래가 가능한 국내 ETF를 찾아줘. 상품명, 연금 위험구분, 상품 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pen_risk_nm, pd_risk_nm, pd_net_tamt, ref_base_dt FROM raw.pref01n001 WHERE pd_sale_yn = '판매 중' AND pd_tr_yn = '거래정지 아님' AND pd_pen_tr_yn = '가능' AND pd_grp_no = 'ETF'
+
+[done] Q12 r3 a1 status=ok e2e=23.7s llm=5 tok=15268 rem=53/35822 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q13 r3] tokens=35815 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+[done] Q13 r3 a1 status=exception e2e=53.0s llm=6 tok=15428 rem=59/59993 | 
+
+===== [Q14 r3] tokens=59986 | 담보부 또는 보증채 중 AAA 등급인 종목을 발행잔액 순으로 정리해줘. 상품번호, 발행사, 담보 유형, 원신
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_no, pd_pbcm, crd_grd, isu_bal_amt, info_base_dt FROM raw.prbd01n001 WHERE crd_grd IN ('AAA') AND isu_bal_amt IS NOT NULL ORDER BY isu_bal_amt DESC
+
+[done] Q14 r3 a1 status=ok e2e=23.9s llm=6 tok=18509 rem=51/30476 | [
+  {
+    "상품번호": "KR381006GFB8",
+    "발행사": "농협은행",
+    "원신용등급": "AAA",
+    "발행잔액": 1210000000000,
+
+
+===== [Q15 r3] tokens=30469 | 해외주식에 투자하는 패시브·실물복제·정방향 ETF 중 순자산 1조 원 이상인 상품을 1년 수익률 순으로 5개
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, cu_charge_rt AS 보수, cu_base_index AS 기초지수, du_last_aum AS AUM, du_base_dt_match_yn AS 수익률_기준일에 대한 정보가 필요합니다.
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "대한"
+LINE 1: ...aum AS AUM, du_base_dt_match_yn AS 수익률_기준일에 대한 정보...
+                                                              ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 질문에 명시된 해외 주식 투자, 패시브 전략, 실물복제 방식, 정방향을 만족하는 조건 추가
+수정된 SQL:
+SELECT pd_nm AS 상품명, cu_charge_rt AS 보수, cu_base_index AS 기초지수, du_last_aum AS AUM, du_base_dt_match_yn AS 수익률_기준일 FROM raw.pref02n001 WHERE wu_inv_ast_type = 'Equity' AND wu_inv_rgn LIKE '%United States%' AND du_last_aum >= 100000000000 AND cu_index_repl_mthd = 'Full' AND cu_strategy = 'Passive' AND cu_index_tracking_yn = 'Y' AND cu_inverse_short_yn = 'N' ORDER BY du_er_1d DESC LIMIT 5
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, cu_charge_rt AS 보수, cu_base_index AS 기초지수, du_last_aum AS AUM, du_base_dt_match_yn AS 수익률_기준일 FROM raw.pref02n001 WHERE wu_inv_ast_type = 'Equity' AND wu_inv_rgn LIKE '%United States%' AND du_last_aum >= 100000000000 AND cu_index_repl_mthd = 'Full' AND cu_strategy = 'Passive' AND cu_index_tracking_yn = 'Y' AND cu_inverse_short_yn = 'N' ORDER BY du_er_1d DESC LIMIT 5
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "cu_strategy" does not exist
+LINE 1: ... 100000000000 AND cu_index_repl_mthd = 'Full' AND cu_strateg...
+                                                             ^
+HINT:  Perhaps you meant to reference the column "pref02n001.cu_strtegy".
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 2: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q15 r3 a1 status=rate_limited e2e=22.0s llm=7 tok=16347 rem=42/2998 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=41 tokens=2991 -> 9.5s 대기
+
+===== [Q15 r3 retry] tokens=59993 | 해외주식에 투자하는 패시브·실물복제·정방향 ETF 중 순자산 1조 원 이상인 상품을 1년 수익률 순으로 5개
+  [Warning] 값이 비어있는 조건 무시됨: 1년수익률
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_charge_rt, cu_base_index, du_last_aum, du_base_dt_match_yn FROM raw.pref02n001 WHERE du_last_aum >= '1000000000000' AND du_er_1d IS NOT NULL ORDER BY du_er_1d DESC LIMIT 5
+
+[done] Q15 r3 a2 status=ok e2e=23.0s llm=5 tok=13701 rem=53/37294 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q16 r3] tokens=37287 | 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품을 찾아 6개월 수익률, 총보수, 위험등급을 비교
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익률, enriched.etf_kr_enriched.charge_rt_final AS 총보수, raw.pref01n001.pd_risk_nm AS 위험등급 FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.cu_strtegy = '액티브' AND raw.pref01n001.pd_net_tamt >= 500000000000 AND raw.pref01n001.du_er_6m IS NOT NULL ORDER BY raw.pref01n001.du_er_6m DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: trailing junk after numeric literal at or near "6개월_수익률"
+LINE 1: ...1n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 컬럼명에 한글 사용 시 SQL 구문 오류 발생
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익률, enriched.etf_kr_enriched.charge_rt_final AS 총보수, raw.pref01n001.pd_risk_nm AS 위험등급 FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.cu_strtegy = '액티브' AND raw.pref01n001.pd_net_tamt >= 500000000000 AND raw.pref01n001.du_er_6m IS NOT NULL ORDER BY raw.pref01n001.du_er_6m DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익률, enriched.etf_kr_enriched.charge_rt_final AS 총보수, raw.pref01n001.pd_risk_nm AS 위험등급 FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.cu_strtegy = '액티브' AND raw.pref01n001.pd_net_tamt >= 500000000000 AND raw.pref01n001.du_er_6m IS NOT NULL ORDER BY raw.pref01n001.du_er_6m DESC
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: trailing junk after numeric literal at or near "6개월_수익률"
+LINE 1: ...1n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼명에 한글 사용 시 SQL 구문 오류 발생
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익률, enriched.etf_kr_enriched.charge_rt_final AS 총보수, raw.pref01n001.pd_risk_nm AS 위험등급 FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.cu_strtegy = '액티브' AND raw.pref01n001.pd_net_tamt >= 500000000000 AND raw.pref01n001.du_er_6m IS NOT NULL ORDER BY raw.pref01n001.du_er_6m DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익률, enriched.etf_kr_enriched.charge_rt_final AS 총보수, raw.pref01n001.pd_risk_nm AS 위험등급 FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.cu_strtegy = '액티브' AND raw.pref01n001.pd_net_tamt >= 500000000000 AND raw.pref01n001.du_er_6m IS NOT NULL ORDER BY raw.pref01n001.du_er_6m DESC
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: trailing junk after numeric literal at or near "6개월_수익률"
+LINE 1: ...1n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: trailing junk after numeric literal at or near "6개월_수익률"
+LINE 1: ...1n001.pd_nm AS 상품명, raw.pref01n001.du_er_6m AS 6개월_수익...
+                                                             ^
+
+[done] Q16 r3 a1 status=rate_limited e2e=28.6s llm=8 tok=24380 rem=43/22 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=42 tokens=15 -> 6.5s 대기
+
+===== [Q16 r3 retry] tokens=59993 | 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품을 찾아 6개월 수익률, 총보수, 위험등급을 비교
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.etf_kr_enriched AS ee ON base.etf_cd = ee.etf_cd WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): JOIN하려 했던 enriched.etf_kr_enriched 테이블이 존재하지 않아 제거함
+수정된 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+[done] Q16 r3 a2 status=ok e2e=30.3s llm=7 tok=24637 rem=51/22539 | 조건에 맞는 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품들의 정보는 다음과 같습니다:
+
+1. 삼성액티브 KoAct 미국나스닥성장기업액티브증권상장지수투자신탁[주식]
+
+[guard] remaining=50 tokens=22532 -> 29.5s 대기
+
+===== [Q17 r3] tokens=59993 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AND du_last_aum >= '10000000' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.05%"
+LINE 1: ...curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): cu_charge_rt는 숫자형이므로 작은따옴표를 제거하고 숫자형으로 변경하였습니다.; du_last_aum는 천 단위로 표현되므로 '1천억 달러'를 100000000000으로 변환하여 사용하였습니다.
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= 0.05 AND du_last_aum >= 100000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+[done] Q17 r3 a1 status=ok e2e=23.5s llm=7 tok=19742 rem=51/27144 | [
+[guard] remaining=50 tokens=27137 -> 36.5s 대기
+
+===== [Q18 r3] tokens=59993 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.10%"
+LINE 1: ..._vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 숫자 타입의 연산에서는 숫자 값을 사용해야 하므로, '0.10%'를 숫자 값 0.10으로 변경하여 비교
+수정된 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+[done] Q18 r3 a1 status=ok e2e=29.9s llm=7 tok=19106 rem=51/28188 | [
+  {
+    "pd_nm": "Vanguard 500 Index Fund;ETF",
+    "cu_base_index": "S&P 500 TR",
+    "wu_inv_rgn
+[guard] remaining=50 tokens=28181 -> 29.5s 대기
+
+===== [Q19 r3] tokens=59993 | 판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, exchdg_yn, fd_ivst_rgn_desc, zrin_fd_ivst_risk_grd_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE sale_yn = '판매 중' AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r >= 0 AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma >= 1000000000000 AND fd_nast_suma IS NOT NULL ORDER BY fd_yr1_ern_r DESC
+
+[done] Q19 r3 a1 status=ok e2e=23.6s llm=5 tok=15253 rem=53/35787 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q20 r3] tokens=35780 | 국내 반도체에 투자하는 ETF와 공모펀드를 통합 검색해 순자산 상위 상품을 비교해줘. 단순히 이름에 반도체가
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%반도체%'
+  UNION ALL
+SELECT itm_no AS code, itm_nm AS name, '펀드' AS domain, fd_nast_suma AS sort_value FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모' AND fd_nast_suma IS NOT NULL
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q20 r3 a1 status=ok e2e=33.2s llm=7 tok=19177 rem=44/3976 | 순자산 상위 상품으로는 미래에셋 TIGER 반도체TOP10증권상장지수투자신탁(주식)이 있으며, 해당 상품의 정보는 다음과 같음:
+
+- **기초지수**: FnGuide AI 반도체 
+[guard] remaining=43 tokens=3969 -> 1.5s 대기
+
+===== [Q21 r3] tokens=59993 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_itm_no AS 상품번호, pd_sale_yn AS 상장여부 FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX200%'
+
+[done] Q21 r3 a1 status=rate_limited e2e=49.1s llm=14 tok=38239 rem=44/1012 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=43 tokens=1005 -> 10.5s 대기
+
+===== [Q21 r3 retry] tokens=59993 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_itm_no AS 상품번호, pd_sale_yn AS 상장여부 FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX200%'
+
+[done] Q21 r3 a2 status=rate_limited e2e=45.7s llm=14 tok=38254 rem=44/996 | 
+[guard] remaining=43 tokens=989 -> 13.5s 대기
+
+===== [Q22 r3] tokens=59993 | 캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘. ETF→편입증권→기업 경로를 사용하고, ETF명·티커·
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커
+FROM raw.pref02n001
+
+[done] Q22 r3 a1 status=ok e2e=35.8s llm=6 tok=15568 rem=52/33236 | 해당 조건에 맞는 중국 반도체 ETF 정보는 찾을 수 없습니다.
+
+===== [Q23 r3] tokens=33229 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, wu_inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt BETWEEN '2023-01-01' AND CURRENT_DATE - INTERVAL '180 days' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND pd_grp_no = 'ETF' AND wu_inv_ast_type LIKE '%우주항공%';
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedFunction: operator does not exist: text <= timestamp without time zone
+LINE 1: ..._inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt BETWEEN '2...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type cas
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): BETWEEN 사용 시 발생하는 타입 불일치를 해결하기 위해 비교 연산자와 범위를 사용하여 날짜 조건을 변경함
+수정된 SQL:
+SELECT pd_nm, pd_ticker, wu_inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT_DATE - INTERVAL '180 days' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND pd_grp_no = 'ETF' AND wu_inv_ast_type LIKE '%우주항공%';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, wu_inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT_DATE - INTERVAL '180 days' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND pd_grp_no = 'ETF' AND wu_inv_ast_type LIKE '%우주항공%';
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedFunction: operator does not exist: text <= timestamp without time zone
+LINE 1: ...001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type cas
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼 du_upt_dt의 데이터 타입이 타임스탬프가 아니므로, 이를 캐스팅하여 비교 가능하도록 변경함
+수정된 SQL:
+SELECT pd_nm, pd_ticker, wu_inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT_DATE - INTERVAL '180 days' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND pd_grp_no = 'ETF' AND wu_inv_ast_type LIKE '%우주항공%';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, wu_inv_ast_type FROM raw.pref01n001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT_DATE - INTERVAL '180 days' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND pd_grp_no = 'ETF' AND wu_inv_ast_type LIKE '%우주항공%';
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedFunction: operator does not exist: text <= timestamp without time zone
+LINE 1: ...001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type cas
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedFunction: operator does not exist: text <= timestamp without time zone
+LINE 1: ...001 WHERE du_upt_dt >= '2023-01-01' AND du_upt_dt <= CURRENT...
+                                                             ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type cas
+
+[done] Q23 r3 a1 status=ok e2e=144.0s llm=9 tok=30564 rem=52/26470 | [{"etf_code":"KR70102X0002","etf_name":"ACE 유럽방산TOP10"},{"etf_code":"KR7494840002","etf_name":"TIGER
+[guard] remaining=51 tokens=26463 -> 27.5s 대기
+
+===== [Q24 r3] tokens=59993 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 AS base LEFT JOIN enriched.etf_kr_enriched AS ee ON base.pd_cd = ee.pd_cd WHERE pd_grp_no = 'ETF' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...ELECT pd_nm FROM raw.pref01n001 AS base LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LEFT JOIN enriched.etf_kr_enriched AS ee ON base.pd_cd = ee.pd_cd 부분이 잘못된 테이블 참조로 인해 제거되었습니다.
+수정된 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+[done] Q24 r3 a1 status=ok e2e=29.1s llm=7 tok=21635 rem=51/25448 | 해당 상품의 위험요인 문서에 대한 정보는 확인할 수 없음.
+[guard] remaining=50 tokens=25441 -> 30.5s 대기
+
+===== [Q25 r3] tokens=59993 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE itm_nm LIKE '%국민성장펀드%' AND prvo_pbff_desc = '공모'
+
+[done] Q25 r3 a1 status=ok e2e=18.3s llm=5 tok=14006 rem=53/36704 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q26 r3] tokens=36697 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, applied_yield FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE 발행사 = 'SK하이닉스' AND 기업 = 'SK하이닉스' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 1: ...률, du_last_aum AS AUM FROM raw.pref01n001 WHERE 발행사 = '...
+                                                            ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사는 cu_fund_mgmt_co로 대체; 기업은 wu_inv_ast_type으로 대체
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE cu_fund_mgmt_co = 'SK하이닉스' AND wu_inv_ast_type = '채권' OR cu_fund_mgmt_co = 'SK하이닉스' AND wu_inv_ast_type = '혼합자산'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE cu_fund_mgmt_co = 'SK하이닉스' AND wu_inv_ast_type = '채권' OR cu_fund_mgmt_co = 'SK하이닉스' AND wu_inv_ast_type = '혼합자산'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE 발행사 = 'SK하이닉스'
+),
+     sk_hynix_funds AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE (운용사명 LIKE '%SK하이닉스%' OR 상품명 LIKE '%SK하이닉스%') AND prvo_pbff_desc = '공모'
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_funds
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 6:     WHERE 발행사 = 'SK하이닉스'
+                  ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사라는 컬럼은 존재하지 않으므로, 대신 상품명과 종목약어명에 대한 LIKE 조건으로 대체하여 매수 가능 채권을 찾도록 변경함
+수정된 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%매수 가능 채권%' OR itm_abrv_nm LIKE '%매수 가능 채권%')
+),
+     sk_hynix_funds AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR itm_abrv_nm LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_funds
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%매수 가능 채권%' OR itm_abrv_nm LIKE '%매수 가능 채권%')
+),
+     sk_hynix_funds AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR itm_abrv_nm LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_funds
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: each UNION query must have the same number of columns
+LINE 19: SELECT * FROM sk_hynix_funds
+                ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 각 서브쿼리의 열 수가 동일하도록 조정하여 UNION ALL 연산이 가능하게 함
+수정된 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+               zrin_fd_ivst_risk_grd_nm AS 등급,
+               fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%매수 가능 채권%' OR itm_abrv_nm LIKE '%매수 가능 채권%')
+),
+     sk_hynix_funds AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR itm_abrv_nm LIKE '%SK하이닉스%')
+)
+SELECT b.상품명, b.등급, b.수익률, f.편입비중, f.AUM 
+FROM sk_hynix_bond b 
+UNION ALL 
+SELECT f.상품명, f.등급, NULL AS 수익률, f.편입비중, f.AUM 
+FROM sk_hynix_funds f
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+               zrin_fd_ivst_risk_grd_nm AS 등급,
+               fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%매수 가능 채권%' OR itm_abrv_nm LIKE '%매수 가능 채권%')
+),
+     sk_hynix_funds AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR itm_abrv_nm LIKE '%SK하이닉스%')
+)
+SELECT b.상품명, b.등급, b.수익률, f.편입비중, f.AUM 
+FROM sk_hynix_bond b 
+UNION ALL 
+SELECT f.상품명, f.등급, NULL AS 수익률, f.편입비중, f.AUM 
+FROM sk_hynix_funds f
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: missing FROM-clause entry for table "f"
+LINE 17: SELECT b.상품명, b.등급, b.수익률, f.편입비중, f.AUM 
+                                            ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedTable: missing FROM-clause entry for table "f"
+LINE 17: SELECT b.상품명, b.등급, b.수익률, f.편입비중, f.AUM 
+                                            ^
+
+[done] Q26 r3 a1 status=ok e2e=188.9s llm=15 tok=42740 rem=46/2904 | 조건에 맞는 상품이 없습니다.
+[guard] remaining=45 tokens=2897 -> 9.5s 대기
+
+===== [Q27 r3] tokens=59993 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_no, pd_nm FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, credit_rating, maturity_date, 편입비중, battery_risk_factor FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND ((pd_grp_no = 'ETF'))
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...battery_risk_factor FROM raw.pref01n001 LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): credit_rating와 maturity_date는 채권 관련 정보이므로 fn_average_coupon과 fn_effective_maturity 사용; 편입비중은 순자산총액을 의미하므로 pd_net_tamt 사용; battery_risk_factor 정보는 제공되지 않으므로 빈 문자열로 설정
+수정된 SQL:
+SELECT pd_nm, fn_average_coupon AS credit_rating, fn_effective_maturity AS maturity_date, pd_net_tamt AS 편입비중, '' AS battery_risk_factor FROM raw.pref01n001 WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND (pd_grp_no = 'ETF')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, fn_average_coupon AS credit_rating, fn_effective_maturity AS maturity_date, pd_net_tamt AS 편입비중, '' AS battery_risk_factor FROM raw.pref01n001 WHERE (pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%자회사%') AND (pd_grp_no = 'ETF')
+
+[done] Q27 r3 a1 status=ok e2e=94.4s llm=11 tok=30802 rem=50/21435 | 검색된 데이터에서는 LG에너지솔루션 및 자회사와 관련된 구체적인 채권이나 ETF 정보가 나타나지 않았습니다. 따라서 요청하신 사항에 대한 답변을 제공할 수 없습니다.
+[guard] remaining=49 tokens=21428 -> 27.5s 대기
+
+===== [Q28 r3] tokens=59993 | 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품을 비교하고, 일반 지수형과 커버드콜형의 위
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%엔비디아%'
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value FROM raw.pref02n001
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q28 r3 a1 status=ok e2e=42.0s llm=7 tok=19555 rem=51/28160 | {'편입내역': {'기준일': [], '비중': [], 'AUM': []}, '전략 원문': [''], '위험 설명': ['']}
+[guard] remaining=50 tokens=28153 -> 8.5s 대기
+
+===== [Q29 r3] tokens=59993 | VOO, IVV, SPY가 같은 S&P 500 계열 지수를 추종하는지 확인하고 편입종목 중복률과 상위 기업 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, ref_base_index, cu_base_index, cu_charge_rt, du_last_aum FROM raw.pref01n001 WHERE pd_nm LIKE '%VOO%' OR pd_nm LIKE '%IVV%' OR pd_nm LIKE '%SPY%';
+
+[done] Q29 r3 a1 status=ok e2e=34.4s llm=5 tok=15395 rem=53/35630 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 3건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q30 r3] tokens=35623 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH fund_etfs AS (
+    SELECT pd_nm, pd_lstg_dt
+    FROM raw.pref01n001
+    WHERE pd_grp_no = 'ETF'
+    AND pd_nm LIKE '%반도체%'
+)
+SELECT a.*, b.*
+FROM fund_etfs a
+JOIN fund_etfs b ON a.pd_nm = b.pd_nm
+
+[done] Q30 r3 a1 status=ok e2e=47.3s llm=9 tok=24002 rem=55/43177 | 요청하신 정보는 다음과 같습니다:
+
+1. 편입기준일: 
+   - 브이아이 FOCUS AI반도체위클리고정커버드콜증권상장지수투자신탁: 2026년 4월 7일
+   - NH-Amundi 
+
+===== [Q31 r3] tokens=43170 | 신용등급이 AAAA인 매수 가능 채권을 찾아 상품번호와 신용평가 근거를 제시해줘.
+[done] Q31 r3 a1 status=ok e2e=11.1s llm=3 tok=10845 rem=50/26727 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=49 tokens=26720 -> 25.5s 대기
+
+===== [Q32 r3] tokens=59993 | 2026-08-24 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, link_doc, post_dt, pnt_bng FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "link_doc" does not exist
+LINE 1: SELECT itm_nm, link_doc, post_dt, pnt_bng FROM raw.prfd01n00...
+                       ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): link_doc라는 컬럼은 실제 테이블에 존재하지 않으므로 이를 제거하고 쿼리를 재구성하였습니다.
+수정된 SQL:
+SELECT itm_nm, post_dt, pnt_bng FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, post_dt, pnt_bng FROM raw.prfd01n001 WHERE post_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "post_dt" does not exist
+LINE 1: SELECT itm_nm, post_dt, pnt_bng FROM raw.prfd01n001 WHERE po...
+                       ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): post_dt 대신 fd_price_bas_dt 사용
+수정된 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE fd_price_bas_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE fd_price_bas_dt >= '20260824' AND itm_nm LIKE '%Kimi%' AND prvo_pbff_desc = '공모'
+
+[done] Q32 r3 a1 status=ok e2e=22.5s llm=7 tok=20910 rem=51/25755 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=50 tokens=25748 -> 37.5s 대기
+
+===== [Q33 r3] tokens=59993 | KODEX AI로봇 ETF의 수익률과 편입종목을 공식 문서 근거로 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1d FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX AI로봇 ETF%' AND pd_grp_no = 'ETF'
+
+[done] Q33 r3 a1 status=ok e2e=15.7s llm=5 tok=14026 rem=53/36434 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q34 r3] tokens=36427 | TIGER 미국S&P500의 2027년 확정 연간수익률을 데이터 근거와 함께 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1d FROM raw.pref02n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%'
+
+[done] Q34 r3 a1 status=ok e2e=18.3s llm=5 tok=12408 rem=46/14510 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=45 tokens=14503 -> 24.5s 대기
+
+===== [Q35 r3] tokens=59993 | VOO가 직접 발행한 회사채의 신용등급과 만기일을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, mat_dt FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+[done] Q35 r3 a1 status=ok e2e=46.8s llm=5 tok=13428 rem=53/37093 | 해당 정보를 찾을 수 없습니다.
+
+===== [Q1 r4] tokens=37086 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, buyable_quantity, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND pd_nm LIKE '%에스케이하이닉스224-2%'
+
+[done] Q1 r4 a1 status=ok e2e=24.7s llm=6 tok=16325 rem=57/52419 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+
+===== [Q2 r4] tokens=52412 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_nm LIKE '%국고채권 02000-3106(21-5)%'
+
+[done] Q2 r4 a1 status=ok e2e=21.0s llm=6 tok=15811 rem=49/25372 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754,"srf
+[guard] remaining=48 tokens=25365 -> 26.5s 대기
+
+===== [Q3 r4] tokens=59993 | 현대해상화재보험7(후)(콜/후)의 채권 종류, 발행사, 신용등급, 만기구분, 듀레이션을 알려줘. 원본 등급값
+[done] Q3 r4 a1 status=ok e2e=14.8s llm=3 tok=11091 rem=55/43470 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_hit: 스코프 1상품(문서 확보 0, 미확보 0), 청크 0건(≥0.45))
+
+===== [Q4 r4] tokens=43463 | KODEX 200의 운용사, 기초지수, 현재 AUM, NAV, 종가, 괴리율과 1년 수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, cu_base_index, du_last_aum, du_last_nav, du_clpr, du_diff_rt, du_er_1y FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX 200%' AND pd_grp_no = 'ETF'
+
+[done] Q4 r4 a1 status=ok e2e=21.0s llm=6 tok=17720 rem=47/14389 | 조건에 맞는 상품이 없습니다.
+[guard] remaining=46 tokens=14382 -> 21.5s 대기
+
+===== [Q5 r4] tokens=59993 | TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, wu_inv_ast_type, wu_inv_rgn, cu_strtegy, cu_charge_rt, du_er_1m, du_er_3m, du_er_6m FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%' AND pd_grp_no = 'ETF'
+
+[done] Q5 r4 a1 status=ok e2e=24.0s llm=6 tok=17020 rem=52/31830 | {'투자자산군': ['주식'], '투자지역': ['미국'], '운용전략': ['실물복제'], '총보수': [], '1개월 수익률': ['1.84', '-3.93', '-2.97',
+
+===== [Q6 r4] tokens=31823 | VOO의 정식 상품명, 기초지수, 운용사, 총보수, AUM, 현재가와 거래량을 알려줘. ISIN, 가격 기준
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, cu_fund_mgmt_co, cu_charge_rt, du_last_aum, ru_mkt_price, ru_mkt_volume, pd_isin_cd, du_clpr_base_dt, du_upt_dt FROM raw.pref02n001 WHERE pd_nm LIKE '%VOO%';
+
+[done] Q6 r4 a1 status=ok e2e=20.4s llm=5 tok=13063 rem=45/9485 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=44 tokens=9478 -> 14.5s 대기
+
+===== [Q7 r4] tokens=59993 | BND의 투자자산 유형, 투자지역, 기초지수, 지수 복제방식, 운용전략과 총보수를 알려줘. 상품번호와 전략 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, basc_idx_desc, idx_jrnl_mthd_desc, oprtg_strgy_desc, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r as total_commission, strgy_src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "basc_idx_desc" does not exist
+LINE 1: SELECT itm_nm, fd_ivst_rgn_desc, basc_idx_desc, idx_jrnl_mth...
+                                         ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): basc_idx_desc는 존재하지 않는 컬럼이므로 벤치마크명(bmrk_nm)으로 대체; idx_jrnl_mthd_desc는 제로인 속성명(zrin_attr_nms)으로 대체
+수정된 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, bmrk_nm AS basc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, oprtg_strgy_desc, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS total_commission, strgy_src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, bmrk_nm AS basc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, oprtg_strgy_desc, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS total_commission, strgy_src_fld FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "oprtg_strgy_desc" does not exist
+LINE 1: ...sc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, oprtg_strg...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): '운용전략(oprg_strgy_desc)'이라는 컬럼은 존재하지 않으므로, 이를 삭제하고 대신 'strgy_src_fld'라는 컬럼을 사용하였습니다.
+수정된 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, bmrk_nm AS basc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, strgy_src_fld, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS total_commission FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_ivst_rgn_desc, bmrk_nm AS basc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, strgy_src_fld, sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r AS total_commission FROM raw.prfd01n001 WHERE itm_nm LIKE '%BND%' AND prvo_pbff_desc = '공모'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "strgy_src_fld" does not exist
+LINE 1: ...sc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, strgy_src_...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "strgy_src_fld" does not exist
+LINE 1: ...sc_idx_desc, zrin_attr_nms AS idx_jrnl_mthd_desc, strgy_src_...
+                                                             ^
+
+[done] Q7 r4 a1 status=ok e2e=25.1s llm=7 tok=21604 rem=51/25369 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=50 tokens=25362 -> 34.5s 대기
+
+===== [Q8 r4] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모' AND itm_nm LIKE '%미래에셋코어테크증권자투자신탁(주식) 종류A%'
+
+[done] Q8 r4 a1 status=ok e2e=24.2s llm=6 tok=16676 rem=52/32360 | [{"fund_type":"주식형","net_asset":"734810470588.0000","one_month_return":"3.32","three_month_return":"
+
+===== [Q9 r4] tokens=32353 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no FROM raw.prfd01n001 WHERE or_attr_desc = 'MMF' AND itm_nm LIKE '%삼성 베스트 MMF 법인 제1호%'
+
+[done] Q9 r4 a1 status=ok e2e=20.5s llm=6 tok=16151 rem=44/4935 | {"벤치마크": "CALL", "통화": "KRW", "투자지역": "국내", "개인\u002f법인 구분": "법인", "위험등급": "매우 낮은 위험", "순자산": "21900
+[guard] remaining=43 tokens=4928 -> 14.5s 대기
+
+===== [Q10 r4] tokens=59993 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·
+  [Warning] 값이 비어있는 조건 무시됨: 모펀드 ID
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, itm_no, sale_yn, fd_nast_suma, fd_yr1_ern_r, rptt_ksd_itm_no FROM raw.prfd01n001 WHERE itm_nm LIKE '%우리반도체BIG2플러스%' OR itm_nm LIKE '%C-P%' OR itm_nm LIKE '%C-Pe%' AND fd_nast_suma IS NOT NULL AND fd_yr1_ern_r IS NOT NULL ORDER BY fd_nast_suma DESC LIMIT 1
+
+[done] Q10 r4 a1 status=ok e2e=140.8s llm=6 tok=17333 rem=55/44067 | 동일한 모펀드에 속하는지를 확인하는 과정에서 삼성 글로벌액티브 적격TDF 2060 증권투자신탁UH[주식혼합-재간접형]_C-P라는 펀드가 발견되었습니다. 그러나 C-Pe 클래스에 대
+
+===== [Q11 r4] tokens=44060 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, mat_dt, buy_yield, buyable_quantity, sale_yield_base_dt FROM raw.prbd01n001 WHERE buyable_quantity >= 0 AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND buyable_quantity IS NOT NULL ORDER BY buyable_quantity DESC
+
+[done] Q11 r4 a1 status=exception e2e=54.9s llm=6 tok=15464 rem=59/59993 | 
+
+===== [Q12 r4] tokens=59986 | 현재 판매 중이고 거래정지가 아니며 연금거래가 가능한 국내 ETF를 찾아줘. 상품명, 연금 위험구분, 상품 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_pen_risk_nm AS 연금위험구분, pd_risk_nm AS 상품위험등급, pd_net_tamt AS 순자산, ref_base_dt AS 데이터기준일 FROM raw.pref01n001 WHERE pd_sale_yn = '판매 중' AND pd_tr_yn = '거래정지 아님' AND pd_pen_tr_yn = '가능' AND pd_grp_no = 'ETF'
+
+[done] Q12 r4 a1 status=ok e2e=24.9s llm=5 tok=15314 rem=52/35781 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q13 r4] tokens=35774 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 ORDER BY buy_yield DESC, pd_nm ASC LIMIT 10
+
+[done] Q13 r4 a1 status=ok e2e=32.1s llm=6 tok=18117 rem=44/7094 | 조건에 맞는 회사채 목록은 다음과 같습니다:
+
+1. pd_nm: 기은센풍무프로젝트제일차유동화전문1(사모/콜/강제), crd_grd: AAA, remaining_days: 996.0
+[guard] remaining=43 tokens=7087 -> 1.5s 대기
+
+===== [Q14 r4] tokens=59993 | 담보부 또는 보증채 중 AAA 등급인 종목을 발행잔액 순으로 정리해줘. 상품번호, 발행사, 담보 유형, 원신
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_no, pd_pbcm, crd_grd, isu_bal_amt, info_base_dt FROM raw.prbd01n001 WHERE crd_grd IN ('AAA') AND isu_bal_amt IS NOT NULL ORDER BY isu_bal_amt DESC
+
+[done] Q14 r4 a1 status=exception e2e=50.9s llm=6 tok=14846 rem=52/30448 | 
+
+===== [Q15 r4] tokens=30441 | 해외주식에 투자하는 패시브·실물복제·정방향 ETF 중 순자산 1조 원 이상인 상품을 1년 수익률 순으로 5개
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_charge_rt, cu_base_index, du_last_aum, du_base_dt_match_yn FROM raw.pref02n001 WHERE du_last_aum >= 1000000000000 AND du_er_1d IS NOT NULL ORDER BY du_er_1d DESC LIMIT 5
+
+[done] Q15 r4 a1 status=ok e2e=19.3s llm=5 tok=13468 rem=56/49400 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q16 r4] tokens=49393 | 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상인 상품을 찾아 6개월 수익률, 총보수, 위험등급을 비교
+  [Warning] 값이 비어있는 조건 무시됨: 6개월 수익률
+  [Warning] 값이 비어있는 조건 무시됨: 총보수
+  [Warning] 값이 비어있는 조건 무시됨: 위험등급
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.etf_kr_enriched AS etf ON base.pd_cd = etf.pd_cd WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_risk_nm FROM raw.pref01n001 AS base INNER JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): JOIN하려는 enriched.etf_kr_enriched 테이블이 존재하지 않아 에러가 발생함
+수정된 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_6m, cu_charge_rt, pd_risk_nm FROM raw.pref01n001 WHERE cu_strtegy = '액티브' AND pd_net_tamt >= 500000000000 AND pd_grp_no = 'ETF' AND du_er_6m IS NOT NULL
+
+[done] Q16 r4 a1 status=ok e2e=38.4s llm=7 tok=25198 rem=47/11897 | 조건에 맞는 섹터·테마형 액티브 ETF 중 순자산 5천억 원 이상의 상품들에 대해 다음과 같이 정리하였습니다:
+
+1. 삼성액티브 KoAct 미국나스닥성장기업액티브증권상장지수투자신탁
+[guard] remaining=46 tokens=11890 -> 10.5s 대기
+
+===== [Q17 r4] tokens=59993 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AND du_last_aum >= '100000000000000000' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.05%"
+LINE 1: ...curr_cd FROM raw.pref02n001 WHERE cu_charge_rt <= '0.05%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): cu_charge_rt는 숫자형이므로 작은따옴표를 제거하고 수치형으로 변환하여 비교
+수정된 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE CAST(cu_charge_rt AS numeric) <= 0.05 AND du_last_aum >= 100000000000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd FROM raw.pref02n001 WHERE CAST(cu_charge_rt AS numeric) <= 0.05 AND du_last_aum >= 100000000000000000 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC
+
+[done] Q17 r4 a1 status=ok e2e=22.3s llm=6 tok=16490 rem=52/32361 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q18 r4] tokens=32354 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "0.10%"
+LINE 1: ..._vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= '0.10%' AN...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 숫자 타입의 연산에서는 숫자 값을 사용해야 하므로, '0.10%'를 숫자 값 0.10으로 변경하여 비교
+수정된 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d FROM raw.pref02n001 WHERE cu_charge_rt <= 0.10 AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 10
+
+[done] Q18 r4 a1 status=ok e2e=30.1s llm=7 tok=19061 rem=43/543 | [
+  {
+    "pd_nm": "Vanguard 500 Index Fund;ETF",
+    "cu_base_index": "S&P 500 TR",
+    "wu_inv_rgn
+[guard] remaining=42 tokens=536 -> 5.5s 대기
+
+===== [Q19 r4] tokens=59993 | 판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, exchdg_yn, fd_ivst_rgn_desc, zrin_fd_ivst_risk_grd_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE sale_yn = '판매 중' AND prvo_pbff_desc = '공모' AND fd_yr1_ern_r >= 0 AND fd_yr1_ern_r IS NOT NULL AND fd_nast_suma >= 1000000000000 AND fd_nast_suma IS NOT NULL ORDER BY fd_yr1_ern_r DESC
+
+[done] Q19 r4 a1 status=ok e2e=24.9s llm=5 tok=15319 rem=53/35815 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+
+===== [Q20 r4] tokens=35808 | 국내 반도체에 투자하는 ETF와 공모펀드를 통합 검색해 순자산 상위 상품을 비교해줘. 단순히 이름에 반도체가
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%반도체%'
+  UNION ALL
+SELECT itm_no AS code, itm_nm AS name, '펀드' AS domain, fd_nast_suma AS sort_value FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모'
+) merged
+ORDER BY sort_value DESC NULLS LAST
+
+[done] Q20 r4 a1 status=ok e2e=35.7s llm=7 tok=19281 rem=59/59993 | 순자산 상위 상품으로는 미래에셋 TIGER 반도체TOP10증권상장지수투자신탁(주식)이 있으며, 해당 상품의 정보는 다음과 같음:
+
+- **기초지수**: FnGuide AI 반도체 
+
+===== [Q21 r4] tokens=59986 | KODEX200이 국내 ETF 데이터와 공모펀드 데이터에 모두 나타나는 이유를 설명해줘. 동일 운용상품, 상
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_itm_no, pd_sale_yn FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%KODEX200%';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm as 상품명, itm_no as 상품번호, rptt_ksd_itm_no as 대표종목번호, ofsfd_yn as 상장_여부 FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모' AND itm_nm = 'KODEX200'
+
+[done] Q21 r4 a1 status=ok e2e=36.1s llm=9 tok=22031 rem=48/21081 | KODEX200은 국내 ETF 데이터에만 나타나며, 공모펀드 데이터에는 존재하지 않습니다. 따라서 두 데이터 간에 동일 운용상품이나 상장 클래스 차이로 인한 중복이 아닌 것으로 보
+[guard] remaining=47 tokens=21074 -> 22.5s 대기
+
+===== [Q22 r4] tokens=59993 | 캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘. ETF→편입증권→기업 경로를 사용하고, ETF명·티커·
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE (ETF 편입 증권 -> 기업 = '캠브리콘') AND (편입 비중 IS NOT NULL)
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "편입"
+LINE 1: ...pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE (ETF 편입 증권 ...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): WHERE 절에서 '편입'이라는 한글 표현 대신 백틱(`)으로 감싸서 SQL 구문으로 인식되게 함
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 증권 -> 기업" LIKE '%캠브리콘%') AND (편입 비중 IS NOT NULL)
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 증권 -> 기업" LIKE '%캠브리콘%') AND (편입 비중 IS NOT NULL)
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비중"
+LINE 1: ...F 편입 증권 -> 기업" LIKE '%캠브리콘%') AND (편입 비중 IS NO...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 컬럼명이 잘못 지정되어 있어서 올바른 컬럼명으로 변경하였습니다.
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 증권 -> 기업" LIKE '%캠브리콘%')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_nm AS ETF명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 증권 -> 기업" LIKE '%캠브리콘%')
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "ETF 편입 증권 -> 기업" does not exist
+LINE 1: ...명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 ...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "ETF 편입 증권 -> 기업" does not exist
+LINE 1: ...명, pd_abrv_nm AS 티커 FROM raw.pref02n001 WHERE ("ETF 편입 ...
+                                                             ^
+
+[done] Q22 r4 a1 status=ok e2e=40.3s llm=7 tok=18147 rem=51/28750 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=50 tokens=28743 -> 15.5s 대기
+
+===== [Q23 r4] tokens=59993 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm as 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co 
+FROM raw.pref01n001 
+JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = enriched.etf_kr_enriched.pd_itm_no 
+WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE 
+AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') 
+AND wu_inv_ast_type LIKE '%우주항공%' 
+AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 3: JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_itm_no = ...
+             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): enriched.etf_kr_enriched 테이블이 존재하지 않아 JOIN 부분을 제거함
+수정된 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-01' AND CURRENT_DATE AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: "2023-01-01"
+LINE 1: ...t_co FROM raw.pref01n001 WHERE du_vlty_6m BETWEEN '2023-01-0...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): du_vlty_6m는 날짜 형식이 아니므로 DATE 함수로 변환하여 사용
+수정된 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE DATE(du_vlty_6m) >= '2023-01-01' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm AS 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE DATE(du_vlty_6m) >= '2023-01-01' AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002') AND wu_inv_ast_type LIKE '%우주항공%' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedFunction: function date(numeric) does not exist
+LINE 1: ...index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE DATE(du_vl...
+                                                             ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedFunction: function date(numeric) does not exist
+LINE 1: ...index, ref_fund_mgmt_co FROM raw.pref01n001 WHERE DATE(du_vl...
+                                                             ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+
+[done] Q23 r4 a1 status=ok e2e=166.1s llm=9 tok=30732 rem=52/26404 | [{"etf_code": "KR70102X0002", "etf_name": "ACE 유럽방산TOP10"}, {"etf_code": "KR7494840002", "etf_name":
+[guard] remaining=51 tokens=26397 -> 23.5s 대기
+
+===== [Q24 r4] tokens=59993 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%에코프로%' AND du_last_aum IS NOT NULL ORDER BY du_last_aum DESC LIMIT 1
+
+[done] Q24 r4 a1 status=ok e2e=30.8s llm=6 tok=19665 rem=52/29581 | 위험요인 문서 인용문:
+
+[집합투자기구 위험등급 분류기준 및 상세설명]
+위험등급 | 분류기준 | 상세설명(주)
+1등급 | 매우높은위험 | ①레버리지 등 수익구조가 특수하여 투자시 
+[guard] remaining=51 tokens=29574 -> 28.5s 대기
+
+===== [Q25 r4] tokens=59993 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm FROM raw.prfd01n001 WHERE itm_nm LIKE '%국민성장펀드%' AND prvo_pbff_desc = '공모'
+
+[done] Q25 r4 a1 status=ok e2e=21.3s llm=5 tok=14030 rem=53/36700 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q26 r4] tokens=36693 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 등급 FROM raw.prbd01n001 WHERE std_pd_mcls_nm = 'SK하이닉스';
+SELECT pd_nm AS 상품명 FROM raw.prbd01n001 WHERE pd_nm = 'SK하이닉스';
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+다중 SQL 문은 허용하지 않습니다
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 원래 쿼리는 다중 SQL 문을 사용하려 했지만, 이는 지원되지 않으므로 하나의 SQL 문으로 통합하여 작성하였습니다.
+수정된 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 등급 FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 등급 FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채';
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 LEFT JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE 발행사 = 'SK하이닉스' AND 기업 = 'SK하이닉스' AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ... du_last_aum AS AUM FROM raw.pref01n001 LEFT JOIN enriched.e...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): LEFT JOIN enriched.etf_kr_enriched 테이블이 존재하지 않아 제거함; 발행사와 기업이 모두 'SK하이닉스'이므로, 상품명에 'SK하이닉스'가 포함된 ETF를 찾기 위해 LIKE 사용
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%SK하이닉스%'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE (prvo_pbff_desc = '공모' AND (발행사 = 'SK하이닉스')) OR (운용사명 LIKE '%SK하이닉%' AND prvo_pbff_desc = '공모');
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 1: ...aw.prfd01n001 WHERE (prvo_pbff_desc = '공모' AND (발행사 = '...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사라는 컬럼은 존재하지 않으므로, 운용사와 관련된 컬럼인 or_co_xtn_itt_cd 또는 종목명과 관련된 itm_nm을 사용하여 조건문을 수정함
+수정된 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm AS 상품명, zrin_fd_ivst_risk_grd_nm AS 등급, fd_yr1_ern_r AS 수익률, zrin_dmst_stk_cmst_rt AS 편입비중, fd_nast_suma AS AUM FROM raw.prfd01n001 WHERE prvo_pbff_desc = '공모' AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+
+[done] Q26 r4 a1 status=ok e2e=94.9s llm=16 tok=47348 rem=48/9130 | 발행사 SK하이닉스와 관련된 매수 가능한 채권 정보는 다음과 같습니다:
+
+1. 퍼스트파이브지제팔십사차유동화전문1-14 - 등급: AAA
+2. POSCO314-1 - 등급: AA+
+
+[guard] remaining=47 tokens=9123 -> 2.5s 대기
+
+===== [Q27 r4] tokens=59993 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, 모자회사_관계의_공식_근거, 채권_신용등급, 채권_만기, ETF_편입_비중, 배터리_산업_위험_요인에 대한 정보가 필요합니다.
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "정보가"
+LINE 1: ..._만기, ETF_편입_비중, 배터리_산업_위험_요인에 대한 정보가 필...
+                                                              ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 질문에 필요한 모든 정보를 다루기에는 현재 제공된 SQL이 너무 단순하며, 특정 컬럼들이 누락됨
+수정된 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 채권_신용등급, mat_dt AS 채권_만기 FROM raw.prbd01n001
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, crd_grd AS 채권_신용등급, mat_dt AS 채권_만기 FROM raw.prbd01n001
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH lg_energy_sol_data AS (SELECT * FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND 발행사 IN ('LG에너지솔루션', 'LG에너지솔루션 자회사')), etf_data AS (SELECT * FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND 편입기업 LIKE '%LG에너지솔루션%' OR 편입기업 LIKE '%LG에너지솔루션 자회사%'), risk_factors AS (SELECT * FROM 해석된_문서 WHERE 주제 = '배터리 산업 위험 요인') SELECT lg_energy_sol_data.pd_nm, lg_energy_sol_data.신용등급, lg_energy_sol_data.만기일, etf_data.pd_nm, etf_data.편입비중, risk_factors.위험요인 FROM lg_energy_sol_data FULL OUTER JOIN etf_data ON TRUE FULL OUTER JOIN risk_factors ON TRUE
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "발행사" does not exist
+LINE 1: ...FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND 발행사 IN ...
+                                                             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 발행사 컬럼이 존재하지 않아 pd_itm_no로 변경하여 사용
+수정된 SQL:
+WITH lg_energy_sol_data AS (SELECT * FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND pd_itm_no IN ('LG에너지솔루션', 'LG에너지솔루션 자회사')), etf_data AS (SELECT * FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%LG에너지솔루션 자회사%'), risk_factors AS (SELECT * FROM 해석된_문서 WHERE 주제 = '배터리 산업 위험 요인') SELECT lg_energy_sol_data.pd_nm, lg_energy_sol_data.신용등급, lg_energy_sol_data.만기일, etf_data.pd_nm, etf_data.편입비중, risk_factors.위험요인 FROM lg_energy_sol_data FULL OUTER JOIN etf_data ON TRUE FULL OUTER JOIN risk_factors ON TRUE
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH lg_energy_sol_data AS (SELECT * FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND pd_itm_no IN ('LG에너지솔루션', 'LG에너지솔루션 자회사')), etf_data AS (SELECT * FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%LG에너지솔루션 자회사%'), risk_factors AS (SELECT * FROM 해석된_문서 WHERE 주제 = '배터리 산업 위험 요인') SELECT lg_energy_sol_data.pd_nm, lg_energy_sol_data.신용등급, lg_energy_sol_data.만기일, etf_data.pd_nm, etf_data.편입비중, risk_factors.위험요인 FROM lg_energy_sol_data FULL OUTER JOIN etf_data ON TRUE FULL OUTER JOIN risk_factors ON TRUE
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "해석된_문서" does not exist
+LINE 1: ...지솔루션 자회사%'), risk_factors AS (SELECT * FROM 해석된_문...
+                                                              ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 해석된_문서 테이블은 존재하지 않으므로 제거함
+수정된 SQL:
+WITH lg_energy_sol_data AS (SELECT * FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND pd_itm_no IN ('LG에너지솔루션', 'LG에너지솔루션 자회사')), etf_data AS (SELECT * FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%LG에너지솔루션 자회사%') SELECT lg_energy_sol_data.pd_nm, lg_energy_sol_data.신용등급, lg_energy_sol_data.만기일, etf_data.pd_nm, etf_data.편입비중 FROM lg_energy_sol_data FULL OUTER JOIN etf_data ON TRUE
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH lg_energy_sol_data AS (SELECT * FROM raw.pref01n001 WHERE pd_nm LIKE '%채권%' AND pd_itm_no IN ('LG에너지솔루션', 'LG에너지솔루션 자회사')), etf_data AS (SELECT * FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%LG에너지솔루션%' OR pd_nm LIKE '%LG에너지솔루션 자회사%') SELECT lg_energy_sol_data.pd_nm, lg_energy_sol_data.신용등급, lg_energy_sol_data.만기일, etf_data.pd_nm, etf_data.편입비중 FROM lg_energy_sol_data FULL OUTER JOIN etf_data ON TRUE
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column lg_energy_sol_data.신용등급 does not exist
+LINE 1: ...솔루션 자회사%') SELECT lg_energy_sol_data.pd_nm, lg_energy_...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column lg_energy_sol_data.신용등급 does not exist
+LINE 1: ...솔루션 자회사%') SELECT lg_energy_sol_data.pd_nm, lg_energy_...
+                                                             ^
+
+[done] Q27 r4 a1 status=ok e2e=113.7s llm=12 tok=36512 rem=49/14297 | 요청하신 정보 중 다음과 같은 사항을 확인할 수 있었습니다:
+
+1. 채권 정보:
+   - 여러 기업의 채권 정보가 확인되었으나, LG에너지솔루션 및 그 자회사와 관련된 구체적인 정
+[guard] remaining=48 tokens=14290 -> 19.5s 대기
+
+===== [Q28 r4] tokens=59993 | 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품을 비교하고, 일반 지수형과 커버드콜형의 위
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%엔비디아%',
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value FROM raw.pref02n001 WHERE (pd_nm LIKE '%엔비디아%') AND ('일반 지수형' = risk_type OR '커버드콜형' = risk_type)
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 2: ...f01n001 WHERE pd_grp_no = 'ETF' AND pd_nm LIKE '%엔비디아%',
+                                                                      ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 해외ETF 서브쿼리의 'risk_type'이라는 컬럼은 존재하지 않으므로, '일반 지수형'과 '커버드콜형'을 구분하기 위해 'ref_fund_mgmt_co' 컬럼을 사용함.
+수정된 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value 
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+AND pd_nm LIKE '%엔비디아%',
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value
+FROM raw.pref02n001
+WHERE pd_nm LIKE '%엔비디아%' 
+AND ref_fund_mgmt_co IN ('일반 지수형', '커버드콜형')
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value 
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+AND pd_nm LIKE '%엔비디아%',
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value
+FROM raw.pref02n001
+WHERE pd_nm LIKE '%엔비디아%' 
+AND ref_fund_mgmt_co IN ('일반 지수형', '커버드콜형')
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 5: AND pd_nm LIKE '%엔비디아%',
+                                   ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): SQL 문법 오류로 인해 쿼리가 중단되었습니다.
+수정된 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value 
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+AND pd_nm LIKE '%엔비디아%',
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value
+FROM raw.pref02n001
+WHERE pd_nm LIKE '%엔비디아%' 
+AND ref_fund_mgmt_co IN ('일반 지수형', '커버드콜형')
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT * FROM (
+SELECT pd_itm_no AS code, pd_nm AS name, '국내ETF' AS domain, pd_net_tamt AS sort_value 
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+AND pd_nm LIKE '%엔비디아%',
+  UNION ALL
+SELECT pd_itm_no AS code, pd_nm AS name, '해외ETF' AS domain, du_last_aum AS sort_value
+FROM raw.pref02n001
+WHERE pd_nm LIKE '%엔비디아%' 
+AND ref_fund_mgmt_co IN ('일반 지수형', '커버드콜형')
+) merged
+ORDER BY sort_value DESC NULLS LAST
+LIMIT 1
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 5: AND pd_nm LIKE '%엔비디아%',
+                                   ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 5: AND pd_nm LIKE '%엔비디아%',
+                                   ^
+
+[done] Q28 r4 a1 status=ok e2e=46.9s llm=9 tok=28225 rem=49/15915 | 현재 제공된 데이터로는 엔비디아를 편입한 국내 ETF와 해외 ETF 중 순자산이 큰 상품에 대한 구체적인 정보(AUM, 편입 내역 기준일, 비중 등)가 포함되어 있지 않습니다. 또
+[guard] remaining=48 tokens=15908 -> 12.5s 대기
+
+===== [Q29 r4] tokens=59993 | VOO, IVV, SPY가 같은 S&P 500 계열 지수를 추종하는지 확인하고 편입종목 중복률과 상위 기업 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, ref_base_index, cu_base_index, cu_charge_rt, du_last_aum FROM raw.pref01n001 WHERE pd_nm LIKE '%VOO%' OR pd_nm LIKE '%IVV%' OR pd_nm LIKE '%SPY%';
+
+[done] Q29 r4 a1 status=ok e2e=38.4s llm=5 tok=15345 rem=53/35672 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 3건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q30 r4] tokens=35665 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일
+FROM raw.pref01n001
+JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd
+WHERE raw.pref01n001.pd_grp_no = 'ETF'
+AND raw.pref01n001.pd_nm LIKE '%반도체%'
+ORDER BY (중복 비율) DESC
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 6: ORDER BY (중복 비율) DESC
+                       ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 주문에 잘못된 '중복 비율' 표현이 있어 이를 제거하여 SQL 구문을 수정함
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "비율"
+LINE 1: ...ND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY (중복 비율)
+                                                                  ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): ORDER BY 절에서 '중복 비율'이라는 표현은 SQL에서 유효하지 않으므로, 특정 열 이름인 'raw.pref01n001.pd_nm'으로 변경하여 오류를 해결함.
+수정된 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT raw.pref01n001.pd_nm AS 상품명, raw.pref01n001.pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.etf_kr_enriched ON raw.pref01n001.pd_cd = enriched.etf_kr_enriched.pd_cd WHERE raw.pref01n001.pd_grp_no = 'ETF' AND raw.pref01n001.pd_nm LIKE '%반도체%' ORDER BY raw.pref01n001.pd_nm
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...pd_lstg_dt AS 편입기준일 FROM raw.pref01n001 JOIN enriched.e...
+                                                             ^
+
+[done] Q30 r4 a1 status=ok e2e=39.4s llm=11 tok=31919 rem=55/36338 | 요청하신 정보 중 편입기준일, 중복도 계산식, 기업관계 및 위험문서 근거에 대해 다음과 같이 정리하였습니다.
+
+===== [Q31 r4] tokens=36331 | 신용등급이 AAAA인 매수 가능 채권을 찾아 상품번호와 신용평가 근거를 제시해줘.
+[done] Q31 r4 a1 status=ok e2e=11.1s llm=3 tok=10842 rem=50/19889 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] remaining=49 tokens=19882 -> 34.5s 대기
+
+===== [Q32 r4] tokens=59993 | 2026-08-24 기준으로 Kimi 관련 투자 상품을 찾아 해당 모델과 상품의 연결 근거 문서, 발표일과 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT 
+    itm_nm AS 상품명,
+    kimi_model AS 모델명,
+    jnct_gnd_doc AS 연결근거문서,
+    annc_dt AS 발표일,
+    pnt_bnng_bxg AS 편입비중
+FROM 
+    raw.prfd01n001
+WHERE 
+    kimi_model = 'Kimi'
+    AND annc_dt >= '2026-08-24'
+    AND prvo_pbff_desc = '공모'
+    AND (sale_co_rwrd_r IS NOT NULL OR or_co_rwrd_r IS NOT NULL OR trusc_rwrd_r IS NOT NULL OR ofwk_trus_rwrd_r IS NOT NULL)
+ORDER BY 
+    annc_dt DESC;
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "kimi_model" does not exist
+LINE 3:     kimi_model AS 모델명,
+            ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): kimi_model이라는 컬럼은 존재하지 않으므로 삭제함
+수정된 SQL:
+SELECT 
+    itm_nm AS 상품명,
+    '' AS 모델명,
+    '' AS 연결근거문서,
+    '' AS 발표일,
+    '' AS 편입비중
+FROM 
+    raw.prfd01n001
+WHERE 
+    prvo_pbff_desc = '공모'
+ORDER BY 
+    annc_dt DESC;
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT 
+    itm_nm AS 상품명,
+    '' AS 모델명,
+    '' AS 연결근거문서,
+    '' AS 발표일,
+    '' AS 편입비중
+FROM 
+    raw.prfd01n001
+WHERE 
+    prvo_pbff_desc = '공모'
+ORDER BY 
+    annc_dt DESC;
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "annc_dt" does not exist
+LINE 12:     annc_dt DESC
+             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): 발표일을 위한 칼럼이 존재하지 않아 기준일로 대체
+수정된 SQL:
+SELECT 
+    itm_nm AS 상품명,
+    '' AS 모델명,
+    '' AS 연결근거문서,
+    '' AS 발표일,
+    '' AS 편입비중
+FROM 
+    raw.prfd01n001
+WHERE 
+    prvo_pbff_desc = '공모'
+ORDER BY 
+    fd_price_bas_dt DESC;
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT 
+    itm_nm AS 상품명,
+    '' AS 모델명,
+    '' AS 연결근거문서,
+    '' AS 발표일,
+    '' AS 편입비중
+FROM 
+    raw.prfd01n001
+WHERE 
+    prvo_pbff_desc = '공모'
+ORDER BY 
+    fd_price_bas_dt DESC;
+
+[done] Q32 r4 a1 status=ok e2e=28.3s llm=8 tok=24017 rem=50/21005 | 조건에 맞는 투자 상품이 존재하지 않습니다.
+[guard] remaining=49 tokens=20998 -> 30.5s 대기
+
+===== [Q33 r4] tokens=59993 | KODEX AI로봇 ETF의 수익률과 편입종목을 공식 문서 근거로 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1d FROM raw.pref01n001 WHERE pd_nm LIKE '%KODEX AI로봇 ETF%' AND pd_grp_no = 'ETF'
+
+[done] Q33 r4 a1 status=ok e2e=14.9s llm=5 tok=14026 rem=53/36434 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+
+===== [Q34 r4] tokens=36427 | TIGER 미국S&P500의 2027년 확정 연간수익률을 데이터 근거와 함께 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, du_er_1y FROM raw.pref01n001 WHERE pd_nm LIKE '%TIGER 미국S&P500%'
+
+[done] Q34 r4 a1 status=ok e2e=16.0s llm=6 tok=15622 rem=45/9180 | 현재 제공된 데이터로는 TIGER 미국S&P500의 2027년 확정 연간수익률에 대한 구체적인 정보는 확인할 수 없습니다.
+[guard] remaining=44 tokens=9173 -> 27.5s 대기
+
+===== [Q35 r4] tokens=59993 | VOO가 직접 발행한 회사채의 신용등급과 만기일을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_nm, crd_grd, mat_dt FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+[done] Q35 r4 a1 status=ok e2e=24.0s llm=5 tok=13247 rem=53/37210 | 조건에 맞는 회사채 정보가 없습니다.
+[run] 완료 -> test\pipline-test\latency\traces_full.jsonl

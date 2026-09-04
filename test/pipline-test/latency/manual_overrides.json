@@ -1,0 +1,101 @@
+{
+ "Q10": {
+  "when_sql_contains": "limit 1",
+  "add_codes": [
+   "QUERY_GENERATION_ERROR"
+  ],
+  "cause": "C",
+  "note": "클래스 2종 비교 질의에 SQL이 LIMIT 1을 붙여 C-P 행이 조회되지 않음"
+ },
+ "Q12": {
+  "when_sql_contains": "pd_sale_yn = '판매 중'",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "판매/거래정지/연금 플래그를 실제 코드값이 아닌 자연어 리터럴로 비교해 0행"
+ },
+ "Q18": {
+  "when_sql_lacks": "wu_inv_ast_type",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "'채권 ETF' 조건(wu_inv_ast_type='Bond')이 SQL에 없어 주식 ETF(VOO 등)가 상위에 옴"
+ },
+ "Q19": {
+  "when_sql_contains": "sale_yn = '판매 중'",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "sale_yn 리터럴 불일치로 0행"
+ },
+ "Q20": {
+  "when_answer_contains": "fnguide ai 반도체 top2",
+  "add_codes": [
+   "WRONG_VALUE"
+  ],
+  "cause": "C",
+  "note": "TIGER 반도체TOP10의 기초지수로 다른 상품(AI반도체TOP2+) 문서 청크 값을 제시"
+ },
+ "Q25": {
+  "when_sql_contains": "prvo_pbff_desc = '공모'",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "국민성장 4건은 prvo_pbff_desc='사모'로 적재돼 공모 필터에 걸러짐(골든 비고의 함정)"
+ },
+ "Q26": {
+  "when_answer_contains": "sk하이닉스를 편입한 etf",
+  "add_codes": [
+   "UNSUPPORTED_INFERENCE"
+  ],
+  "cause": "C",
+  "note": "발행사 필터 없는 회사채 목록을 SK하이닉스 발행 채권으로, 상품명 매칭 ETF를 편입 ETF로 제시(§17 예시와 동일 오답)"
+ },
+ "Q28": [
+  {
+   "when_answer_contains": "vanguard 500",
+   "add_codes": [
+    "FILTER_ERROR",
+    "UNGROUNDED_CLAIM"
+   ],
+   "cause": "C",
+   "note": "해외ETF 서브쿼리에 엔비디아 조건이 없어 AUM 상위(VOO·IVV)를 편입 ETF로 제시, 커버드콜 위험 설명은 인용 없는 일반 지식"
+  },
+  {
+   "when_answer_contains": "'편입내역': {'기준일': []",
+   "add_codes": [
+    "GENERATION_OMISSION"
+   ],
+   "cause": "E",
+   "note": "빈 JSON 골격만 출력"
+  }
+ ],
+ "Q30": {
+  "when_sql_contains": "or_attr_desc = '주식형'",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "펀드 SQL이 우리반도체BIG2플러스를 특정하지 않고 주식형 전체(100행)를 조회"
+ },
+ "Q17": {
+  "when_sql_contains": "100000000000000000",
+  "add_codes": [
+   "FILTER_ERROR"
+  ],
+  "cause": "C",
+  "note": "AUM 1천억달러를 1e17로 환산해 0행(단위 오류)"
+ },
+ "Q27": {
+  "when_answer_contains": "관련된 구체적인 정보는 포함되지 않았습니다",
+  "add_codes": [
+   "RETRIEVAL_MISS"
+  ],
+  "cause": "C",
+  "note": "채권 SQL에 발행사 필터가 없어 무관한 채권을 예시로 제시"
+ }
+}
