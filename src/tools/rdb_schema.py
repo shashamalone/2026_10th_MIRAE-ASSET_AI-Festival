@@ -82,6 +82,7 @@ wu_ 계열이 한글이고 결측이 없어 기본값으로 삼았다.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 
@@ -1312,10 +1313,18 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
     "국내ETF": [
         "이 테이블에는 ETN(545건)이 섞여 있다. 질문이 ETF만 요구하면 pd_grp_no = 'ETF' 조건을 건다.",
         "반도체, 2차전지 같은 테마 조건은 등호로 풀 수 없다. pd_nm LIKE '%키워드%' 매칭으로만 가능하다.",
-        "총보수율은 카탈로그가 enriched.product_metric(EXPENSE_RATIO)으로 매핑해 두었고 "
-        "[해석된 스키마]에 필요한 JOIN 절이 자동으로 포함된다. 직접 cu_charge_rt를 "
-        "쓰지 말 것(87.8% 결측). 다만 이 값도 1,235건 중 67건(5.4%)에만 있으므로, "
-        "총보수 기준 정렬·최저가 질의는 표본이 67건이라는 사실을 답변에 함께 밝힌다. "
+        # ⚠ 이 문구에 물리 테이블 이름을 적지 않는다. 2026-09-03 실측 trace 에서
+        # 확인된 사고다: 예전 문구가 "enriched.etf_kr_enriched 의 charge_rt_final
+        # 을 쓴다"고 적혀 있었고, 이 caveat 은 utils.py 가 국내ETF 질의 **전부**에
+        # 주입한다. 그래서 총보수와 아무 상관 없는 질문(Q23 편입기업/테마, Q30
+        # 상품명 검색)에서도 LLM 이 그 테이블명을 배워 JOIN 을 지어냈고,
+        # UndefinedTable 로 3회 재시도를 모두 태웠다(7문항 24회차).
+        # 조인이 필요한 질의에는 [해석된 스키마]가 JOIN 절을 이미 넣어 준다.
+        "총보수율은 [해석된 스키마]에 나온 컬럼으로만 조회한다. JOIN 절이 필요한 "
+        "경우 이미 포함되어 있으므로 직접 JOIN 을 쓰거나 테이블 이름을 지어내지 "
+        "말 것. 원본 cu_charge_rt 는 87.8% 결측이라 직접 쓰지 않는다. "
+        "다만 총보수 값 자체가 1,235건 중 67건(5.4%)에만 있으므로, 총보수 기준 "
+        "정렬·최저가 질의는 표본이 67건이라는 사실을 답변에 함께 밝힌다. "
         "조건을 만족하는 종목이 없으면 없다고 답하고 다른 컬럼으로 대체하지 않는다.",
         "순자산은 pd_net_tamt를 쓴다. du_last_aum도 있지만 값이 미세하게 다르다.",
     ],
@@ -1630,6 +1639,42 @@ def iter_catalog_column_refs() -> set[tuple[str, str]]:
     return refs
 
 
+_PHYSICAL_TABLE_PATTERN = re.compile(
+    r"\b(?:raw|enriched|relations|vec|core|meta)\.[a-z_0-9]+"
+)
+
+
+def assert_caveat_hygiene() -> None:
+    """SQL caveat 이 물리 테이블 이름을 언급하지 않는지 확인한다.
+
+    utils 는 도메인 caveat 을 그 도메인의 **모든** 질의 프롬프트에 주입한다.
+    그래서 caveat 에 테이블 이름이 들어 있으면, 그 테이블이 이번 질의의
+    JOIN 에 없더라도 LLM 이 이름을 배워 조인을 지어낸다.
+
+    가설이 아니라 실측이다. 2026-09-03 팀원 trace 에서 예전 caveat
+    ("enriched.etf_kr_enriched 의 charge_rt_final 을 쓴다")이 총보수와 무관한
+    질문까지 오염시켜 UndefinedTable 을 만들었다 - Q5·Q16·Q23·Q24·Q26·Q27·Q30
+    7문항 24회차가 3회 재시도를 모두 태우고 실패했다. 그중 Q30 은 조인만
+    빼면 61행이 정상 반환되는, 원래 답할 수 있던 질문이었다.
+
+    필요한 조인은 [해석된 스키마]가 이미 넣어 주므로 caveat 이 테이블 이름을
+    말할 이유가 없다.
+    """
+    offenders: list[str] = []
+    for domain, caveats in DOMAIN_SQL_CAVEATS.items():
+        for index, text in enumerate(caveats):
+            found = sorted(set(_PHYSICAL_TABLE_PATTERN.findall(text)))
+            if found:
+                offenders.append(f"{domain}[{index}]: {', '.join(found)}")
+    if offenders:
+        raise ValueError(
+            "SQL caveat 에 물리 테이블 이름이 들어 있다. 이 문구는 도메인의 모든 "
+            "질의에 주입되므로 LLM 이 없는 조인을 지어내게 만든다(2026-09-03 "
+            "trace 실측). 개념 이름으로 바꾸고 JOIN 은 해석된 스키마에 맡길 것:\n  - "
+            + "\n  - ".join(offenders)
+        )
+
+
 def assert_schema_contract(snapshot: dict | None = None) -> None:
     """카탈로그가 참조하는 테이블·컬럼이 live 에 전부 있는지 확인한다.
 
@@ -1640,6 +1685,10 @@ def assert_schema_contract(snapshot: dict | None = None) -> None:
     여기서 검사하지 않는다. 실제로 SQL 에 들어가는 것만 검사한다.
     """
     from tools import schema_snapshot
+
+    # 프롬프트에 주입되는 문구가 없는 테이블을 가르치지 않는지 먼저 본다.
+    # 네트워크가 필요 없는 검사라 앞에 둔다.
+    assert_caveat_hygiene()
 
     schema_snapshot.assert_contract(
         table_refs=sorted(iter_catalog_table_refs()),
