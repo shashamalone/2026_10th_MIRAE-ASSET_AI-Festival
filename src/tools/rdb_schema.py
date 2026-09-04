@@ -1546,11 +1546,22 @@ def resolve_subtype_condition(domain: str, subtype_value: str) -> dict | None:
 # 그래서 어긋남은 쿼리 시점이 아니라 기동 시점에 잡는다.
 # ---------------------------------------------------------------------------
 
-# join_table 이 파생 테이블 "(SELECT ...)" 인 경우, 그 안에서 실제로 읽는
-# 물리 테이블을 여기 적어 둔다. 문자열 파싱으로 추출하면 조용히 틀리므로
-# 손으로 선언하고, 아래 iter_catalog_table_refs 가 이걸 같이 검사한다.
-DERIVED_JOIN_PHYSICAL_REFS: dict[str, list[str]] = {
-    "총보수율": ["enriched.etf_kr", "enriched.product_metric"],
+# join_table 이 파생 테이블 "(SELECT ...)" 인 경우, 그 서브쿼리가 실제로 읽는
+# 물리 테이블과 컬럼을 여기 적어 둔다. 문자열 파싱으로 추출하면 조용히
+# 틀리므로 손으로 선언하고, 아래 iter_* 가 이걸 같이 검사한다.
+DERIVED_JOIN_PHYSICAL_REFS: dict[str, dict[str, list]] = {
+    "총보수율": {
+        "tables": ["enriched.etf_kr", "enriched.product_metric"],
+        "columns": [
+            ("enriched.etf_kr", "pd_itm_no"),
+            ("enriched.etf_kr", "product_id"),
+            ("enriched.product_metric", "product_id"),
+            ("enriched.product_metric", "metric_code"),
+            ("enriched.product_metric", "value"),
+            ("enriched.product_metric", "is_available"),
+            ("enriched.product_metric", "unavailable_reason"),
+        ],
+    },
 }
 
 
@@ -1571,15 +1582,56 @@ def iter_catalog_table_refs() -> set[str]:
                 continue
             if spec.join_table.lstrip().startswith("("):
                 # 파생 테이블: 선언된 물리 의존만 검사한다.
-                refs.update(DERIVED_JOIN_PHYSICAL_REFS.get(concept, []))
+                refs.update(DERIVED_JOIN_PHYSICAL_REFS.get(concept, {}).get("tables", []))
             else:
                 refs.add(spec.join_table)
 
     return refs
 
 
+def iter_catalog_column_refs() -> set[tuple[str, str]]:
+    """카탈로그가 존재를 전제하는 (테이블, 컬럼) 쌍 전체를 모은다.
+
+    [SCHEMA-001] 테이블만 검사하면 이번 사고의 절반만 잡는다. 실제로 처음
+    터진 것도 컬럼이었다(enriched.etf_kr 에 charge_rt_final 이 없었다).
+    테이블은 있는데 컬럼이 사라진 경우가 더 조용하고 더 흔하다.
+
+    검사 대상은 세 갈래다.
+      1. RDB_SCHEMA[domain]["properties"] - get_full_column_list 가 그대로
+         LLM 에게 "실제 컬럼 목록"이라고 넘기는 것들.
+      2. AttributeSpec.column 중 별칭이 없는 것 - 기본 테이블 컬럼.
+      3. 파생 조인이 내부에서 읽는 컬럼 - 위 선언에서 가져온다.
+    별칭이 붙은 컬럼(join_alias 소속)은 파생 조인이면 3번이 덮고, 일반
+    조인 테이블이면 그 테이블 기준으로 검사한다.
+    """
+    refs: set[tuple[str, str]] = set()
+
+    for domain, entry in DOMAIN_TABLE_INFO.items():
+        table = entry["table"]
+        for column in RDB_SCHEMA.get(domain, {}).get("properties", {}):
+            refs.add((table, column))
+
+    for domain, domain_attrs in ATTRIBUTE_CATALOG.items():
+        base_table = DOMAIN_TABLE_INFO.get(domain, {}).get("table")
+        for concept, spec in domain_attrs.items():
+            column = spec.column
+            if spec.join_table and spec.join_table.lstrip().startswith("("):
+                declared = DERIVED_JOIN_PHYSICAL_REFS.get(concept, {}).get("columns", [])
+                refs.update((t, c) for t, c in declared)
+                continue
+            if "." in column:
+                alias, _, bare = column.partition(".")
+                if spec.join_table and alias == spec.join_alias:
+                    refs.add((spec.join_table, bare))
+                continue
+            if base_table:
+                refs.add((base_table, column))
+
+    return refs
+
+
 def assert_schema_contract(snapshot: dict | None = None) -> None:
-    """카탈로그가 참조하는 테이블이 live 에 전부 있는지 확인한다.
+    """카탈로그가 참조하는 테이블·컬럼이 live 에 전부 있는지 확인한다.
 
     없으면 schema_snapshot.SchemaContractError 를 던진다. 삼키지 말 것 -
     이 예외는 "곧 실패할 것"이 아니라 "이미 틀린 전제로 돌고 있었다"는 뜻이다.
@@ -1590,7 +1642,9 @@ def assert_schema_contract(snapshot: dict | None = None) -> None:
     from tools import schema_snapshot
 
     schema_snapshot.assert_contract(
-        table_refs=sorted(iter_catalog_table_refs()), snapshot=snapshot
+        table_refs=sorted(iter_catalog_table_refs()),
+        column_refs=sorted(iter_catalog_column_refs()),
+        snapshot=snapshot,
     )
 
 

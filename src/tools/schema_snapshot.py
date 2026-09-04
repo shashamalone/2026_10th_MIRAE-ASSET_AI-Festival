@@ -77,7 +77,23 @@ DEFAULT_SNAPSHOT_PATH = Path(
     os.environ.get("RDB_SCHEMA_SNAPSHOT_PATH", ".cache/schema_snapshot.json")
 )
 
-SNAPSHOT_FORMAT_VERSION = 1
+SNAPSHOT_FORMAT_VERSION = 2
+
+# [SCHEMA-003] 캐시 신선도. 스냅샷은 "그때의 DB"라서 재배포가 있으면 조용히
+# 낡는다. 나이 제한과 release_id 결속을 둘 다 건다 - 나이만 보면 같은 시각에
+# 배포가 바뀐 경우를 놓치고, release 만 보면 네트워크가 죽었을 때 무한히
+# 낡은 캐시를 쓴다.
+SNAPSHOT_MAX_AGE_SECONDS = float(os.environ.get("RDB_SCHEMA_SNAPSHOT_MAX_AGE", "3600"))
+
+# [SCHEMA-005] 429 대기 상한. 서버 윈도우가 60초지만, 기동 경로에서 60초씩
+# 무한정 멈춰 서면 운영상 장애와 구분되지 않는다. 총 대기 시간을 묶는다.
+RATE_LIMIT_WAIT_SECONDS = float(os.environ.get("RDB_API_RATE_LIMIT_WAIT", "60"))
+RATE_LIMIT_TOTAL_WAIT_BUDGET = float(os.environ.get("RDB_API_RATE_LIMIT_BUDGET", "120"))
+
+# 스냅샷 수집은 테이블 수 + 3 회를 호출한다(실측 48회). 서버 한도가 분당
+# 60이라 초당 5회로 쏘면 수집이 스스로 429 를 만든다(실측). 한도보다 약간
+# 느리게 걸어 자기 자신을 막지 않게 한다.
+DEFAULT_PACE_SECONDS = float(os.environ.get("RDB_SCHEMA_SNAPSHOT_PACE", "1.05"))
 
 
 class SchemaContractError(RuntimeError):
@@ -99,16 +115,23 @@ def _request(
     timeout: float | None = None,
     session: requests.Session | None = None,
     max_retries: int = 3,
+    wait_on_rate_limit: bool = False,
 ) -> dict:
     """introspection 엔드포인트 GET.
 
-    429 는 서버의 분당 한도(기본 60)에 걸린 것이다. 현재 서버는 Retry-After
-    헤더를 주지 않으므로(T-119 에서 보강 예정), 헤더가 있으면 그 값을 쓰고
-    없으면 슬라이딩 윈도우 길이인 60초를 보수적으로 기다린다.
+    429 처리는 호출 맥락에 따라 다르다.
+
+    - `wait_on_rate_limit=False`(기본): Retry-After 가 없으면 **기다리지 않고
+      즉시 실패**한다. 기동 경로에서 헤더 없는 429 에 60초씩 멈춰 서면
+      장애와 구분되지 않고, 얼마나 기다려야 하는지는 순전히 추측이다.
+    - `wait_on_rate_limit=True`: 스냅샷 수집처럼 원래 수십 번을 호출하는
+      배치 작업용. 서버 윈도우가 60초로 알려져 있으므로 헤더가 없어도 그만큼
+      기다린다. 총 대기는 RATE_LIMIT_TOTAL_WAIT_BUDGET 으로 묶는다.
     """
     url = f"{(base_url or DEFAULT_BASE_URL).rstrip('/')}{path}"
     get = (session or requests).get
     last_error: Exception | None = None
+    waited = 0.0
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -121,12 +144,29 @@ def _request(
             continue
 
         if response.status_code == 429:
+            # [SCHEMA-005] Retry-After 가 있으면 그 값만큼(예산 안에서) 기다린다.
+            # 없으면 기다리지 않고 즉시 실패한다 - 헤더 없는 429 에 60초씩
+            # 멈춰 서면 기동 경로에서 장애와 구분되지 않고, 우리가 얼마나
+            # 기다려야 하는지는 순전히 추측이기 때문이다. 서버가 헤더를 주게
+            # 되면(T-119) 자동으로 대기 경로를 타게 된다.
             retry_after = response.headers.get("Retry-After")
-            wait = float(retry_after) if retry_after and retry_after.isdigit() else 60.0
-            if attempt == max_retries:
+            if retry_after and retry_after.strip().isdigit():
+                wait = float(retry_after)
+            elif wait_on_rate_limit:
+                # 배치 수집: 헤더가 없어도 알려진 윈도우 길이만큼 기다린다.
+                wait = RATE_LIMIT_WAIT_SECONDS
+            else:
                 raise SnapshotUnavailableError(
-                    f"{url} 분당 한도(429) 초과. {max_retries}회 대기 후에도 실패."
+                    f"{url} 분당 한도(429)이고 Retry-After 헤더가 없다. "
+                    "얼마나 기다려야 할지 알 수 없어 즉시 중단한다"
+                    "(서버가 Retry-After 를 주도록 보강 필요 - T-119)."
                 )
+            if attempt == max_retries or waited + wait > RATE_LIMIT_TOTAL_WAIT_BUDGET:
+                raise SnapshotUnavailableError(
+                    f"{url} 분당 한도(429). 총 대기 예산"
+                    f"({RATE_LIMIT_TOTAL_WAIT_BUDGET:.0f}s) 안에서 통과하지 못했다."
+                )
+            waited += wait
             time.sleep(wait)
             continue
 
@@ -136,30 +176,68 @@ def _request(
             )
 
         payload = response.json()
-        if payload.get("truncated"):
-            # 잘린 응답은 "없는 컬럼"을 없다고 잘못 단정하게 만든다.
+
+        # [SCHEMA-002] fail-closed. "잘리지 않았다"는 명시적으로 False 여야
+        # 인정한다. 필드가 없거나 None/0/"false" 같은 falsy 값이면 "잘렸는지
+        # 알 수 없다"이고, 모르는 상태로 스키마 진실을 만들면 실제로는 있는
+        # 컬럼을 없다고 단정하게 된다.
+        if payload.get("truncated") is not False:
             raise SnapshotUnavailableError(
-                f"{url} 응답이 서버 MAX_ROWS 에서 잘렸다(truncated=true). "
-                "테이블 단위로 나눠 받아야 한다."
+                f"{url} 응답의 truncated 가 False 가 아니다"
+                f"(값: {payload.get('truncated')!r}). 잘렸거나, 잘림 여부를 "
+                "확인할 수 없다. 기대 형식: "
+                "{columns, rows, row_count, truncated, elapsed_ms}"
+            )
+        if not isinstance(payload.get("rows"), list):
+            raise SnapshotUnavailableError(
+                f"{url} 응답의 rows 가 리스트가 아니다"
+                f"(타입: {type(payload.get('rows')).__name__}). 서버 계약 확인 필요."
             )
         return payload
 
     raise SnapshotUnavailableError(f"{url} 실패: {last_error}")
 
 
+def _release_id_of(version_payload: Mapping[str, Any]) -> str | None:
+    """/db/version 봉투에서 release_id 만 꺼낸다."""
+    rows = version_payload.get("rows") or []
+    return rows[0].get("release_id") if rows else None
+
+
 def fetch_snapshot(
     base_url: str | None = None,
     timeout: float | None = None,
-    pace_seconds: float = 0.2,
+    pace_seconds: float | None = None,
 ) -> dict:
     """live information_schema 를 읽어 스냅샷 dict 를 만든다.
 
-    테이블 목록 1회 + 테이블당 컬럼 1회를 호출한다(2026-09-05 실측 45개
-    테이블 기준 46회). 서버 한도가 분당 60이라 `pace_seconds` 로 간격을 둔다.
+    호출 수는 (version 2회 + tables 1회 + 테이블당 columns 1회)다. 2026-09-05
+    실측 45개 테이블 기준 48회인데 서버 한도가 **분당 60**이라 여유가 거의
+    없다. 그래서 기본 페이싱을 한도에 맞춰 잡는다(초당 1회 미만). 이전에
+    0.2초(초당 5회)로 쏘다가 수집이 스스로 429 를 유발했다.
     """
     session = requests.Session()
+    if pace_seconds is None:
+        pace_seconds = DEFAULT_PACE_SECONDS
+
+    # [race] 46회를 호출하는 동안 재배포가 일어나면 앞부분과 뒷부분이 서로
+    # 다른 배포본에서 온 잡종 스냅샷이 된다. 시작과 끝의 release_id 가 같은지
+    # 확인해 그 창을 닫는다.
+    release_before = _release_id_of(
+        _request(
+            "/db/version", base_url=base_url, timeout=timeout, session=session,
+            wait_on_rate_limit=True,
+        )
+    )
+    if not release_before:
+        raise SnapshotUnavailableError(
+            "/db/version 이 release_id 를 주지 않았다. 스냅샷의 출처를 특정할 수 "
+            "없으므로 스냅샷을 만들지 않는다."
+        )
+
     tables_payload = _request(
-        "/db/tables", base_url=base_url, timeout=timeout, session=session
+        "/db/tables", base_url=base_url, timeout=timeout, session=session,
+        wait_on_rate_limit=True,
     )
 
     tables: dict[str, dict[str, Any]] = {}
@@ -177,6 +255,7 @@ def fetch_snapshot(
             base_url=base_url,
             timeout=timeout,
             session=session,
+            wait_on_rate_limit=True,
         )
         tables[qualified]["columns"] = {
             row["column_name"]: {
@@ -189,19 +268,31 @@ def fetch_snapshot(
         if pace_seconds:
             time.sleep(pace_seconds)
 
-    try:
-        version_payload = _request(
-            "/db/version", base_url=base_url, timeout=timeout, session=session
+    # [SCHEMA-004] release 정보를 옵션으로 두지 않는다. 어떤 배포본을 보고
+    # 만든 스냅샷인지 모르면 나중에 신선도를 판단할 근거가 없고, 결국 낡은
+    # 스냅샷을 낡은 줄 모르고 쓰게 된다. 여기서 실패하면 스냅샷을 만들지
+    # 않는다(실패를 삼키지 않는다).
+    # /db/version 은 다른 조회와 같은 봉투({columns, rows, ...})로 온다.
+    # 릴리스 매니페스트는 그 안의 단일 행이므로 행만 꺼내 둔다 - 봉투째
+    # 넣으면 스냅샷 diff 를 볼 때 elapsed_ms 같은 잡음이 매번 바뀐다.
+    version_payload = _request(
+        "/db/version", base_url=base_url, timeout=timeout, session=session,
+        wait_on_rate_limit=True,
+    )
+    release_after = _release_id_of(version_payload)
+    if not release_after:
+        raise SnapshotUnavailableError(
+            "/db/version 이 release_id 를 주지 않았다. 스냅샷의 출처를 특정할 수 "
+            "없으므로 스냅샷을 만들지 않는다."
         )
-        # /db/version 은 다른 조회와 같은 봉투({columns, rows, ...})로 온다.
-        # 릴리스 매니페스트는 그 안의 단일 행이므로 행만 꺼내 둔다 - 봉투째
-        # 넣으면 스냅샷 diff 를 볼 때 elapsed_ms 같은 잡음이 매번 바뀐다.
-        rows = version_payload.get("rows") or []
-        version_stamp: dict[str, Any] = rows[0] if rows else {"unavailable": True}
-    except SnapshotUnavailableError:
-        # 버전 엔드포인트가 없어도 스냅샷 자체는 유효하다. 다만 어떤 배포본을
-        # 봤는지 모른다는 사실은 스냅샷에 남긴다.
-        version_stamp = {"unavailable": True}
+    if release_after != release_before:
+        # 수집 도중 배포가 바뀌었다. 앞뒤가 다른 배포본에서 온 잡종이므로 버린다.
+        raise SnapshotUnavailableError(
+            "스냅샷 수집 중 배포본이 바뀌었다"
+            f"(시작 {release_before} -> 종료 {release_after}). "
+            "잡종 스냅샷을 만들지 않고 중단한다. 다시 수집할 것."
+        )
+    version_stamp: dict[str, Any] = version_payload["rows"][0]
 
     return {
         "snapshot_format_version": SNAPSHOT_FORMAT_VERSION,
@@ -222,7 +313,28 @@ def save_snapshot(snapshot: dict, path: Path | str | None = None) -> Path:
     return target
 
 
-def load_snapshot(path: Path | str | None = None) -> dict | None:
+def snapshot_release_id(snapshot: Mapping[str, Any]) -> str | None:
+    return (snapshot.get("api_version") or {}).get("release_id")
+
+
+def snapshot_age_seconds(snapshot: Mapping[str, Any]) -> float:
+    fetched = snapshot.get("fetched_at")
+    if not fetched:
+        return float("inf")
+    try:
+        stamp = datetime.fromisoformat(fetched)
+    except ValueError:
+        return float("inf")
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - stamp).total_seconds()
+
+
+def load_snapshot(
+    path: Path | str | None = None,
+    max_age_seconds: float | None = None,
+) -> dict | None:
+    """디스크 캐시를 읽는다. 포맷이 다르거나 너무 낡았으면 None."""
     target = Path(path or DEFAULT_SNAPSHOT_PATH)
     if not target.exists():
         return None
@@ -230,29 +342,100 @@ def load_snapshot(path: Path | str | None = None) -> dict | None:
     if snapshot.get("snapshot_format_version") != SNAPSHOT_FORMAT_VERSION:
         # 포맷이 바뀌었으면 캐시를 신뢰하지 않는다.
         return None
+    limit = SNAPSHOT_MAX_AGE_SECONDS if max_age_seconds is None else max_age_seconds
+    if limit is not None and snapshot_age_seconds(snapshot) > limit:
+        # [SCHEMA-003] 낡은 캐시는 없느니만 못하다 - 조용히 틀린 진실이 된다.
+        return None
     return snapshot
 
 
+def live_release_id(
+    base_url: str | None = None, timeout: float | None = None
+) -> str | None:
+    """배포본의 현재 release_id 를 1회 조회한다(캐시 결속 확인용)."""
+    payload = _request("/db/version", base_url=base_url, timeout=timeout)
+    rows = payload.get("rows") or []
+    return rows[0].get("release_id") if rows else None
+
+
 _CACHED: dict | None = None
+# 검증 사실은 "어느 캐시 경로 / 어느 서버에 대해" 확인했는지와 함께 기억한다.
+# 전역 불리언 하나로 두면 base_url 이나 path 를 바꿔 호출했을 때 엉뚱한
+# 검증 결과를 재사용하게 된다.
+_RELEASE_VERIFIED_FOR: tuple[str, str] | None = None
+
+
+def _cache_key(path: Path | str | None, base_url: str | None) -> tuple[str, str]:
+    return (
+        str(Path(path or DEFAULT_SNAPSHOT_PATH)),
+        (base_url or DEFAULT_BASE_URL).rstrip("/"),
+    )
 
 
 def get_snapshot(
     refresh: bool = False,
     path: Path | str | None = None,
     base_url: str | None = None,
+    verify_release: bool = True,
+    max_age_seconds: float | None = None,
 ) -> dict:
-    """스냅샷을 얻는다. 프로세스 캐시 -> 디스크 캐시 -> live fetch 순."""
-    global _CACHED
-    if _CACHED is not None and not refresh:
-        return _CACHED
-    if not refresh:
-        cached = load_snapshot(path)
-        if cached is not None:
-            _CACHED = cached
-            return _CACHED
+    """스냅샷을 얻는다. 프로세스 캐시 -> 디스크 캐시 -> live fetch 순.
+
+    [SCHEMA-003] 캐시를 쓸 때는 나이(TTL)와 release_id 를 둘 다 본다. 나이만
+    보면 TTL 안에 일어난 재배포를 놓치고, release 만 보면 서버가 응답하지
+    않을 때 낡은 캐시를 무한정 쓰게 된다.
+
+    프로세스 캐시에도 TTL 을 적용한다 - 오래 사는 프로세스(노트북 커널,
+    서버 워커)가 낡은 스냅샷을 영원히 붙잡는 것을 막는다.
+
+    release 확인이 불가능하면(엔드포인트가 release_id 를 주지 않으면) 검증된
+    것으로 취급하지 않고 실패시킨다. 출처를 모르는 스냅샷을 "확인됨"으로
+    바꿔 놓으면 이 모듈이 하려던 일과 정반대가 된다.
+
+    verify_release=False 는 오프라인 도구용 탈출구다. 런타임 경로에서는 쓰지
+    말 것.
+    """
+    global _CACHED, _RELEASE_VERIFIED_FOR
+
+    key = _cache_key(path, base_url)
+    limit = SNAPSHOT_MAX_AGE_SECONDS if max_age_seconds is None else max_age_seconds
+
+    if refresh:
+        snapshot = fetch_snapshot(base_url=base_url)
+        save_snapshot(snapshot, path)
+        _CACHED, _RELEASE_VERIFIED_FOR = snapshot, key
+        return snapshot
+
+    candidate = _CACHED
+    if candidate is not None and limit is not None:
+        # 프로세스 캐시도 늙는다.
+        if snapshot_age_seconds(candidate) > limit:
+            candidate = None
+    if candidate is None:
+        candidate = load_snapshot(path, max_age_seconds)
+
+    if candidate is not None and verify_release and _RELEASE_VERIFIED_FOR != key:
+        current = live_release_id(base_url=base_url)
+        if not current:
+            raise SnapshotUnavailableError(
+                "/db/version 이 release_id 를 주지 않아 캐시된 스냅샷이 현재 "
+                "배포본과 같은지 확인할 수 없다. 확인되지 않은 스냅샷으로 "
+                "스키마 계약을 판정하지 않는다."
+            )
+        if current != snapshot_release_id(candidate):
+            # 배포본이 바뀌었다. 낡은 스냅샷으로 계약을 판정하면 "있는 컬럼을
+            # 없다"고 하거나 그 반대가 된다 - 다시 받는다.
+            candidate = None
+        else:
+            _RELEASE_VERIFIED_FOR = key
+
+    if candidate is not None:
+        _CACHED = candidate
+        return candidate
+
     snapshot = fetch_snapshot(base_url=base_url)
     save_snapshot(snapshot, path)
-    _CACHED = snapshot
+    _CACHED, _RELEASE_VERIFIED_FOR = snapshot, key
     return snapshot
 
 
