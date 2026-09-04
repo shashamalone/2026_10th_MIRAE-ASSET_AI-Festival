@@ -367,7 +367,7 @@ _RATE_LIMIT_WAIT_SECONDS = float(os.environ.get("RDB_API_RATE_LIMIT_WAIT", "60")
 _MAX_RATE_LIMIT_WAITS = 1
 
 
-def _live_column_list(domain: str) -> str:
+def _live_column_list(domain: str, schema_block: str = "") -> str:
     """이 도메인이 SQL 에서 쓸 수 있는 컬럼 목록을 live 스키마 기준으로 만든다.
 
     컬럼의 존재 여부는 live(information_schema)가 정본이고, 각 컬럼의 설명은
@@ -377,7 +377,15 @@ def _live_column_list(domain: str) -> str:
 
     기본 테이블 컬럼만 나열하면 조인으로 들어오는 컬럼(예: 총보수율의
     pm.expense_ratio)을 LLM 이 "없는 컬럼"으로 오해한다. 그래서 조인이
-    제공하는 별칭 컬럼도 같이 알려 준다.
+    제공하는 별칭 컬럼도 같이 알려 준다 - **단, 이번 쿼리에 그 조인이 실제로
+    등록돼 있을 때만.**
+
+    조인은 질의가 그 개념을 실제로 쓸 때만 resolved_schema 에 등록되고, 그때만
+    schema_block 에 "LEFT JOIN ... AS <별칭> ON ..." 줄이 들어간다
+    (utils.format_resolved_schema). 등록되지도 않은 별칭을 "그대로 쓸 수
+    있다"고 알려 주면, LLM 이 그 별칭을 써서 "missing FROM-clause entry"
+    라는 **새로운** 실패를 만든다 - 수리하러 온 함수가 고장을 만드는 셈이다.
+    그래서 schema_block 에 실제로 등록된 별칭만 노출한다.
 
     **live 근거를 못 얻으면 예외를 던진다.** 예전엔 카탈로그로 조용히
     폴백했는데, 그러면 이 함수가 존재하는 이유(틀린 카탈로그로 수리하지
@@ -413,16 +421,26 @@ def _live_column_list(domain: str) -> str:
             + ", ".join(stale) + ")"
         )
 
-    # 조인이 추가로 제공하는 컬럼. 해석된 스키마에 JOIN 절이 자동으로 들어가
-    # 있으므로 이 별칭들은 그대로 쓸 수 있다.
+    # 이번 쿼리에 등록된 조인만 노출한다. utils 는 조인을
+    # "LEFT JOIN <테이블> AS <별칭> ON <조건>" 으로 렌더하므로 "AS <별칭> ON"
+    # 이 schema_block 에 있는지로 판정한다.
     joined = [
         f"{spec.column} ({concept}; {spec.join_alias} 조인으로 제공)"
         for concept, spec in rdb_schema.ATTRIBUTE_CATALOG.get(domain, {}).items()
-        if spec.join_table and "." in spec.column
+        if spec.join_table
+        and "." in spec.column
+        and spec.join_alias
+        and f"AS {spec.join_alias} ON" in schema_block
     ]
     if joined:
-        lines.append("[조인으로 추가 제공되는 컬럼 - 그대로 쓸 수 있다]")
+        lines.append("[이번 쿼리의 JOIN 으로 제공되는 컬럼 - 그대로 쓸 수 있다]")
         lines.extend(joined)
+    else:
+        # 조인이 없는 쿼리에서 별칭을 쓰면 missing FROM-clause 로 실패한다.
+        lines.append(
+            "(이번 쿼리에는 JOIN 이 없다. base 테이블에 없는 값은 만들어 낼 수 "
+            "없으므로, 별칭(ee., pm. 같은 접두어)을 새로 지어내지 말 것.)"
+        )
 
     return "\n".join(lines)
 
@@ -484,8 +502,18 @@ def _run_sql_with_retry(
     # 상태로 진행한다 - 원래 SQL 은 그대로 한 번 실행해 본다(멀쩡할 수도
     # 있다). 실패했을 때 근거 없이 고치지 않을 뿐이다.
     attempts_log: list[str] = []
+
+    # 예산이 없으면 아무것도 하지 않는다. live 스키마를 먼저 받아 오면
+    # 쓰지도 않을 네트워크 호출(테이블 수 + 3회)을 낭비한다.
+    if max_retries <= 0:
+        return {
+            "rows": [], "sql": current_sql, "assumptions": assumptions,
+            "attempts": 0, "attempts_log": attempts_log,
+            "error": f"재시도 예산이 0 이하라 SQL 을 한 번도 실행하지 않았다(max_retries={max_retries}).",
+        }
+
     try:
-        real_columns_desc = _live_column_list(domain)
+        real_columns_desc = _live_column_list(domain, schema_block)
         repair_allowed = True
         ground_truth_error = ""
     except Exception as exc:
@@ -642,13 +670,14 @@ def _run_sql_with_retry(
                 f"수정된 SQL:\n{fix_result['sql']}\n"
             )
 
-    # max_retries 가 0 이하면 루프가 한 번도 돌지 않는다. 예전 for 문에서도
-    # 같은 구멍이 있었고 그때는 None 이 그대로 호출부로 흘러가 AttributeError
-    # 로 터졌다. 다른 반환 경로와 같은 모양을 돌려준다.
+    # 여기까지 오면 안 된다(max_retries<=0 은 함수 앞에서 이미 걸렀고, 루프는
+    # 모든 경로에서 return 한다). 그래도 None 을 흘려보내지는 않는다 - 예전
+    # for 문 버전은 이 구멍으로 None 을 내보내 호출부에서 AttributeError 로
+    # 터졌다.
     return {
         "rows": [], "sql": current_sql, "assumptions": assumptions,
-        "attempts": 0, "attempts_log": attempts_log,
-        "error": f"재시도 예산이 0 이하라 SQL 을 한 번도 실행하지 않았다(max_retries={max_retries}).",
+        "attempts": attempt, "attempts_log": attempts_log,
+        "error": "재시도 루프가 결과 없이 종료됐다(도달하면 안 되는 경로).",
     }
 
 
