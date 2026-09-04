@@ -35,8 +35,8 @@ from pathlib import Path
 from typing import Any
 
 # 저장소 루트: src/infrastructure/graph_db/client.py 기준 3단계 위.
-# kb.config.ARTIFACTS는 src/kb/artifacts를 가리켜 실제 Oxigraph 스토어
-# (저장소 루트의 artifacts/oxigraph)와 다르므로 여기서 쓰지 않는다.
+# kb.config와 같은 기준을 독립적으로 계산해 infrastructure adapter가 kb
+# 패키지에 결합되지 않게 한다.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 MAX_ROWS = 10_000
