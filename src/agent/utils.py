@@ -39,7 +39,7 @@ from decimal import Decimal
 from typing import Any
 
 from agent.graph_logic import graph_ids
-from agent.evidence_contract import is_identity_field
+from agent.evidence_contract import is_identity_field, GRAPH_FIELD_CONCEPTS
 from tools import rdb_schema
 from tools import catalog_sql
 from agent.prompts import COLUMN_RESOLUTION_SYSTEM_PROMPT
@@ -119,6 +119,44 @@ def preserve_overseas_exposure_scope(intent: dict, question: str) -> tuple[dict,
     fixed = {**intent, "conditions": conditions + domestic, "sort": sort,
              "product_domain": [*domains, {"domain": "국내ETF", "subtype": list(domains[0].get("subtype") or [])}]}
     return fixed, ["'해외 자산에 투자'는 해외 상장과 다르므로 국내 상장 ETF 후보도 조회합니다. 해외 상장 범위는 유지하며 통화·수익률 미지원 조건을 숨기지 않습니다."]
+
+
+def restore_shared_theme_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Recover a source-taxonomy topic applied to ETF/fund integrated search.
+
+    This is classification evidence, not an invented holdings relationship.
+    Unknown categories remain invalid; only terms present in TBox themes qualify.
+    """
+    if intent.get("relations"):
+        return intent, []
+    domains = intent.get("product_domain") or []
+    normalized_question = catalog_sql.normalize(question)
+    theme_labels = {catalog_sql.normalize(a) for entry in _ontology_labels("Theme") for a in entry["aliases"]}
+    topics = []
+    for domain in domains:
+        for subtype in domain.get("subtype") or []:
+            key = catalog_sql.normalize(subtype)
+            if (len(key) >= 2 and any(key in label for label in theme_labels)
+                    and key + "에투자" in normalized_question
+                    and rdb_schema.resolve_subtype_condition(domain["domain"], subtype) is None):
+                topics.append(subtype)
+    topics = list(dict.fromkeys(topics))
+    if not topics:
+        return intent, []
+    shared = "통합" in question or bool(re.search(r"ETF(?:와|·|및)(?:공모)?펀드", normalized_question, re.IGNORECASE))
+    relations, conditions, fixed_domains = [], list(intent.get("conditions") or []), []
+    for domain in domains:
+        relevant = topics if shared else [s for s in topics if s in domain.get("subtype", [])]
+        fixed_domains.append({**domain, "subtype": [s for s in domain.get("subtype") or [] if s not in relevant]})
+        for topic in relevant:
+            relations.append({"id": f"theme{len(relations)+1}", "relation": "has_theme", "subject_domain": domain["domain"],
+                              "object_entity": topic, "object_ref": "", "entity_role": "theme"})
+            for region in _ontology_labels("InvestmentRegion"):
+                label = region["label"]
+                if catalog_sql.normalize(label + topic + "에투자") in normalized_question:
+                    conditions.append({"domain": domain["domain"], "attribute": "투자지역", "operator": "eq", "value": label, "value_2": ""})
+    return {**intent, "product_domain": fixed_domains, "conditions": conditions, "relations": relations}, [
+        "원문 투자 주제와 TBox 테마 명칭을 대조하여 각 상품군에 분류 연결 조건을 적용합니다. 분류는 실제 편입을 대신하지 않습니다. 해당 상품군의 연결이 없으면 전체 상품 조회로 확대하지 않습니다."]
 
 
 def lookup_product_identities(names: list[str]) -> list[dict]:
@@ -516,6 +554,7 @@ def collect_needed_concepts(step: dict) -> list[str]:
     concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS
                     and not is_source_column_request(f)
                     and not is_identity_field(f)
+                    and catalog_sql.normalize(f) not in GRAPH_FIELD_CONCEPTS
                     and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
     # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
@@ -965,7 +1004,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
                 resolved_fields.append({"attribute": f if view["kind"] == "raw_rating" else f"분류근거({name})",
                                         "column": name, "spec": catalog_sql.spec_for_column(domain, name, {})})
             continue
-        if is_identity_field(f):
+        if is_identity_field(f) or catalog_sql.normalize(f) in GRAPH_FIELD_CONCEPTS:
             continue
         if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS or is_source_column_request(f):
             notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")

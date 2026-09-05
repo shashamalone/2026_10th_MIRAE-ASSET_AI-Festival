@@ -36,10 +36,46 @@ def restore_explicit_comparators(intent: dict, question: str) -> tuple[dict, lis
             output["fields"] = [sort_attribute if f == "수익률" else f for f in fields]
             notes.append(f"일반 '수익률' 출력 요청은 원문에 명시된 정렬 지표 '{sort_attribute}'로 구체화했습니다.")
     sort = dict(intent.get("sort") or {})
-    if sort.get("limit") and not re.search(r"\d+\s*(?:개(?!월)|종목|종|위)|상위|하위|가장|최대|최소|top", question, re.IGNORECASE):
+    if sort.get("limit") and not re.search(r"\d+\s*(?:개(?!월)|종목|종|위)|가장|최대|최소|top\s*\d+", question, re.IGNORECASE):
         sort["limit"] = ""
         notes.append("원문에 개수 제한·최상위 요청이 없어 임의로 추가된 결과 개수 제한을 제거했습니다.")
     return {**intent, "conditions": conditions, "output_requirements": output, "sort": sort}, notes
+
+
+GRAPH_FIELD_CONCEPTS = {"편입비중", "종목별비중", "편입기준일", "편입내역기준일"}
+
+
+def graph_field_evidence(label: str, product_code: str, results: dict) -> dict | None:
+    normalized = re.sub(r"\s+", "", label)
+    if normalized not in GRAPH_FIELD_CONCEPTS or not product_code:
+        return None
+    entries = []
+    sources = []
+    for sid, result in results.items():
+        if result.get("engine") != "graph" or result.get("status") != "ok":
+            continue
+        plan = result.get("graph_plan") or {}
+        outputs = plan.get("outputs") or []
+        codes = [o["alias"] for o in outputs if o.get("property", "").endswith(("#productCode", ":productCode"))]
+        weights = [o["alias"] for o in outputs if o.get("property", "").endswith(("#weight", ":weight"))]
+        holdings = [n["id"] for n in plan.get("nodes") or [] if n.get("class_uri", "").endswith(("#Holding", ":Holding"))]
+        for row in result.get("rows") or []:
+            if not any(str(row.get(k, "")) == str(product_code) for k in codes):
+                continue
+            names = {o["alias"]: row.get(o["alias"]) for o in outputs if o.get("property", "").endswith(("#organizationName", ":organizationName", "#securityCode", ":securityCode"))}
+            dates = {f"{h}_as_of": row.get(f"{h}_as_of") or "미확보" for h in holdings}
+            detail = {**names, **dates}
+            if "비중" in normalized:
+                detail.update({w: row.get(w) if row.get(w) is not None else "NULL·확인 불가" for w in weights})
+                if not weights:
+                    detail["비중"] = "미조회·확인 불가"
+            entries.append(detail)
+            sources.extend(f"{sid}:{h}_source={row.get(f'{h}_source', '미확보')}" for h in holdings)
+    if not entries:
+        return None
+    return {"field": label, "column": None, "value": entries, "status": "available",
+            "source_columns": list(dict.fromkeys(sources)),
+            "detail": "RDB 상품 식별자와 Graph productCode를 정확히 대조한 편입 기록입니다. 기준일이 다른 현재 비중이나 문서 원문으로 대체하지 않습니다."}
 
 
 def request_blockers(intent: dict, question: str, *, today: date | None = None) -> list[str]:

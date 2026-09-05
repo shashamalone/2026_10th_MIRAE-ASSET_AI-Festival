@@ -190,6 +190,7 @@ class AnswerContractTests(unittest.TestCase):
     def test_narrative_output_cannot_erase_structured_fields(self):
         state = self.state()
         state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
+        state["step_results"]["v"] = {"engine": "vector", "status": "ok", "chunks": [{"document_id": "D", "chunk_id": "C", "chunk_text": "가상 문서의 위험 근거", "document_title": "가상 위험자료"}]}
         invocation = self.llm.with_structured_output.return_value.invoke
         invocation.side_effect = None
         for reply in ["", "  ", "확보된 문서의 위험 요약"]:
@@ -204,11 +205,19 @@ class AnswerContractTests(unittest.TestCase):
     def test_narrative_outage_keeps_retrieved_values(self):
         state = self.state()
         state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
+        state["step_results"]["v"] = {"engine": "vector", "status": "ok", "chunks": [{"document_id": "D", "chunk_id": "C", "chunk_text": "가상 문서의 위험 근거", "document_title": "가상 위험자료"}]}
         self.llm.with_structured_output.return_value.invoke.side_effect = RuntimeError("mock outage")
         answer = self.answer(state)
         self.assertIn("추가 설명 생성에 실패", answer)
         self.assertIn("4.266", answer)
         self.assertIn("buyable_quantity", answer)
+
+    def test_no_document_body_cannot_generate_a_risk_claim(self):
+        state = self.state()
+        state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
+        answer = self.answer(state)
+        self.assertIn("문서 기반 설명 확인 불가", answer)
+        self.llm.with_structured_output.assert_not_called()
 
     def test_node_transmits_execution_bindings_and_original_requests(self):
         step = {"domain": "채권", "fields": ["매수수익률", "매수가능수량"]}

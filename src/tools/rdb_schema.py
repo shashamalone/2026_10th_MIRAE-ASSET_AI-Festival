@@ -1388,6 +1388,11 @@ BOND_ATTRIBUTES["세후수익률"] = AttributeSpec(
 DOMESTIC_ETF_ATTRIBUTES["거래정지여부"] = AttributeSpec(
     column="pd_tr_yn", value_type="boolean", note="원천 0=정상, 1=거래정지. NULL은 미확인.")
 FUND_ATTRIBUTES["대표종목번호"] = AttributeSpec(column="rptt_ksd_itm_no", value_type="text", note="대표예탁원종목번호 원천키. 개별 종목번호와 구분한다.")
+for _catalog in (DOMESTIC_ETF_ATTRIBUTES, OVERSEAS_ETF_ATTRIBUTES):
+    _catalog["보수"] = _catalog["총보수율"]
+    _catalog["현재가"] = AttributeSpec(column="ru_mkt_price", value_type="numeric", note="원천 현재가. 데이터 기준일과 거래통화를 함께 확인한다.")
+OVERSEAS_ETF_ATTRIBUTES["복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
+OVERSEAS_ETF_ATTRIBUTES["지수복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
 SEMANTIC_ALIASES = {
     "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리", "원신용등급": "신용등급"},
     "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "판매여부": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},

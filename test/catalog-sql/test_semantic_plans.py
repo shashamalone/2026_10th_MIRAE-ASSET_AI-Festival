@@ -11,6 +11,24 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_shared_topic_cannot_leave_fund_branch_unfiltered(self):
+        intent = {"product_domain": [{"domain": "국내ETF", "subtype": ["바이오"]}, {"domain": "펀드", "subtype": ["공모펀드"]}]}
+        with patch.object(utils, "_ontology_labels", side_effect=lambda axis: [{"label": "국내", "aliases": {"국내"}}] if axis == "InvestmentRegion" else [{"label": "글로벌바이오", "aliases": {"글로벌바이오"}}]):
+            fixed, _ = utils.restore_shared_theme_scope(intent, "국내 바이오에 투자하는 ETF와 공모펀드를 통합 검색")
+        self.assertEqual({r["subject_domain"] for r in fixed["relations"]}, {"국내ETF", "펀드"})
+        planned = self.planner.plan_query_node({"intent": fixed, "question": "통합 검색"})
+        self.assertTrue(all(p["depends_on"] for p in planned["plan"] if p["engine"] == "rdb"))
+
+    def test_graph_weight_is_matched_by_product_code_not_row_order(self):
+        plan = {"nodes": [{"id": "h", "class_uri": "fp:Holding"}], "outputs": [
+            {"alias": "code", "property": "fp:productCode"}, {"alias": "weight", "property": "fp:weight"}]}
+        results = {"g": {"engine": "graph", "status": "ok", "graph_plan": plan,
+                         "rows": [{"code": "A", "weight": 3.2, "h_as_of": "2026-07-10", "h_source": "SRC"},
+                                  {"code": "B", "weight": 8.1, "h_as_of": "2026-07-10", "h_source": "SRC"}]}}
+        item = evidence_contract.graph_field_evidence("편입비중", "B", results)
+        self.assertEqual(item["value"][0]["weight"], 8.1)
+        self.assertIsNone(evidence_contract.graph_field_evidence("편입비중", "C", results))
+
     def test_graph_source_records_do_not_require_nonexistent_documents(self):
         from types import SimpleNamespace
         compiled = SimpleNamespace(evidence_columns=("h_as_of", "h_source", "h_document", "h_document_title"), tbox_provenance=())

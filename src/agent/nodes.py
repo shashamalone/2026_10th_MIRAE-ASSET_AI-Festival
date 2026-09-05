@@ -132,6 +132,8 @@ def verify_intent_node(state: PipelineState) -> dict:
     guard_notes.extend(region_notes)
     final_intent, exposure_notes = utils.preserve_overseas_exposure_scope(final_intent, question)
     guard_notes.extend(exposure_notes)
+    final_intent, theme_notes = utils.restore_shared_theme_scope(final_intent, question)
+    guard_notes.extend(theme_notes)
     final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
     guard_notes.extend(request_notes)
     trace = [trace_msg]
@@ -1068,7 +1070,7 @@ def graph_search_node(state: PipelineState) -> dict:
             # 실측). entity_role="theme"이면 후보 테마를 전부 찾아 합치는
             # 전용 경로(run_theme_membership)로 보낸다.
             if frame["entities"][0]["role"] == "theme":
-                result = graph_orchestrator.run_theme_membership(question, frame["entities"][0]["text"])
+                result = graph_orchestrator.run_theme_membership(question, frame["entities"][0]["text"], limit=frame["limit"])
             else:
                 result = graph_orchestrator.run(question, frame=frame)
         except Exception as e:
@@ -1726,6 +1728,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
             labels.extend(b["attribute"] for b in bindings
                           if b["attribute"] in {"상품명", "상품코드"}
                           or b["attribute"].startswith("조건근거(") or b["attribute"] == "AUM통화"
+                          or b["attribute"].startswith("정렬근거(")
                           or (b["attribute"].startswith("출처기준일(") and not has_date_request))
             if not labels:
                 labels = list(req.get("fields") or ["조회 결과"])
@@ -1743,6 +1746,12 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                     # a per-product physical column with a contradictory NULL.
                     continue
                 derived = (row or {}).get("_derived_fields", {}).get(normalized)
+                code_binding = next((b for b in bindings if b["attribute"] == "상품코드"), None)
+                code = (row or {}).get(code_binding["key"], "") if code_binding else ""
+                graph_item = evidence_contract.graph_field_evidence(label, code, state.get("step_results") or {})
+                if graph_item and not failure:
+                    items.append(graph_item)
+                    continue
                 if derived and not failure:
                     items.append(dict(derived))
                     continue
@@ -1993,15 +2002,18 @@ def generate_answer_node(state: PipelineState) -> dict:
         for sid, r in (state.get("step_results") or {}).items()) or "; ".join(blocking_reasons) or "실행 결과 미확보"
     # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
     # narrative questions still use the existing synthesis path plus the contract.
-    structured_only = (bool(field_contract) and not narrative_topics
-                       and not route.get("needs_graph") and not route.get("needs_vector")
-                       and not any(r.get("engine") in {"graph", "vector"}
-                                   for r in (state.get("step_results") or {}).values()))
+    document_body = any(str(c.get("chunk_text") or "").strip()
+                        for r in (state.get("step_results") or {}).values()
+                        if r.get("engine") == "vector" and r.get("status") == "ok"
+                        for c in r.get("chunks") or [])
+    structured_only = bool(field_contract or graph_answer or vector_sources) and not document_body
     if structured_only:
         response = {"question_id": question_id, "question": question,
                     "retrieved_context": retrieved_context,
                     "think_trace": execution_summary,
-                    "answer": "\n\n".join(p for p in [field_answer, execution_limits] if p)}
+                    "answer": "\n\n".join(p for p in [field_answer, graph_answer,
+                        ("문서 기반 설명 확인 불가: " + ", ".join(narrative_topics) + ". 대응하는 문서 본문을 확보하지 못했습니다.") if narrative_topics else "",
+                        vector_sources, execution_limits] if p)}
         return {"answer": json.dumps(response, ensure_ascii=False),
                 "trace": ["답변 생성: 요청 항목별 결정론적 출력 (추가 LLM 호출 없음)"]}
 

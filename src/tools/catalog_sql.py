@@ -385,6 +385,8 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
     if sort_expr:
         where.append(f"{sort_expr} IS NOT NULL")
     fields = list(resolved.get("fields", []))
+    if sort and not union_mode:
+        fields.append({**sort, "attribute": f"정렬근거({sort['attribute']})"})
     # Return the actual tested values, so a ranking/filter claim is auditable.
     for record in resolved.get("conditions", []):
         if record.get("column") and not any(f.get("column") == record["column"] for f in fields):
