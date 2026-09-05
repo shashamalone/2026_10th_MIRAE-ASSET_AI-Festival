@@ -1,0 +1,298 @@
+[run] 4문항 x 1회차 -> test\pipline-test\latency\traces_after_T1_graph.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+
+===== [Q10 r1] tokens=59993 | 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·
+  [Warning] 값이 비어있는 조건 무시됨: 모펀드 ID
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, itm_no, sale_yn, fd_nast_suma, fd_yr1_ern_r, rptt_ksd_itm_no FROM raw.prfd01n001 WHERE (itm_nm LIKE '%우리반도체BIG2플러스%' OR itm_nm LIKE '%C-P%' OR itm_nm LIKE '%C-Pe%') AND fd_nast_suma IS NOT NULL ORDER BY fd_nast_suma DESC LIMIT 1
+
+[done] Q10 r1 a1 status=ok e2e=29.7s llm=6 tok=17135 rem=45/2220 | 동일 펀드 판정에 사용한 대표종목번호 KR5014410040을 통해 삼성신종MMF종류형제D2호의 C-P 클래스가 확인되었습니다. 해당 클래스의 정보는 다음과 같습니다:
+
+- 종목번
+[guard] remaining=44 tokens=2213 -> 29.5s 대기
+
+===== [Q23 r1] tokens=53970 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_ticker, pd_nm as 편입_기업, wu_inv_ast_type, cu_upt_dt, ref_base_index, ref_fund_mgmt_co 
+FROM raw.pref01n001 
+WHERE du_vlty_6m BETWEEN '2023-01-01'
+AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0007', 'KR70082F0008', 'KR7449450006', 'KR7463250001', 'KR7440910008', 'KR70080G0009', 'KR70100K0009', 'KR7496770009', 'KR7490480001', 'KR70151P0002', 'KR70104G0001', 'KR7478150006', 'KR70090B0002')
+AND wu_inv_ast_type LIKE '%우주항공%'
+AND pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near "IN"
+LINE 4: AND pd_itm_no IN ('KR70102X0002', 'KR7494840002', 'KR70093D0...
+                      ^
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 1: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q23 r1 a1 status=rate_limited e2e=45.9s llm=8 tok=18480 rem=42/1439 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=41 tokens=1432 -> 13.5s 대기
+
+===== [Q23 r1 retry] tokens=59993 | 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을
+[done] Q23 r1 a2 status=ok e2e=20.0s llm=5 tok=17794 rem=53/33005 | 현재 제공된 데이터로는 최근 6개월 동안 우주항공 테마와 관련된 ETF의 구체적인 편입 기업이나 산업/테마 경로에 대한 정보가 부족합니다. 또한, 문서 근거와 관련된 세부 정보도 
+
+===== [Q26 r1] tokens=32998 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, applied_yield FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+[done] Q26 r1 a1 status=rate_limited e2e=38.1s llm=11 tok=19868 rem=40/965 | 
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=39 tokens=958 -> 1.5s 대기
+
+===== [Q26 r1 retry] tokens=59993 | SK하이닉스가 발행한 매수 가능 채권과 SK하이닉스를 편입한 ETF·공모펀드를 연결해 알려줘. 발행사→채권과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, applied_yield FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM
+FROM raw.pref01n001 AS base
+JOIN enriched.etf_kr_enriched AS ee ON base.pd_cd = ee.pd_cd
+WHERE base.발행사 = 'SK하이닉스'
+AND (ee.기업 = 'SK하이닉스' OR base.기업 = 'SK하이닉스')
+AND ee.pd_grp_no = 'ETF'
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 3: JOIN enriched.etf_kr_enriched AS ee ON base.pd_cd = ee.pd_cd
+             ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): enriched.etf_kr_enriched 테이블이 존재하지 않아 직접 raw.pref01n001 테이블 사용; 발행사와 기업 필드가 없어 pd_nm과 wu_inv_ast_type을 사용해 조건 설정
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type = '채권' OR wu_inv_ast_type = '혼합자산') AND pd_nm LIKE '%SK하이닉스%', pd_risk_nm != '' AND du_er_1d != '' AND du_last_aum != ''
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type = '채권' OR wu_inv_ast_type = '혼합자산') AND pd_nm LIKE '%SK하이닉스%', pd_risk_nm != '' AND du_er_1d != '' AND du_last_aum != ''
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: SyntaxError: syntax error at or near ","
+LINE 1: ...t_type = '혼합자산') AND pd_nm LIKE '%SK하이닉스%', pd_risk_...
+                                                             ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): AND 뒤에 오는 조건들 사이에 쉼표를 추가하여 SQL 구문을 올바르게 수정함
+수정된 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type = '채권' OR wu_inv_ast_type = '혼합자산') AND pd_nm LIKE '%SK하이닉스%' AND pd_risk_nm <> '' AND du_er_1d <> '' AND du_last_aum <> ''
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm AS 상품명, pd_risk_nm AS 등급, du_er_1d AS 수익률, du_last_aum AS AUM FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (wu_inv_ast_type = '채권' OR wu_inv_ast_type = '혼합자산') AND pd_nm LIKE '%SK하이닉스%' AND pd_risk_nm <> '' AND du_er_1d <> '' AND du_last_aum <> ''
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: ""
+LINE 1: ...SK하이닉스%' AND pd_risk_nm <> '' AND du_er_1d <> '' AND du_...
+                                                             ^
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type numeric: ""
+LINE 1: ...SK하이닉스%' AND pd_risk_nm <> '' AND du_er_1d <> '' AND du_...
+                                                             ^
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+           zrin_fd_ivst_risk_grd_nm AS 등급,
+           fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND itm_nm LIKE '%채권%'
+      AND (CASE WHEN itm_nm LIKE '%SK하이닉스%' THEN 1 ELSE 0 END) = 1
+),
+sk_hynix_etf_fund AS (
+    SELECT itm_nm AS 상품명,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_etf_fund;
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: DatatypeMismatch: UNION types text and numeric cannot be matched
+LINE 20: SELECT * FROM sk_hynix_etf_fund
+                ^
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): UNION ALL 연산에서 데이터 타입 불일치로 인한 오류 발생
+수정된 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+               zrin_fd_ivst_risk_grd_nm AS 등급,
+               fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND itm_nm LIKE '%채권%'
+      AND (CASE WHEN itm_nm LIKE '%SK하이닉스%' THEN 1 ELSE 0 END) = 1
+),
+sk_hynix_etf_fund AS (
+    SELECT itm_nm AS 상품명,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_etf_fund;
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+               zrin_fd_ivst_risk_grd_nm AS 등급,
+               fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND itm_nm LIKE '%채권%'
+      AND (CASE WHEN itm_nm LIKE '%SK하이닉스%' THEN 1 ELSE 0 END) = 1
+),
+sk_hynix_etf_fund AS (
+    SELECT itm_nm AS 상품명,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_etf_fund;
+
+
+[❌ SQL 실패] 시도 2/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: DatatypeMismatch: UNION types text and numeric cannot be matched
+LINE 20: SELECT * FROM sk_hynix_etf_fund
+                ^
+
+[🔧 SQL 수정] 시도 2 실패 -> 시도 3 재시도
+수정 이유(LLM 판단): UNION ALL 연산에서 데이터 타입 불일치로 인한 오류 발생
+수정된 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+                zrin_fd_ivst_risk_grd_nm AS 등급,
+                fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND itm_nm LIKE '%채권%'
+      AND (CASE WHEN itm_nm LIKE '%SK하이닉스%' THEN 1 ELSE 0 END) = 1
+),
+sk_hynix_etf_fund AS (
+    SELECT itm_nm AS 상품명,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_etf_fund;
+
+
+[DEBUG] 서버로 전송하는 SQL:
+WITH sk_hynix_bond AS (
+    SELECT itm_nm AS 상품명,
+                zrin_fd_ivst_risk_grd_nm AS 등급,
+                fd_yr1_ern_r AS 수익률
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND itm_nm LIKE '%채권%'
+      AND (CASE WHEN itm_nm LIKE '%SK하이닉스%' THEN 1 ELSE 0 END) = 1
+),
+sk_hynix_etf_fund AS (
+    SELECT itm_nm AS 상품명,
+           zrin_dmst_stk_cmst_rt AS 편입비중,
+           fd_nast_suma AS AUM
+    FROM raw.prfd01n001
+    WHERE prvo_pbff_desc = '공모'
+      AND (itm_nm LIKE '%SK하이닉스%' OR or_co_xtn_itt_cd LIKE '%SK하이닉스%')
+)
+SELECT * FROM sk_hynix_bond
+UNION ALL
+SELECT * FROM sk_hynix_etf_fund;
+
+
+[❌ SQL 실패] 시도 3/3
+원인(DB 에러):
+('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+[❌ 재시도 소진] 3회 모두 실패. 마지막 에러:
+('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+
+[done] Q26 r1 a2 status=ok e2e=72.0s llm=16 tok=47092 rem=56/43448 | 검색된 데이터에는 SK하이닉스와 관련된 정보가 포함되어 있지 않습니다.
+
+===== [Q27 r1] tokens=43441 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND (pd_nm LIKE '%배터리%' OR pd_nm LIKE '%LG에너지솔루션%')
+
+[done] Q27 r1 a1 status=rate_limited e2e=44.8s llm=10 tok=24080 rem=44/3486 | 조건에 맞는 상품 목록:
+
+채권:
+1. 퍼스트파이브지제팔십사차유동화전문1-14
+2. POSCO314-1
+3. SK이노베이션11-2
+4. LG전자95-1
+5. 한국카본 4CB(사모/
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=43 tokens=3479 -> 2.5s 대기
+
+===== [Q27 r1 retry] tokens=59993 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT DISTINCT pd_no, pd_nm, crd_grd FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, credit_rating, maturity_date, inclusion_ratio FROM raw.pref01n001 AS base LEFT JOIN enriched.etf_kr_enriched AS ee ON base.pd_cd = ee.pd_cd WHERE (base.pd_nm LIKE '%채권%' AND (base.issuer = 'LG에너지솔루션' OR base.issuer LIKE '%LG에너지솔루션%')) OR (base.pd_nm LIKE '%ETF%' AND ee.inclusion_ratio > 0 AND (ee.included_company = 'LG에너지솔루션' OR ee.included_company LIKE '%LG에너지솔루션%'))
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedTable: relation "enriched.etf_kr_enriched" does not exist
+LINE 1: ...usion_ratio FROM raw.pref01n001 AS base LEFT JOIN enriched.e...
+                                                             ^
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 1: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q27 r1 a2 status=rate_limited e2e=40.3s llm=10 tok=21175 rem=41/3810 | 
+[run] 완료 -> test\pipline-test\latency\traces_after_T1_graph.jsonl

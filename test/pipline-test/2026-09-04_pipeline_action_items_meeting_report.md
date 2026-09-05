@@ -97,3 +97,21 @@
 - `test/pipline-test/2026-09-03_pipeline_latency_quality_visual.ipynb`
 - `test/pipline-test/golden_set_data_gap_evaluation_rubric.md`
 - `test/pipline-test/latency/analysis_summary.json`, `roadmap.json`, `per_run_eval.jsonl`
+
+## GSTACK REVIEW REPORT
+
+리뷰 상세: `test/pipline-test/2026-09-05_pipeline_plan_eng_review.md`
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found (outside voice, 2026-09-05) | 12 findings: 5 일치, 7 신규 검증, 4 채택(T12~T14) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open (2026-09-05, commit 96b2748) | 8 issues, 2 critical gaps (F1 인덱스 빈 폴백, F4 빌더 빈 WHERE) |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **CODEX:** P0 게이트에 P1 항목 A5가 섞인 순서 모순, 상품명 `contains` 매칭, 기준일 일괄 표기, 429 가용성 분리를 지적. 재계산으로 A5 제외 p95 20.2초(추정) 확인.
+- **CROSS-MODEL:** Graph 인덱스 대상(normalized·segment 키)과 게이트 상향은 두 리뷰가 일치. 인덱스 생명주기(런타임 vs 오프라인)와 빌더 선행 조건(typed transform)은 Codex 안이 더 단순하나 사용자가 계획 유지를 선택.
+- **VERDICT:** Eng Review issues_open — 8건 전부 결정 완료(T1~T14로 계획에 반영), critical gap 2건은 구현 시 폴백·테스트 필수. eng review required (T1~T6 구현 후 재실행).
+
+NO UNRESOLVED DECISIONS
