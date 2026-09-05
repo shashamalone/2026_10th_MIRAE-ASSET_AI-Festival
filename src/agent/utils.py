@@ -39,7 +39,11 @@ from decimal import Decimal
 from typing import Any
 
 from agent.graph_logic import graph_ids
-from agent.evidence_contract import is_identity_field, GRAPH_FIELD_CONCEPTS
+from agent.evidence_contract import (
+    GRAPH_FIELD_CONCEPTS,
+    is_document_evidence_field,
+    is_identity_field,
+)
 from tools import rdb_schema
 from tools import catalog_sql
 from agent.prompts import COLUMN_RESOLUTION_SYSTEM_PROMPT
@@ -561,6 +565,7 @@ def collect_needed_concepts(step: dict) -> list[str]:
     concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS
                     and not is_source_column_request(f)
                     and not is_identity_field(f)
+                    and not is_document_evidence_field(f)
                     and catalog_sql.normalize(f) not in GRAPH_FIELD_CONCEPTS
                     and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
@@ -1017,7 +1022,10 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
                 resolved_fields.append({"attribute": f if view["kind"] == "raw_rating" else f"분류근거({name})",
                                         "column": name, "spec": catalog_sql.spec_for_column(domain, name, {})})
             continue
-        if is_identity_field(f) or catalog_sql.normalize(f) in GRAPH_FIELD_CONCEPTS:
+        if (is_identity_field(f) or is_document_evidence_field(f)
+                or catalog_sql.normalize(f) in GRAPH_FIELD_CONCEPTS):
+            if is_document_evidence_field(f):
+                notes.append(f"'{f}'는 RDB 컬럼으로 추측하지 않고 문서 근거 계층에서 확인합니다.")
             continue
         if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS or is_source_column_request(f):
             notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")

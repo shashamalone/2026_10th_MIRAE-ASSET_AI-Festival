@@ -160,6 +160,36 @@ class SemanticPlanTests(unittest.TestCase):
         self.assertIn("LEFT JOIN enriched.etf_kr AS etf_ref", sql)
         self.assertIn("etf_ref.ticker AS ticker", sql)
 
+    def test_document_evidence_fields_never_trigger_rdb_concept_fallback(self):
+        step = {
+            "domain": "국내ETF", "role": "target", "conditions": [],
+            "fields": ["상품명", "티커", "편입비중", "편입기준일", "편입내역 문서명", "근거 문장"],
+        }
+        concepts = utils.collect_needed_concepts(step)
+        self.assertIn("상품명", concepts)
+        self.assertIn("티커", concepts)
+        self.assertNotIn("편입내역 문서명", concepts)
+        self.assertNotIn("근거 문장", concepts)
+        with patch.object(
+            utils,
+            "_resolve_unknown_concepts_via_llm",
+            side_effect=AssertionError("문서 근거 필드가 RDB LLM 폴백으로 전달됨"),
+        ) as fallback:
+            mapped, unresolved = utils.resolve_concepts_for_domain(
+                "국내ETF", concepts, "가상 ETF의 편입 종목과 근거", Mock()
+            )
+        fallback.assert_not_called()
+        self.assertEqual(unresolved, [])
+        schema = utils.build_resolved_schema(step, mapped, unresolved)
+        self.assertEqual(schema["unresolved_concepts"], [])
+        self.assertFalse(any(field.get("column") is None for field in schema["fields"]))
+        field_names = {field["attribute"] for field in schema["fields"]}
+        self.assertIn("상품명", field_names)
+        self.assertIn("티커", field_names)
+        self.assertNotIn("편입내역 문서명", field_names)
+        self.assertNotIn("근거 문장", field_names)
+        self.assertTrue(any("문서 근거 계층" in note for note in schema["notes"]))
+
     def test_graph_source_records_do_not_require_nonexistent_documents(self):
         from types import SimpleNamespace
         compiled = SimpleNamespace(evidence_columns=("h_as_of", "h_source", "h_document", "h_document_title"), tbox_provenance=())

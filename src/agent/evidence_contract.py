@@ -74,6 +74,20 @@ def restore_relative_event_window(intent: dict, question: str, *, today: date | 
 
 
 GRAPH_FIELD_CONCEPTS = {"편입비중", "종목별비중", "편입기준일", "편입내역기준일"}
+DOCUMENT_EVIDENCE_CONCEPTS = {
+    "문서명", "편입내역문서명", "근거문장", "근거원문", "인용문",
+    "documentname", "citationtext", "evidencetext",
+}
+
+
+def is_document_evidence_field(label: str) -> bool:
+    """Document citations are evidence metadata, never an RDB column guess."""
+    normalized = re.sub(r"\s+", "", str(label or "")).casefold()
+    return (
+        normalized in DOCUMENT_EVIDENCE_CONCEPTS
+        or normalized.endswith("문서명")
+        or normalized.endswith("근거문장")
+    )
 
 
 def _graph_output_aliases(outputs: list[dict], *property_names: str) -> list[str]:

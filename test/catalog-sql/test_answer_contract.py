@@ -222,7 +222,25 @@ class AnswerContractTests(unittest.TestCase):
         self.assertNotIn("etf_code", answer)
         self.assertIn("상품코드: TEST-ETF", answer)
         self.assertIn("편입비중: 3.5", answer)
-        self.assertIn("r1", response["think_trace"])
+        self.assertNotIn("r1", response["think_trace"])
+
+    def test_public_think_trace_uses_stage_labels_not_step_ids(self):
+        state = self.state(fields=["상품명", "상품번호"])
+        rdb_result = state["step_results"].pop("r1")
+        rdb_result["domain"] = "국내ETF"
+        state["step_results"].update({
+            "graph_R1": {"engine": "graph", "status": "ok", "rows": [{"code": "TEST-ETF"}]},
+            "graph_RT1": {"engine": "graph", "status": "ok", "rows": [{"code": "TEST-ETF"}]},
+            "rdb_국내ETF": rdb_result,
+        })
+        state.update(self.nodes.merge_results_node(state))
+        trace = self.response(state)["think_trace"]
+        self.assertIn("관계 조회 1", trace)
+        self.assertIn("관계 조회 2", trace)
+        self.assertIn("국내ETF 데이터 조회", trace)
+        self.assertNotIn("graph_R", trace)
+        self.assertNotIn("graph_RT", trace)
+        self.assertNotIn("rdb_", trace)
 
     def test_graph_candidates_consumed_by_rdb_are_not_rendered_as_final_rows(self):
         state = self.state(fields=["상품명", "상품번호"])

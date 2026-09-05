@@ -2174,6 +2174,46 @@ def _render_graph_results(step_results: dict, plan: list[dict] | None = None) ->
     return "\n\n".join(blocks)
 
 
+def _build_public_execution_summary(state: PipelineState) -> str:
+    """Describe execution stages without exposing internal routing identifiers."""
+    step_results = list((state.get("step_results") or {}).items())
+    if not step_results:
+        return "; ".join((state.get("route") or {}).get("blocking_reasons") or []) or "실행 결과 미확보"
+
+    totals: dict[str, int] = {}
+    for _step_id, result in step_results:
+        engine = str(result.get("engine") or "unknown")
+        totals[engine] = totals.get(engine, 0) + 1
+    seen: dict[str, int] = {}
+    labels = {"graph": "관계 조회", "rdb": "상품 데이터 조회", "vector": "문서 검색"}
+    internal_ids = [step_id for step_id, _result in step_results]
+    lines = []
+    for _step_id, result in step_results:
+        engine = str(result.get("engine") or "unknown")
+        seen[engine] = seen.get(engine, 0) + 1
+        label = labels.get(engine, "조회")
+        if engine == "rdb" and result.get("domain"):
+            label = f"{result['domain']} 데이터 조회"
+        elif totals[engine] > 1:
+            label += f" {seen[engine]}"
+
+        detail = str(result.get("skipped_reason") or result.get("note") or "")
+        for internal_id in internal_ids:
+            detail = re.sub(
+                rf"(?<![\w가-힣]){re.escape(internal_id)}(?=\s*:|에서|\b)",
+                "선행 조회",
+                detail,
+            )
+        status = result.get("status") or (
+            "실패" if result.get("error") else "차단" if result.get("skipped_reason") else "조회 완료"
+        )
+        lines.append(
+            f"{label}: 상태={status}; 반환={len(result.get('rows') or result.get('chunks') or [])}건"
+            + (f"; {detail}" if detail else "")
+        )
+    return "\n".join(lines)
+
+
 def generate_answer_node(state: PipelineState) -> dict:
     # 1. State에서 필요한 값 추출 (question_id가 들어온다고 가정)
     question_id = state.get("question_id", "Q-UNKNOWN")
@@ -2198,11 +2238,7 @@ def generate_answer_node(state: PipelineState) -> dict:
         state.get("step_results") or {}, state.get("plan") or []
     )
     narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
-    execution_summary = "\n".join(
-        f"{sid}: {r.get('engine')}; 상태={r.get('status') or ('실패' if r.get('error') else '차단' if r.get('skipped_reason') else '조회 완료')}; "
-        f"반환={len(r.get('rows') or r.get('chunks') or [])}건; "
-        f"{r.get('skipped_reason') or r.get('note') or ''}"
-        for sid, r in (state.get("step_results") or {}).items()) or "; ".join(blocking_reasons) or "실행 결과 미확보"
+    execution_summary = _build_public_execution_summary(state)
     # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
     # narrative questions still use the existing synthesis path plus the contract.
     document_body = any(str(c.get("chunk_text") or "").strip()
