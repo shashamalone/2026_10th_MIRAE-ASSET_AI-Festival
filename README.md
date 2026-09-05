@@ -109,6 +109,66 @@ print('graph triples:', triple_count())
 
 ---
 
+## 평가용 API 서버
+
+주최측 규격(`GET /answer`)을 그대로 구현한 HTTP 서버다. 표준 라이브러리만 쓴다 — 평가 기간에 서버에서 추가 설치가 필요 없도록 한 선택이다.
+
+```bash
+PYTHONPATH=src python -m serve_answer                    # 0.0.0.0:8080
+PYTHONPATH=src python -m serve_answer --port 80          # 80 포트
+```
+
+| 환경변수 | 기본 | 설명 |
+|---|---|---|
+| `ANSWER_HOST` | `0.0.0.0` | 바인드 주소 |
+| `ANSWER_PORT` | `8080` | 포트 |
+| `ANSWER_TIMEOUT_SECONDS` | `55` | 문항당 제한 시간. 주최측 권장 60초 대비 여유 |
+| `ANSWER_MAX_WORKERS` | `4` | 동시 처리 스레드 |
+
+### 요청 / 응답
+
+```bash
+curl -s "http://<host>/answer?question_id=Q-001&question=$(python -c "
+import urllib.parse,sys; print(urllib.parse.quote('VOO의 총보수를 알려줘'))")"
+```
+
+```json
+{
+  "question_id": "Q-001",
+  "question": "VOO의 총보수를 알려줘",
+  "retrieved_context": "PREF02N001 해외ETF마스터 · 2026-08-24",
+  "think_trace": "조건 파싱 → 라우팅(RDB 단독) → 필터 → 정렬",
+  "answer": "총보수 0.03%인 ... (근거: PREF02N001)"
+}
+```
+
+### 동작 보장
+
+**어떤 경우에도 200 + 5필드 JSON을 돌려준다.** 채점자에게 500이나 연결 오류가 가면 그 문항은 무조건 0점이지만, 스키마를 지킨 "확인할 수 없음"은 답변 불가 문항에서 정답 처리된다.
+
+| 상황 | 동작 |
+|---|---|
+| 정상 질의 | 파이프라인 결과를 5필드로 반환 |
+| 확인 불가 질의 | 200 + 동일 스키마 + 답변 불가 사유 |
+| 미정의 파라미터 | 무시하고 정상 처리 |
+| `question` 누락 | 200 + 입력 안내 |
+| 파이프라인 예외 | 200 + `think_trace`에 오류 기록 |
+| 제한 시간 초과 | 200 + 초과 사실 명시 |
+| 파이프라인 로드 실패 | 서버는 기동하고 답변 불가 모드로 응답 (`/health`가 `degraded`) |
+| 알 수 없는 경로 | 404지만 본문은 5필드 JSON |
+
+운영 점검용 `GET /health`도 제공한다(주최측 규격과 무관한 자체 엔드포인트).
+
+### 규격 회귀 테스트
+
+```bash
+python test/answer-api/test_serve_answer.py
+```
+
+14개 테스트가 위 표의 각 항목과 URL 인코딩 복원, `Content-Type`, 필드 타입을 검증한다.
+
+---
+
 ## 평가 하네스
 
 소스를 수정하지 않고 노드·LLM·SQL/SPARQL 호출을 계측한다.
