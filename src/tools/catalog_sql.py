@@ -158,6 +158,15 @@ def _date_value(value) -> str:
     return text
 
 
+def limit_value(value) -> int | None:
+    if value in (None, ""):
+        return None
+    match = re.fullmatch(r"(?:top\s*)?([0-9]+)(?:\s*개)?", str(value).strip(), re.IGNORECASE)
+    if not match or not 1 <= int(match[1]) <= 10000:
+        raise CompileError("LIMIT은 1~10000 정수여야 합니다")
+    return int(match[1])
+
+
 def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool = False,
                    snapshot: dict | None = None, metadata: dict | None = None) -> dict:
     """Compile exactly the resolved fields/conditions, never a best-effort subset.
@@ -351,10 +360,9 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         if order not in {"asc", "desc"}:
             raise CompileError("정렬 방향은 asc/desc여야 합니다")
         sql += f"\nORDER BY {sort_expr} {order.upper()} NULLS LAST"
-        limit = sort.get("limit")
-        if apply_limit and limit not in (None, ""):
-            if not str(limit).isdigit() or not 1 <= int(limit) <= 10000:
-                raise CompileError("LIMIT은 1~10000 정수여야 합니다")
-            sql += f"\nLIMIT {int(limit)}"
+        if apply_limit:
+            limit = limit_value(sort.get("limit"))
+            if limit is not None:
+                sql += f"\nLIMIT {limit}"
     return {"sql": sql, "assumptions": assumptions, "compiled": True,
             "compiler": "catalog-sql-v1", "column_refs": sorted(refs)}

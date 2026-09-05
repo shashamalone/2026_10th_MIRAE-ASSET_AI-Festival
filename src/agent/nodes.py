@@ -220,6 +220,13 @@ def _execute_merged_target_group(
     1년수익률) 조건이 무효인 도메인은 이 그룹에서만 제외하고 사유를
     남긴다 - 질문 전체를 답변불가 처리하지 않는다."""
     sort_order = sort.get("order") or "desc"
+    try:
+        if sort_order not in {"asc", "desc"}:
+            raise catalog_sql.CompileError("정렬 방향은 asc/desc여야 합니다")
+        parsed_limit = catalog_sql.limit_value(sort_limit)
+    except catalog_sql.CompileError as exc:
+        return {step["step_id"]: {"engine": "rdb", "role": "target", "domain": step["domain"],
+                "rows": [], "count": 0, "sql": None, "skipped_reason": str(exc)} for step in steps}
 
     contributing_step_ids: list[str] = []
     contributing_domains: list[str] = []
@@ -292,7 +299,7 @@ def _execute_merged_target_group(
         return results
 
     order_dir = "ASC" if sort_order == "asc" else "DESC"
-    limit_clause = f"\nLIMIT {int(sort_limit)}" if str(sort_limit).isdigit() else ""
+    limit_clause = f"\nLIMIT {parsed_limit}" if parsed_limit is not None else ""
     combined_sql = (
         "SELECT * FROM (\n" + "\n  UNION ALL\n".join(subqueries) + "\n) merged\n"
         f"ORDER BY sort_value {order_dir} NULLS LAST{limit_clause}"

@@ -1631,8 +1631,10 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
 
 def resolve_subtype_condition(domain: str, subtype_value: str) -> dict | None:
     """subtype 값 하나를 실제 (column, operator, value) 조건으로 매핑한다.
-    매핑이 없으면 None이며, 호출부는 이 경우 조건을 걸지 않고 넘어가야
-    한다(억지로 아무 컬럼에나 끼워 맞추면 조용히 틀린 0건 결과가 나온다)."""
+    매핑이 없으면 None이며 호출부가 조회를 중단한다. 조건을 버리거나
+    임의 컬럼을 사용해서 제한 없는 조회/조용한 오답을 만들지 않는다."""
+    if domain == "펀드":
+        subtype_value = {"공모펀드": "공모", "사모펀드": "사모"}.get(subtype_value, subtype_value)
     return SUBTYPE_CONDITION_MAP.get(domain, {}).get(subtype_value)
 
 

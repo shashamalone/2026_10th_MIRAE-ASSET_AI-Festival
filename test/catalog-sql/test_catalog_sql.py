@@ -68,6 +68,22 @@ class CompilerTests(unittest.TestCase):
         schema["subtype"] = ["ETN"]
         self.assertIn("base.pd_grp_no = E'ETN'", self.compile(schema))
 
+    def test_unmapped_subtype_is_not_silently_discarded(self):
+        schema = utils.build_resolved_schema({"domain": "국내ETF", "subtype": ["반도체"]}, r.get_attribute_catalog("국내ETF"), [])
+        with self.assertRaises(c.CompileError):
+            self.compile(schema)
+
+    def test_explicit_public_fund_subtype_preserved(self):
+        schema = utils.build_resolved_schema({"domain": "펀드", "subtype": ["공모펀드"]}, r.get_attribute_catalog("펀드"), [])
+        self.assertIn("base.prvo_pbff_desc::text = E'공모'", self.compile(schema))
+
+    def test_limit_surface_forms_preserve_count(self):
+        for value in ["1", "top 1", "TOP1", "1개"]:
+            self.assertEqual(c.limit_value(value), 1)
+        for value in ["all", "0", "-1", "1; SELECT 1"]:
+            with self.assertRaises(c.CompileError):
+                c.limit_value(value)
+
     def test_db_zero_missing_policy(self):
         schema = resolved(sort={"attribute": "AUM"})
         sql = c.compile_select(schema, snapshot=self.snap, metadata={"pd_net_tamt": {

@@ -144,15 +144,18 @@ def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[di
     직접 실제 컬럼 조건으로 바꾼다. (이미 컬럼까지 정해진 조건 레코드 목록,
     적용 로그) 튜플을 돌려준다.
 
-    컬럼 매핑이 없는 값(예: 국내ETF "테마형")은 조건을 걸지 않고 로그에만
-    남긴다 - 값 하나가 매핑이 없다고 질문 전체(unresolved_concepts로
-    번져서 RDB 단계 전체가 건너뛰어지는 것)를 막으면 안 된다."""
+    해석하지 못한 subtype도 필터다. 로그만 남기고 버리면 제한 없는
+    전체 상품 조회를 해당 유형의 결과로 오인하므로 invalid로 보존한다."""
     records: list[dict] = []
     notes: list[str] = []
     for value in subtype or []:
         mapped = rdb_schema.resolve_subtype_condition(domain, value)
+        if domain in {"국내ETF", "해외ETF"} and value.upper() in {"ETF", "ETN"}:
+            mapped = {"column": "pd_grp_no", "operator": "eq", "value": value.upper()}
         if mapped is None:
-            notes.append(f"하위유형 '{value}' 조건은 대응하는 컬럼을 찾지 못해 적용하지 않았습니다.")
+            records.append({"attribute": "상품유형", "value": value, "value_2": "", "operator": "eq",
+                            "column": None, "spec": None, "valid": False,
+                            "invalid_reason": f"하위유형 '{value}'에 대응하는 검증된 필터가 없습니다."})
             continue
         records.append(
             {
@@ -369,6 +372,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     # resolved_conditions에 바로 얹는다.
     subtype_records, subtype_notes = resolve_subtype_conditions(domain, step.get("subtype") or [])
     resolved_conditions.extend(subtype_records)
+    invalid_conditions.extend(record for record in subtype_records if not record["valid"])
     notes.extend(subtype_notes)
 
     for c in build_condition_list(step):
