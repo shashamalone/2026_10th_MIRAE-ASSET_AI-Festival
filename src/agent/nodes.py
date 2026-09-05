@@ -49,8 +49,9 @@ from tools import rdb_schema
 from tools import schema_snapshot
 from tools import catalog_sql
 from agent import utils
+from agent import evidence_contract
 from agent.get_clova import embed
-from tools.vector_search import get_coverage, resolve_product_ids, search_documents
+from tools.vector_search import get_coverage, resolve_product_ids, search_documents, search_policy_documents
 
 PipelineState = dict[str, Any]
 
@@ -114,6 +115,16 @@ def verify_intent_node(state: PipelineState) -> dict:
         trace_msg = "의도 분석 검수 완료: 수정 사항 없음 (원본 유지)"
 
     final_intent, guard_notes = guard_intent(final_intent)
+    final_intent, class_notes = evidence_contract.restore_class_comparison(final_intent, question)
+    guard_notes.extend(class_notes)
+    final_intent, cross_notes = evidence_contract.restore_cross_market_identity(final_intent, question)
+    guard_notes.extend(cross_notes)
+    final_intent, identity_notes = utils.resolve_named_product_domains(final_intent)
+    guard_notes.extend(identity_notes)
+    final_intent, subtype_notes = utils.prune_inferred_named_subtypes(final_intent, question)
+    guard_notes.extend(subtype_notes)
+    final_intent, issuer_notes = utils.validate_issuer_subjects(final_intent, question)
+    guard_notes.extend(issuer_notes)
     final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
     guard_notes.extend(request_notes)
     trace = [trace_msg]
@@ -335,6 +346,33 @@ def _execute_merged_target_group(
     # 서브쿼리 스키마 전부)에서 나온다.
     run = _run_sql_with_retry(conn, contributing_domains[0], question, combined_schema_block, sql_result, max_retries)
 
+    hydration = []
+    if not run["error"] and run["rows"]:
+        # Phase 1 ranks using a common four-column projection. Phase 2 fetches
+        # requested source fields only for selected IDs, without changing rank.
+        for original in steps:
+            domain = original["domain"]
+            selected = [r for r in run["rows"] if r.get("domain") == domain]
+            if not selected:
+                continue
+            codes = list(dict.fromkeys(str(r["code"]) for r in selected))
+            detail_step = {**original, "sort": None, "conditions": list(original.get("conditions") or []) + [
+                {"attribute": "상품코드", "operator": "in", "value": ", ".join(codes), "value_2": ""}]}
+            detail = _execute_target_step_query(detail_step, question, conn, False, max_retries)
+            hydration.append({"domain": domain, "sql": detail.get("sql"), "error": detail.get("error") or detail.get("skipped_reason"),
+                              "count": detail.get("count", 0)})
+            if detail.get("error") or detail.get("skipped_reason"):
+                all_notes.append(f"{domain} 상위 상품 상세값 조회 실패: {detail.get('error') or detail.get('skipped_reason')}")
+                continue
+            code_column = rdb_schema.get_attribute_catalog(domain)["상품코드"].column
+            output_fields_by_domain[domain] = detail.get("output_fields") or []
+            for row in selected:
+                candidates = [r for r in detail.get("rows") or [] if str(r.get(code_column)) == str(row["code"])]
+                if len(candidates) == 1:
+                    row.update({k: v for k, v in candidates[0].items() if k not in {"code", "name", "domain", "sort_value"}})
+                else:
+                    all_notes.append(f"{domain} {row['code']}: 상세 원천 행 {len(candidates)}건으로 유일성 미확보; 임의 행을 선택하지 않았습니다.")
+
     primary_step_id = contributing_step_ids[0]
     results[primary_step_id] = {
         "engine": "rdb", "role": "target", "domain": "+".join(contributing_domains),
@@ -343,6 +381,7 @@ def _execute_merged_target_group(
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
         "output_fields_by_domain": output_fields_by_domain,
         "requested_fields_by_domain": requested_fields_by_domain,
+        "hydration_queries": hydration,
     }
     if run["error"]:
         results[primary_step_id]["error"] = run["error"]
@@ -777,18 +816,22 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
     GraphDB의 fp:productCode와 값이 같은 ISIN/RIC임을 확인)가 이미 실제
     컬럼으로 매핑하므로, 이후는 기존 자연어 초안 -> SQL 생성 파이프라인이
     그대로 처리한다."""
-    entity_codes: list[str] = []
+    entity_codes = None
     for dep_id in step.get("depends_on") or []:
         dep_result = step_results.get(dep_id) or {}
         if dep_result.get("engine") == "graph":
             codes = dep_result.get("entity_codes") or []
-            if dep_result.get("error") or not codes:
+            if dep_result.get("error") or dep_result.get("status") not in (None, "ok") or not codes:
                 return {**step, "graph_handoff_blocked":
                         f"선행 Graph 단계 {dep_id}에서 관계에 맞는 상품코드를 확보하지 못해 제한 없는 RDB 조회를 중단했습니다."}
-            entity_codes.extend(codes)
-    if not entity_codes:
+            if entity_codes is None:
+                entity_codes = list(dict.fromkeys(codes))
+            else:
+                entity_codes = [code for code in entity_codes if code in set(codes)]
+    if entity_codes is None:
         return step
-    entity_codes = list(dict.fromkeys(entity_codes))  # 중복 제거, 순서는 유지
+    if not entity_codes:
+        return {**step, "graph_handoff_blocked": "선행 관계 조건을 모두 만족하는 상품코드의 교집합이 0건입니다. 관계별 후보의 합집합으로 대신하지 않습니다."}
     new_step = dict(step)
     new_step["conditions"] = list(step.get("conditions") or []) + [
         {"attribute": "상품코드", "operator": "in", "value": ", ".join(entity_codes), "value_2": ""}
@@ -926,9 +969,16 @@ def _build_graph_frame(relation: dict, relations_by_id: dict[str, dict]) -> dict
     root = _chain_root_relation(relation, relations_by_id)
     text = (root.get("object_entity") or "").strip()
     role = root.get("entity_role") or "product"
+    chain, seen, current = [], set(), relation
+    while current and current.get("id") not in seen:
+        seen.add(current.get("id"))
+        chain.append(dict(current))
+        current = relations_by_id.get(current.get("object_ref"))
+    chain.reverse()
     return {
         "entities": [{"text": text, "role": role}] if text else [],
-        "relations": [],
+        "relations": chain,
+        "relation_scope": True,
         "requested_fields": [],
         "constraints": [],
         "limit": 100,
@@ -1145,6 +1195,11 @@ def _normalize_chunk(chunk: dict) -> dict:
         "published_at": str(chunk.get("published_at") or ""),
         "source_url": chunk.get("source_url") or "",
         "product_ids": list(chunk.get("product_ids") or []),
+        "page_number": chunk.get("page_number"),
+        "heading_path": chunk.get("heading_path") or "",
+        "document_title": chunk.get("document_title") or "",
+        "publisher": chunk.get("publisher") or "",
+        "source_type": chunk.get("source_type") or "",
     }
 
 
@@ -1155,7 +1210,27 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     검색 -> 상태 판정 순서다. 요청 주제 섹션이 하나도 안 걸리면 결과가
     없을 때 topic_not_covered로 남기고, 걸린 결과가 있어도 미확보 주제를
     topic_coverage/note에 적는다."""
+    if step.get("document_scope") == "policy":
+        documents = search_policy_documents(step.get("subject_terms") or [])
+        chunks = [_normalize_chunk({**r, "chunk_id": r.get("chunk_id") or f"metadata:{r['document_id']}",
+                                   "score": 1.0, "citation_text": r.get("document_title") or ""}) for r in documents]
+        return {"engine": "vector", "status": "ok" if chunks else "no_official_document", "chunks": chunks,
+                "count": len(chunks), "queries": step.get("subject_terms") or [], "raw_top": [],
+                "product_scope": {"codes": [], "names": [], "product_ids": [], "coverage": _summarize_coverage([], {})},
+                "topic_coverage": {"requested": {}, "uncovered": {}},
+                "note": "공식 정책/운용 출처 유형과 주체 문자열을 대조했습니다. 본문 없는 문서는 주장 근거로 사용할 수 없습니다."}
     codes, names = _vector_scope(state, step)
+    dependencies = [(state.get("step_results") or {}).get(sid) or {}
+                    for sid in step.get("depends_on") or []]
+    # A failed product/relationship lookup is not permission to search unrelated
+    # prospectuses globally. Independent document-only plans have no dependency.
+    if dependencies and not codes and not names:
+        return {"engine": "vector", "status": "unresolved_product_scope", "chunks": [],
+                "count": 0, "queries": [], "raw_top": [],
+                "product_scope": {"codes": [], "names": [], "product_ids": [],
+                                  "coverage": _summarize_coverage([], {})},
+                "topic_coverage": {"requested": {}, "uncovered": {}},
+                "note": "선행 상품·관계 조회에서 대상 상품을 확보하지 못했습니다. 무관한 상품의 문서로 대체하지 않습니다."}
     product_ids = resolve_product_ids(codes, names) if (codes or names) else []
     coverage = get_coverage(product_ids) if product_ids else {}
     summary = _summarize_coverage(product_ids, coverage)
@@ -1336,6 +1411,10 @@ def merge_results_node(state: PipelineState) -> dict:
 
     merged_rows: list[dict] = []
     for step_id, result in step_results.items():
+        if result.get("error") or result.get("skipped_reason"):
+            continue
+        if result.get("engine") in {"graph", "vector"} and result.get("status") not in (None, "ok", "chained"):
+            continue
         if result.get("engine") == "rdb" and result.get("role", "target") == "target":
             for row in result.get("rows", []):
                 tagged = dict(row)
@@ -1356,6 +1435,9 @@ def merge_results_node(state: PipelineState) -> dict:
                     "인용": (chunk.get("chunk_text") or "")[:400],
                     "기준일": chunk.get("effective_as_of", ""),
                     "출처URL": chunk.get("source_url", ""),
+                    "근거ID": chunk.get("chunk_id", ""),
+                    "발행일": chunk.get("published_at", ""),
+                    "페이지": chunk.get("page_number"),
                     "상품ID": ", ".join(chunk.get("product_ids") or []),
                     "유사도": round(float(chunk.get("score") or 0.0), 3),
                     "_domain": "vector",
@@ -1469,6 +1551,8 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 f"[RDB:{result.get('domain', '')}] {result.get('count', 0)}건 조회, "
                 f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE}, SQL: {result['sql']}"
             )
+            for detail in result.get("hydration_queries") or []:
+                parts.append(f"[상위 상품 상세조회:{detail['domain']}] {detail['count']}건; SQL: {detail.get('sql')}; 오류: {detail.get('error') or '없음'}")
             if result.get("output_views"):
                 labels = ", ".join(v["attribute"] for v in result["output_views"])
                 parts.append(f"[로컬 온톨로지 규칙 적용] {labels}: RDB 원천값 + 저장소 TBox 정의; 원격 GraphDB 조회 아님")
@@ -1627,6 +1711,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
             # Identification and source dates are compiler-provided provenance.
             labels.extend(b["attribute"] for b in bindings
                           if b["attribute"] in {"상품명", "상품코드"}
+                          or b["attribute"].startswith("조건근거(") or b["attribute"] == "AUM통화"
                           or (b["attribute"].startswith("출처기준일(") and not has_date_request))
             if not labels:
                 labels = list(req.get("fields") or ["조회 결과"])
@@ -1652,7 +1737,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                             items.append(_field_evidence(f"{label}({date_column})", binding, row, failure))
                         continue
                 # A request for source column names is provenance, not a DB value.
-                if "컬럼" in normalized and any(word in normalized for word in ("근거", "출처")):
+                if utils.is_source_column_request(label):
                     item = _field_evidence(label, None, row, failure)
                     if bindings and not failure and row is not None:
                         item.update(status="available", value="각 항목의 근거 컬럼을 함께 표시했습니다.")
@@ -1751,8 +1836,98 @@ def _invoke_answer_with_field_fallback(llm, messages: list, has_field_answer: bo
         if not has_field_answer:
             raise
         # A narrative model outage must not discard already retrieved RDB facts.
-        return {"answer": "추가 설명 생성에 실패했습니다. 아래는 확인된 RDB 조회 결과입니다.",
-                "think_trace": "RDB 항목별 상태를 출력했으며 추가 설명 생성은 실패했습니다."}
+        return {"answer": "추가 설명 생성에 실패했습니다. 아래는 확보된 조회 결과와 문서 근거입니다.",
+                "think_trace": "확보된 항목별 상태와 근거를 출력했으며 추가 설명 생성은 실패했습니다."}
+
+
+def _render_vector_sources(step_results: dict) -> str:
+    """Execution-bound references survive model omissions, blanks and outages.
+
+    Retrieval is not proof of the whole question. Date types stay separate, and
+    a missing URL/title/publisher is not invented. Excerpts are bounded per doc.
+    """
+    lines, seen, quote_words = [], set(), {}
+    for sid, result in step_results.items():
+        if result.get("engine") != "vector":
+            continue
+        chunks = result.get("chunks") or []
+        if result.get("status") != "ok" or not chunks:
+            lines.append(f"- {sid}: 문서 근거 미확보 ({result.get('status') or 'no_hit'}). "
+                         f"{result.get('note') or result.get('error') or ''}")
+            continue
+        for chunk in chunks:
+            key = (chunk.get("document_id"), chunk.get("chunk_id"))
+            if key in seen:
+                continue
+            seen.add(key)
+            title = chunk.get("document_title") or chunk.get("citation_text") or "문서명 미확보"
+            lines.extend([f"- 근거ID {chunk.get('chunk_id') or '미확보'}: {title}",
+                          f"  - 문서ID: {chunk.get('document_id') or '미확보'}; "
+                          f"발표기관: {chunk.get('publisher') or '미확보'}; "
+                          f"발행일: {chunk.get('published_at') or '미확보'}; "
+                          f"내용 기준일: {chunk.get('effective_as_of') or '미확보'}"])
+            if chunk.get("page_number") is not None:
+                lines.append(f"  - 페이지: {chunk['page_number']}; 절: {chunk.get('heading_path') or '미확보'}")
+            url = str(chunk.get("source_url") or "")
+            lines.append(f"  - 원문 URL: {url if url.startswith(('https://', 'http://')) else '미확보'}")
+            doc = chunk.get("document_id") or url or str(key)
+            budget = max(0, 25 - quote_words.get(doc, 0))
+            words = str(chunk.get("chunk_text") or "").split()
+            if budget and words:
+                selected = words[:budget]
+                quote_words[doc] = quote_words.get(doc, 0) + len(selected)
+                excerpt = " ".join(selected)[:240]
+                suffix = " …(발췌)" if len(words) > budget or len(" ".join(selected)) > 240 else ""
+                lines.append(f"  - 근거 원문: {excerpt}{suffix}")
+            elif not words:
+                lines.append("  - 본문 미확보: 문서 메타데이터만 확인했으며 정책·전략 주장의 근거 문장은 확보하지 못했습니다.")
+    if not lines:
+        return ""
+    return ("Vector 문서 검색 출처\n검색된 문서의 출처이며, 검색 유사도만으로 편입·기업관계를 확정하지 않습니다.\n"
+            + "\n".join(lines))
+
+
+def _render_execution_limits(state: PipelineState) -> str:
+    """Expose actual failed prerequisites, never turn abstention rows into facts."""
+    notes = list((state.get("route") or {}).get("blocking_reasons") or [])
+    for sid, result in (state.get("step_results") or {}).items():
+        reason = result.get("skipped_reason") or result.get("error")
+        if reason:
+            notes.append(f"{sid}: {reason}")
+        if result.get("engine") == "graph" and result.get("status") not in (None, "ok", "chained"):
+            notes.append(f"{sid}: 관계 근거 미확보 ({result.get('status')}); "
+                         "편입·발행·자회사·동일 상품 관계를 확인한 결과가 아닙니다.")
+    return "조회 한계\n\n" + "\n".join(f"- {n}" for n in dict.fromkeys(notes)) if notes else ""
+
+
+def _render_graph_results(step_results: dict) -> str:
+    """Keep verified relationship records visible even if synthesis is blank."""
+    blocks = []
+    for sid, result in step_results.items():
+        if result.get("engine") != "graph" or result.get("status") != "ok" or result.get("error"):
+            continue
+        rows = result.get("rows") or []
+        if not rows:
+            continue
+        paths = (result.get("graph_plan") or {}).get("edges") or []
+        description = "; ".join(f"{e['subject']} → {e['predicate']} → {e['object']}" for e in paths)
+        lines = [f"Graph 관계 조회 근거 [{sid}]", f"실행 경로: {description or '경로 정보 미확보'}",
+                 f"반환 {len(rows)}건 중 {min(len(rows), 20)}건 표시. 분류 연결과 실제 편입 관계는 서로 대체하지 않습니다."]
+        for index, row in enumerate(rows[:20], 1):
+            values = []
+            for key, value in row.items():
+                if key.startswith("_"):
+                    continue
+                if value is None or str(value).strip() == "":
+                    value = "값 미확보(확인 불가)"
+                if key.endswith("quote"):
+                    value = " ".join(str(value).split()[:25])[:240]
+                values.append(f"{key}={_display_field_value(value)}")
+            lines.append(f"- {index}. " + "; ".join(values))
+        if result.get("time_window_note"):
+            lines.append(result["time_window_note"])
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def generate_answer_node(state: PipelineState) -> dict:
@@ -1770,11 +1945,17 @@ def generate_answer_node(state: PipelineState) -> dict:
 
     field_contract = _build_rdb_answer_contract(state)
     field_answer = _render_rdb_answer_contract(field_contract)
+    identity_answer = evidence_contract.render_identity_comparison(state)
+    if identity_answer:
+        field_answer = "\n\n".join([identity_answer, field_answer])
+    vector_sources = _render_vector_sources(state.get("step_results") or {})
+    execution_limits = _render_execution_limits(state)
+    graph_answer = _render_graph_results(state.get("step_results") or {})
     narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
     # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
     # narrative questions still use the existing synthesis path plus the contract.
     structured_only = (bool(field_contract) and not narrative_topics
-                       and intent.get("task") == "lookup"
+                       and intent.get("task") in {"lookup", "filter_rank", "comparison"}
                        and not route.get("needs_graph") and not route.get("needs_vector")
                        and not any(r.get("engine") in {"graph", "vector"}
                                    for r in (state.get("step_results") or {}).values()))
@@ -1782,7 +1963,7 @@ def generate_answer_node(state: PipelineState) -> dict:
         response = {"question_id": question_id, "question": question,
                     "retrieved_context": retrieved_context,
                     "think_trace": "RDB 실행 결과와 요청 항목의 컬럼 대응을 대조하여 값과 확인 불가 사유를 구분해 표시했습니다.",
-                    "answer": field_answer}
+                    "answer": "\n\n".join(p for p in [field_answer, execution_limits] if p)}
         return {"answer": json.dumps(response, ensure_ascii=False),
                 "trace": ["답변 생성: 요청 항목별 결정론적 출력 (추가 LLM 호출 없음)"]}
 
@@ -1799,6 +1980,10 @@ def generate_answer_node(state: PipelineState) -> dict:
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
         if field_answer:
             answer_text += "\n\n" + field_answer
+        if vector_sources:
+            answer_text += "\n\n" + vector_sources
+        if execution_limits:
+            answer_text += "\n\n" + execution_limits
         
         final_response = {
             "question_id": question_id,
@@ -1835,6 +2020,7 @@ def generate_answer_node(state: PipelineState) -> dict:
                 f"[요청 항목별 RDB 상태] (값/NULL/미조회/실패를 구별한다. 아래 구조화 항목은 코드가 별도로 출력하므로 answer에는 문서·관계 설명만 작성한다.)\n"
                 f"{json.dumps(field_contract, ensure_ascii=False, default=str)}\n\n"
                 f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
+                f"[문서 출처] (문서에 의존한 설명에는 대응 근거ID를 붙인다. 없는 출처는 만들지 않는다.)\n{vector_sources}\n\n"
                 f"[계획의 조건] (실제 적용 여부는 SQL 실행 기록과 조정된 규칙을 따른다. "
                 f"SELECT에 필터 컬럼이 없다는 이유만으로 실행된 필터를 무효로 판단하지 않는다.)\n"
                 f"{applied_conditions}\n\n"
@@ -1842,7 +2028,7 @@ def generate_answer_node(state: PipelineState) -> dict:
                 f"[실제 실행 기록] (think_trace는 이 로그를 근거로 요약할 것 - 지어내지 말 것)\n{execution_log}\n\n"
                 f"[검색된 데이터] (전체 {len(merged_rows)}건 중 {len(preview)}건 표시)\n{rows_text}",
             ),
-        ], bool(field_answer)
+        ], bool(field_answer or vector_sources or graph_answer)
     )
     
     # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
@@ -1851,6 +2037,12 @@ def generate_answer_node(state: PipelineState) -> dict:
         answer_text = json.dumps(answer_text, ensure_ascii=False, default=str)
     if field_answer:
         answer_text = "\n\n".join(part for part in [answer_text.strip(), field_answer] if part)
+    if vector_sources:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), vector_sources] if part)
+    if execution_limits:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), execution_limits] if part)
+    if graph_answer:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), graph_answer] if part)
     if not answer_text.strip():
         answer_text = "검색 결과는 있으나 최종 설명을 생성하지 못했습니다. 요청 항목의 근거를 확인해야 합니다."
     final_response = {

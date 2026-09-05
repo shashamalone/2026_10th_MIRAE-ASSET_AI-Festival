@@ -322,7 +322,7 @@ ORDER BY""") % {
 # 주지만, 같은 표기가 여러 클래스에 실재할 때는 결과를 바꾼다.
 _ROLE_CLASS_ORDER = {
     "company": ("Company", "Security", "Organization"),
-    "issuer": ("Issuer", "Company", "Organization", "ETF", "ETN", "Product"),
+    "issuer": ("Issuer", "Company", "Organization"),
     "manager": ("AssetManager", "Organization"),
     "product": ("ETF", "PublicFund", "Bond", "ETN", "Product"),
     "share_class": ("ShareClass", "PublicFund"),

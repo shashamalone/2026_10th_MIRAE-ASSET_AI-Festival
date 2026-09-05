@@ -651,13 +651,40 @@ BOND_OUTPUT_VIEWS = {
               "aliases": ("만기 구분", "잔존만기 구분", "만기 분류")},
 }
 
+ETF_CLASSIFICATION_AXES = {
+    "국내ETF": {"wu_inv_ast_type": "AssetType", "wu_inv_rgn": "InvestmentRegion",
+                "cu_strtegy": "ManagementStrategy"},
+    "해외ETF": {"wu_inv_ast_type": "AssetType", "wu_inv_rgn": "InvestmentRegion",
+                "cu_index_repl_mthd": "ReplicationMethod"},
+}
+
+# Raw dataset contract: 0 means normal, 1 means suspended; NULL is unknown.
+BINARY_COLUMN_CONTRACTS = {
+    ("국내ETF", "pd_tr_yn"): {"true": "1", "false": "0", "numeric": True,
+        "true_aliases": ("거래정지", "정지"), "false_aliases": ("거래정지아님", "정지아님", "정상", "거래가능")},
+}
+
+
+def get_output_views(domain: str) -> dict:
+    if domain == "채권":
+        return BOND_OUTPUT_VIEWS
+    if domain == "펀드":
+        return {"상품동일성키": {"kind": "identity_keys", "inputs": ("itm_no", "ksd_itm_no", "mtco_itm_no", "rptt_ksd_itm_no", "or_co_xtn_itt_cd"), "aliases": ()},
+                "클래스": {"kind": "share_class", "inputs": ("itm_nm",), "aliases": ("클래스 코드", "클래스 구분")}}
+    axes = ETF_CLASSIFICATION_AXES.get(domain)
+    if axes:
+        views = {"분류근거": {"kind": "classification", "inputs": tuple(axes), "axes": axes,
+                            "aliases": ("분류 근거", "분류 경로", "온톨로지 분류 근거")}}
+        if domain == "국내ETF":
+            views["상품동일성키"] = {"kind": "identity_keys", "inputs": ("pd_itm_no", "pd_lstg_dt", "pd_lste_dt"), "aliases": ()}
+        return views
+    return {}
+
 
 def get_output_view(domain: str, concept: str) -> dict | None:
     """Output presentation only; callers must never use it to silently filter."""
-    if domain != "채권":
-        return None
     normalized = "".join(concept.split()).casefold()
-    for name, view in BOND_OUTPUT_VIEWS.items():
+    for name, view in get_output_views(domain).items():
         if normalized in {"".join(a.split()).casefold() for a in (name, *view["aliases"])}:
             return {**view, "name": name}
     return None

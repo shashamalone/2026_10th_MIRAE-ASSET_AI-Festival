@@ -42,6 +42,9 @@ class BondOutputTests(unittest.TestCase):
         self.answer_llm = self.llm_patch.start()
         self.answer_llm.with_structured_output.side_effect = AssertionError("No answer LLM expected")
         self.addCleanup(self.llm_patch.stop)
+        identity = patch.object(utils, "lookup_product_identities", return_value=[])
+        identity.start()
+        self.addCleanup(identity.stop)
 
     def repaired(self):
         return utils.preserve_explicit_output_requests(initial_intent(), QUESTION)[0]

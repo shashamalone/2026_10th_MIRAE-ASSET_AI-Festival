@@ -1,0 +1,119 @@
+"""Question-level evidence constraints, independent of evaluation IDs/products."""
+from __future__ import annotations
+
+from datetime import date
+import re
+
+
+def request_blockers(intent: dict, question: str, *, today: date | None = None) -> list[str]:
+    blockers = []
+    if intent.get("issuer_type_conflict"):
+        blockers.append(intent["issuer_type_conflict"])
+    today = today or date.today()
+    # Completed calendar-year observations cannot be replaced by a rolling rate.
+    if "수익률" in question and any(w in question for w in ("연간", "확정", "연도별")):
+        for year in re.findall(r"(?<!\d)(20\d{2})\s*년", question):
+            if date(int(year), 12, 31) >= today:
+                blockers.append(f"{year}년 전체 기간이 아직 끝나지 않아 확정 연간수익률을 확인할 수 없습니다. "
+                                "현재의 1년 수익률이나 전망치로 대신하지 않습니다.")
+    conditions = intent.get("conditions") or []
+    relations = intent.get("relations") or []
+    if not relations and not intent.get("identity_comparison"):
+        unbound = []
+        for entity in intent.get("target_entities") or []:
+            text = entity.get("surface_form") or ""
+            if entity.get("entity_type") == "product_name" or not text:
+                continue
+            if not any(text.casefold() in str(c.get("value", "")).casefold() for c in conditions):
+                unbound.append(text)
+        if intent.get("task") == "relation" or (unbound and re.search(r"관련|연결|편입|보유|자회사", question)):
+            blockers.append(f"{', '.join(unbound) or '요청한 개체'}와 상품을 연결하는 관계를 확정하지 못했습니다. "
+                            "편입, 발행, 테마, 운용 중 어떤 관계인지 또는 정확한 상품 식별자를 알려주세요. "
+                            "조건 없는 전체 상품 목록을 관련 상품으로 제공하지 않습니다.")
+    return blockers
+
+
+def restore_class_comparison(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Recover explicit 'base의 class A와 B' syntax, not a fund-specific list."""
+    match = re.search(r"([^.!?]+?)의\s*([A-Za-z][A-Za-z0-9-]*)\s*(?:와|과|및)\s*([A-Za-z][A-Za-z0-9-]*)\s*클래스", question)
+    if not match or not any(w in question for w in ("동일", "같은", "비교")):
+        return intent, []
+    relations = intent.get("relations") or []
+    if any(r.get("relation") not in {"has_class", "class_of", "same_fund", "same_as"} for r in relations):
+        return intent, []
+    base, *classes = match.groups()
+    base = base.strip()
+    output = dict(intent.get("output_requirements") or {})
+    fields = list(output.get("fields") or [])
+    fields.extend(f for f in ("운용사종목번호", "대표예탁원종목번호", "예탁원종목번호", "운용회사대외기관코드") if f not in fields)
+    output["fields"] = fields
+    # A class code alone is not a global product search term. The base name is
+    # the scope and suffixes are checked on returned source names, exactly.
+    fixed = {**intent, "task": "comparison", "relations": [],
+             "target_entities": [{"entity_type": "product_name", "surface_form": base}],
+             "identity_comparison": {"base": base, "classes": classes},
+             "product_domain": [{"domain": "펀드", "subtype": []}], "output_requirements": output}
+    fixed["conditions"] = [c for c in intent.get("conditions") or []
+                           if not ("모펀드" in c.get("attribute", "") and str(c.get("value", "")) == base)]
+    return fixed, ["명시된 클래스 비교를 원천 종목과 운용사·대표종목 키 대조로 처리합니다. 클래스 코드를 독립 상품명으로 검색하지 않습니다."]
+
+
+def restore_cross_market_identity(intent: dict, question: str) -> tuple[dict, list[str]]:
+    domains = {d.get("domain") for d in intent.get("product_domain") or []}
+    if not {"국내ETF", "펀드"} <= domains or not re.search(r"동일|같은|별도\s*상품", question):
+        return intent, []
+    if not any(e.get("entity_type") == "product_name" for e in intent.get("target_entities") or []):
+        return intent, []
+    if intent.get("relations"):
+        return intent, []
+    output = dict(intent.get("output_requirements") or {})
+    fields = list(output.get("fields") or [])
+    fields.extend(f for f in ("상품동일성키", "상장일") if f not in fields)
+    output["fields"] = fields
+    return {**intent, "output_requirements": output, "identity_comparison": {"mode": "cross_market"}}, [
+        "동일 상품 비교에 원천 식별키를 조회합니다. 펀드 예탁원종목번호와 ETF 종목번호의 일치만 연결 근거로 사용합니다."]
+
+
+def render_identity_comparison(state: dict) -> str:
+    request = (state.get("intent") or {}).get("identity_comparison")
+    if not request:
+        return ""
+    if request.get("mode") == "cross_market":
+        fund_rows, etf_rows = [], []
+        for result in (state.get("step_results") or {}).values():
+            if result.get("engine") != "rdb" or result.get("error") or result.get("skipped_reason"):
+                continue
+            if result.get("domain") == "펀드":
+                fund_rows.extend(result.get("rows") or [])
+            elif result.get("domain") == "국내ETF":
+                etf_rows.extend(result.get("rows") or [])
+        links = [(f, e) for f in fund_rows for e in etf_rows
+                 if f.get("ksd_itm_no") and str(f["ksd_itm_no"]).strip() == str(e.get("pd_itm_no", "")).strip()]
+        if not links:
+            return "동일 상품 관계: 펀드 예탁원종목번호와 ETF 종목번호의 일치 근거를 확보하지 못했습니다. 이름만으로 동일/별도 상품을 확정하지 않습니다."
+        return "\n".join("동일 운용상품 관계: 펀드 " + str(f.get("itm_no")) + " ↔ ETF " + str(e.get("pd_itm_no"))
+                         + f". raw.prfd01n001.ksd_itm_no={f['ksd_itm_no']}와 raw.pref01n001.pd_itm_no가 일치합니다. "
+                           "데이터셋별 별도 레코드이며, 이 연결만으로 클래스 종류나 현재 거래 가능 여부까지 확정하지 않습니다."
+                         for f, e in links)
+    rows = [r for result in (state.get("step_results") or {}).values()
+            if result.get("engine") == "rdb" and result.get("domain") == "펀드"
+            and not result.get("error") and not result.get("skipped_reason")
+            for r in result.get("rows") or []]
+    matched = []
+    for suffix in request["classes"]:
+        candidates = [r for r in rows if re.search(r"(?:Class|종류)\s*" + re.escape(suffix) + r"$", str(r.get("itm_nm", "")), re.IGNORECASE)]
+        if len(candidates) != 1:
+            return f"클래스 동일성: {suffix}를 원천 종목 하나로 확정하지 못해 판정할 수 없습니다. 정확한 종목번호가 필요합니다."
+        matched.append(candidates[0])
+    def valid(value):
+        return bool(value and str(value).strip() and not re.fullmatch(r"(?:KR)?0+", str(value).strip()))
+    keys = [(r.get("or_co_xtn_itt_cd"), r.get("mtco_itm_no")) for r in matched]
+    if any(not all(valid(v) for v in key) for key in keys):
+        return "클래스 동일성: 운용회사 코드 또는 운용사종목번호가 미확보여서 동일 모펀드 여부를 확인할 수 없습니다."
+    if len(set(keys)) != 1:
+        return "클래스 동일성: 운용회사·운용사종목번호가 달라 동일 모펀드라고 확정할 수 없습니다."
+    refs = [r.get("rptt_ksd_itm_no") for r in matched]
+    return (f"클래스 동일성: 원천 운용회사 코드={keys[0][0]}, 운용사종목번호={keys[0][1]}가 일치하여 "
+            "동일 모펀드의 클래스 그룹으로 확인됩니다. 개별 종목번호는 별개입니다. "
+            f"대표예탁원종목번호 대조값={refs}. 근거: raw.prfd01n001의 "
+            "or_co_xtn_itt_cd, mtco_itm_no, rptt_ksd_itm_no. 이름 유사성만으로 판정한 것이 아닙니다.")

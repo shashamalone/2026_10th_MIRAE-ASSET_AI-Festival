@@ -328,6 +328,27 @@ def plan_query_node(state: PipelineState) -> PipelineState:
               needs_merge_rank / used_llm_fallback 등).
     """
     intent = state["intent"]
+    import re
+    question = state.get("question") or intent.get("raw_question", "")
+    policy_request = ("정책" in question and sum(t in question for t in ("구조", "운용주체", "자금조달", "출자")) >= 2)
+    if policy_request:
+        terms = [e.get("surface_form", "") for e in intent.get("target_entities") or [] if e.get("surface_form")]
+        if not terms:
+            subject = re.match(r"\s*([^.!?]+?)의\s", question)
+            terms = [subject.group(1)] if subject else []
+        req = intent.get("output_requirements") or {}
+        return {"plan": [{"step_id": "vector_policy", "engine": "vector", "depends_on": [],
+                          "document_scope": "policy", "subject_terms": terms,
+                          "topics": req.get("narrative_topics", []), "fields": req.get("fields", [])}],
+                "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": True,
+                          "needs_merge_rank": False, "blocking_reasons": []},
+                "trace": _trace("정책·자금조달 설명: 상품 마스터가 아닌 공식 정책/운용 문서 카탈로그에서 주체를 대조합니다.")}
+    from agent.evidence_contract import request_blockers
+    blockers = request_blockers(intent, state.get("question") or intent.get("raw_question", ""))
+    if blockers:
+        return {"plan": [], "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": False,
+                "needs_merge_rank": False, "blocking_reasons": blockers},
+                "trace": _trace("요청 근거 계약: " + "; ".join(blockers))}
 
     domains = _normalize_domains(intent)
     domain_names = [d["domain"] for d in domains]
@@ -505,6 +526,7 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                         "sort": sort if sort_attribute else None,
                         "fields": fields,
                         "product_name_entities": product_name_entities,
+                        "class_suffixes": (intent.get("identity_comparison") or {}).get("classes", []),
                         "triggers": rdb_triggers,
                     }
                 )

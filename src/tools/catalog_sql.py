@@ -123,10 +123,20 @@ def numeric_value(value, column: str, domain: str = "") -> str:
     elif column == "remaining_days" and text.endswith("일"):
         text = text[:-1].strip()
     elif column in {"pd_net_tamt", "fd_nast_suma"} or (column == "du_last_aum" and domain == "국내ETF"):
-        for unit, factor in (("조원", "1e12"), ("억원", "1e8"), ("만원", "1e4"), ("원", "1")):
+        for unit, factor in (("조원", "1e12"), ("천억원", "1e11"), ("백억원", "1e10"), ("십억원", "1e9"), ("억원", "1e8"), ("만원", "1e4"), ("원", "1")):
             if text.endswith(unit):
-                text, multiplier = text[:-len(unit)].strip(), Decimal(factor)
+                text, multiplier = text[:-len(unit)].strip() or "1", Decimal(factor)
                 break
+    elif column == "du_last_aum" and domain == "해외ETF":
+        for currency in ("달러", "USD", "usd"):
+            if not text.endswith(currency):
+                continue
+            text = text[:-len(currency)]
+            for suffix, factor in (("조", "1e12"), ("천억", "1e11"), ("백억", "1e10"), ("십억", "1e9"), ("억", "1e8"), ("만", "1e4")):
+                if text.endswith(suffix):
+                    text, multiplier = text[:-len(suffix)] or "1", Decimal(factor)
+                    break
+            break
     elif text.endswith("%") and ("rt" in column or "_er_" in column or "yield" in column):
         text = text[:-1].strip()
     if not _NUMBER.fullmatch(text) or len(text) > 64:
@@ -243,6 +253,31 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         op, value = record.get("operator"), record.get("value")
         if value is None or not str(value).strip():
             raise CompileError("빈 필터 값")
+        if record.get("category_values"):
+            if op not in {"eq", "ne", "neq"}:
+                raise CompileError("온톨로지 범주 조건의 연산자 미지원")
+            negation = "NOT " if op in {"ne", "neq"} else ""
+            return f"{col} {negation}IN ({', '.join(literal(v) for v in record['category_values'])})"
+        flag = rdb_schema.BINARY_COLUMN_CONTRACTS.get((domain, record["column"]))
+        if flag is None and spec and set(spec.known_values) == {"Y", "N"}:
+            flag = {"true": "Y", "false": "N", "numeric": False}
+        if flag:
+            token = normalize(str(value))
+            polarity = None
+            if token in {"true", "1", "y", "yes", "가능", "참", *flag.get("true_aliases", ())}:
+                polarity = "true"
+            elif token in {"false", "0", "n", "no", "불가", "거짓", *flag.get("false_aliases", ())}:
+                polarity = "false"
+            if polarity is not None:
+                if op not in {"eq", "ne", "neq"}:
+                    raise CompileError("참/거짓 범위 비교는 지원하지 않습니다")
+                if op in {"ne", "neq"}:
+                    polarity = "false" if polarity == "true" else "true"
+                # Equality to the known negative code does not label arbitrary
+                # non-positive codes (or NULL) as a verified negative.
+                lhs = f"({_numeric_expr(col)})" if flag["numeric"] else f"BTRIM({col}::text)"
+                rhs = flag[polarity] if flag["numeric"] else literal(flag[polarity])
+                return f"{lhs} = {rhs}"
         if record.get("entity_identity"):
             if op != "contains" or record.get("column") != reviewed["상품명"].column:
                 raise CompileError("상품식별 표시는 검토된 상품명 contains 조건에만 허용됩니다")
@@ -320,6 +355,21 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         else:
             where.append(term)
     where.extend("(" + " OR ".join(items) + ")" for items in alternatives.values())
+    if resolved.get("class_suffixes"):
+        if domain != "펀드" or not any(c.get("entity_identity") for c in resolved.get("conditions", [])):
+            raise CompileError("클래스 접미사 검색에는 펀드명 범위가 필요합니다")
+        suffixes = resolved["class_suffixes"]
+        if any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]{0,30}", s) for s in suffixes):
+            raise CompileError("유효하지 않은 클래스 코드")
+        where.append("(" + " OR ".join("base.itm_nm ~* " + literal(r"(?:Class|종류)\s*" + re.escape(s) + "$" ) for s in suffixes) + ")")
+        refs.add((table, "itm_nm"))
+    usd_amount = domain == "해외ETF" and any(
+        c.get("column") == "du_last_aum" and str(c.get("value", "")).strip().lower().endswith(("달러", "usd"))
+        for c in resolved.get("conditions", []))
+    if usd_amount:
+        refs.add((table, "pd_trd_ccy"))
+        where.append(f"base.pd_trd_ccy = {literal('USD')}")
+        assumptions.append("해외ETF AUM의 달러 조건은 거래통화 USD 행에만 적용하며 환율 변환을 하지 않습니다.")
     # These are reviewed domain caveats, now enforced independently of SQL LLMs.
     used_condition_columns = {item.get("column") for item in resolved.get("conditions", [])}
     subtypes = resolved.get("subtype") or []
@@ -333,6 +383,12 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
     if sort_expr:
         where.append(f"{sort_expr} IS NOT NULL")
     fields = list(resolved.get("fields", []))
+    # Return the actual tested values, so a ranking/filter claim is auditable.
+    for record in resolved.get("conditions", []):
+        if record.get("column") and not any(f.get("column") == record["column"] for f in fields):
+            fields.append({**record, "attribute": f"조건근거({record['attribute']})"})
+    if usd_amount:
+        fields.append({"attribute": "AUM통화", "column": "pd_trd_ccy", "spec": None})
     if not union_mode:
         # Identity + source dates are provenance, not optional display concepts.
         # They remain available even when the intent LLM omits them from fields.

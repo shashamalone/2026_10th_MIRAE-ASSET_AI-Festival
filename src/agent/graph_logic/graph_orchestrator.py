@@ -107,7 +107,7 @@ def _schema_search_text(question: str, frame: dict) -> str:
     return "\n".join(x for x in parts if x)
 
 
-def _fast_plan(question: str, frame: dict) -> tuple[dict | None, list[str]]:
+def _fast_plan(question: str, frame: dict, seed_class: str = "Company") -> tuple[dict | None, list[str]]:
     """"자회사"/"편입" 류 관계는 결정적 plan으로 바로 처리한다(LLM 생성/
     재시도 없이). 원본 질문 텍스트 자체에 이미 "자회사"/"편입" 같은
     한국어 표현이 그대로 들어 있으므로, frame.relations가 비어 있어도
@@ -120,16 +120,27 @@ def _fast_plan(question: str, frame: dict) -> tuple[dict | None, list[str]]:
     edge를 자주 틀려 3회 교정 안에 abstain하는 사례가 실측됐다 - 실제로는
     이 관계가 이미 그래프에 있었다(직접 확인, ETF 10건 이상). 자회사류와
     똑같이 결정적 plan으로 처리해서 이 실패를 없앤다."""
-    relation_text = " ".join(
-        [question] + [x.get("raw", "") for x in frame.get("relations") or []]
-    ).casefold()
+    relations = frame.get("relations") or []
+    if frame.get("relation_scope"):
+        # A question may contain several independent relations. Only this
+        # step's dependency chain may decide its path; other clauses are not
+        # permission to add a subsidiary or holding edge.
+        predicates = {str(r.get("relation", "")).casefold() for r in relations}
+        has_subsidiary = bool(predicates & {"subsidiary_of", "has_subsidiary", "자회사"})
+        has_holding = bool(predicates & {"holds", "holding", "held_by", "편입", "보유"})
+        target = str((relations[-1] if relations else {}).get("subject_domain", "")).casefold()
+        etf_target = "etf" in target or (has_holding and not target)
+        relation_text = ""
+    else:
+        relation_text = " ".join([question] + [x.get("raw", "") for x in relations]).casefold()
+        has_subsidiary = "자회사" in relation_text or "출자" in relation_text
+        has_holding = "편입" in relation_text or "보유" in relation_text or "포함" in relation_text
+        etf_target = "etf" in relation_text or "상장지수" in relation_text
     limit = frame.get("limit") or 100
-    has_subsidiary = "자회사" in relation_text or "출자" in relation_text
-    has_holding = "편입" in relation_text or "보유" in relation_text or "포함" in relation_text
     if not has_subsidiary and not has_holding:
         return None, []
     if has_subsidiary:
-        if "etf" in relation_text or has_holding or "상장지수" in relation_text:
+        if etf_target and has_holding:
             return subsidiary_holding_etf_plan(limit=max(limit, 100)), [
                 "fp:Company", "fp:SubsidiaryRelation", "fp:Security", "fp:Holding",
                 "fp:ETF", "fp:Document",
@@ -137,8 +148,16 @@ def _fast_plan(question: str, frame: dict) -> tuple[dict | None, list[str]]:
         return subsidiary_relation_plan(limit=limit), [
             "fp:Company", "fp:SubsidiaryRelation", "fp:Document",
         ]
-    if "etf" in relation_text or "상장지수" in relation_text:
-        return company_holding_etf_plan(limit=max(limit, 100)), [
+    if etf_target:
+        plan = company_holding_etf_plan(limit=max(limit, 100))
+        if seed_class == "Security":
+            plan["nodes"] = [{**n, "id": "seed"} if n["id"] == "security" else n
+                             for n in plan["nodes"] if n["id"] != "seed"]
+            plan["edges"] = [{**e, "object": "seed"} if e["object"] == "security" else e
+                             for e in plan["edges"] if e["predicate"] != "fp:issuedByCompany"]
+        elif seed_class != "Company":
+            return None, []
+        return plan, [
             "fp:Company", "fp:Security", "fp:Holding", "fp:ETF", "fp:Document",
         ]
     return None, []
@@ -295,10 +314,7 @@ def _extract_entity_codes(plan: dict, rows: list[dict]) -> list[str]:
     code_aliases = [
         str(o.get("alias"))
         for o in (plan.get("outputs") or [])
-        if isinstance(o, dict) and (
-            str(o.get("property", "")).lower().endswith("code")
-            or "code" in str(o.get("alias", "")).lower()
-        )
+        if isinstance(o, dict) and str(expand_uri(str(o.get("property", "")))) == FP + "productCode"
     ]
     codes: list[str] = []
     for row in rows:
@@ -321,6 +337,16 @@ def run(question: str, frame: dict, *,
     생성한다."""
     trace = []
     seed = resolve_frame_seed(question, frame)
+    if seed["status"] == "not_found" and frame.get("relation_scope"):
+        root = (frame.get("relations") or [{}])[0]
+        if root.get("relation") in {"holds", "holding", "held_by", "subsidiary_of", "has_subsidiary"}:
+            entities = frame.get("entities") or []
+            if entities and entities[0].get("role") not in {"company", "issuer"}:
+                alternate = {**frame, "entities": [{**entities[0], "role": "company"}]}
+                alternate_seed = resolve_frame_seed(question, alternate)
+                alternate_seed["attempts"] = seed["attempts"] + alternate_seed["attempts"]
+                seed = alternate_seed
+                trace.append("관계 주체가 상품으로 해소되지 않아 동일 표기를 회사/증권 식별자로 대조했습니다.")
     attempts_summary = ", ".join(
         f"{a['text']}/{a['role']}/{a['class_name']}={a['status']}" for a in seed["attempts"])
     if seed["status"] == "ambiguous":
@@ -338,8 +364,12 @@ def run(question: str, frame: dict, *,
     trace.append(f"entity: {resolved['text']} -> resolved ({class_local})")
     trace.append(f"entity attempts: {attempts_summary}")
 
-    plan, seeds = _fast_plan(question, frame)
-    schema_text = _schema_search_text(question, frame)
+    scoped_question = question
+    if frame.get("relation_scope"):
+        scoped_question = json.dumps({"entities": frame.get("entities"), "relations": frame.get("relations"),
+                                      "requested_fields": frame.get("requested_fields"), "constraints": frame.get("constraints")}, ensure_ascii=False)
+    plan, seeds = _fast_plan(scoped_question, frame, class_local)
+    schema_text = _schema_search_text(scoped_question, frame)
     try:
         fragment = catalog().select_fragment(schema_text, seed_classes=seeds or [resolved["class_uri"]],
                                              hops=2, max_classes=18, max_properties=60)
@@ -362,7 +392,7 @@ def run(question: str, frame: dict, *,
         for attempt in range(1, max(1, min(max_corrections, MAX_CORRECTIONS)) + 1):
             try:
                 candidate = _sanitize_plan(
-                    generate(question, resolved, fragment, previous, errors), resolved, trace)
+                    generate(scoped_question, resolved, fragment, previous, errors), resolved, trace)
                 validation = validate_graph_plan(candidate, resolved, fragment, catalog())
                 errors = list(validation.errors)
             except Exception as exc:
