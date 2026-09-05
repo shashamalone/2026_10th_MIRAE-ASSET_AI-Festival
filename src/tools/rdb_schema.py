@@ -681,6 +681,7 @@ def get_output_views(domain: str) -> dict:
                             "aliases": ("분류 근거", "분류 경로", "온톨로지 분류 근거")}}
         if domain == "국내ETF":
             views["상품동일성키"] = {"kind": "identity_keys", "inputs": ("pd_itm_no", "pd_lstg_dt", "pd_lste_dt"), "aliases": ()}
+            views["복제방식"] = {"kind": "classification", "inputs": ("cu_strtegy",), "axes": {"cu_strtegy": "ReplicationMethod"}, "aliases": ("복제 방식", "지수 복제 방식")}
             views["상장여부"] = {"kind": "listing", "inputs": ("pd_lstg_dt", "pd_lste_dt", "cu_upt_dt"), "aliases": ("상장 상태",)}
             views["수익률"] = {"kind": "return_series", "inputs": ("du_er_1d", "du_er_1m", "du_er_3m", "du_er_6m", "du_er_1y", "du_er_ytd"), "aliases": (), "periods": ("1일", "1개월", "3개월", "6개월", "1년", "연초 대비")}
         else:

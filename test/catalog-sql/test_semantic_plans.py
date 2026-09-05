@@ -32,6 +32,20 @@ class SemanticPlanTests(unittest.TestCase):
         row = utils.derive_output_views([{"pd_lstg_dt": "20200101", "pd_lste_dt": "99991231", "cu_upt_dt": "20260824"}], [{"attribute": "상장 여부", **view}])[0]
         self.assertEqual(row["_derived_fields"]["상장여부"]["value"], "상장기간 내")
 
+    def test_replication_axis_uses_same_raw_strategy_without_guessing(self):
+        view = rdb_schema.get_output_view("국내ETF", "복제방식")
+        row = utils.derive_output_views([{"cu_strtegy": "실물복제"}], [{"attribute": "복제방식", **view}])[0]
+        self.assertIn("Replication_Physical", row["_derived_fields"]["복제방식"]["value"])
+
+    def test_cross_currency_aum_cannot_have_global_rank(self):
+        state = {"question": "국내 해외 ETF AUM 비교", "intent": {
+            "task": "comparison", "product_domain": [{"domain": d, "subtype": []} for d in ("국내ETF", "해외ETF")],
+            "sort": {"attribute": "AUM", "order": "desc", "limit": "5"},
+            "output_requirements": {"fields": ["AUM"]}}}
+        result = self.planner.plan_query_node(state)
+        self.assertFalse(result["route"]["needs_merge_rank"])
+        self.assertIn("환율", " ".join(result["route"]["blocking_reasons"]))
+
     def test_unqualified_return_has_periods_and_keeps_nulls(self):
         view = rdb_schema.get_output_view("펀드", "수익률")
         row = utils.derive_output_views([{"fd_mm1_ern_r": 2.3, "fd_yr1_ern_r": None}], [{"attribute": "수익률", **view}])[0]

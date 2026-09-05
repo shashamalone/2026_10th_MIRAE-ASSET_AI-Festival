@@ -569,6 +569,10 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     else:
         merge_group_ids = []
     needs_merge_rank = len(merge_group_ids) > 1
+    rank_domains = {p.get("domain") for p in plan if p["step_id"] in merge_group_ids}
+    if needs_merge_rank and "해외ETF" in rank_domains and len(rank_domains) > 1 and "".join(sort_attribute.split()).casefold() in {"aum", "순자산", "순자산총액", "순자산규모"}:
+        needs_merge_rank = False
+        blocking_reasons.append("해외ETF의 거래통화 AUM과 국내 상품의 원화 AUM은 환율·환산 기준일 없이 합쳐 순위를 매길 수 없습니다. 각 도메인 안에서만 정렬해 표시합니다.")
 
     # -----------------------------------------------------------------
     # 4) 라우팅 요약

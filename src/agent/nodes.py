@@ -1975,7 +1975,6 @@ def generate_answer_node(state: PipelineState) -> dict:
     # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
     # narrative questions still use the existing synthesis path plus the contract.
     structured_only = (bool(field_contract) and not narrative_topics
-                       and (intent.get("task") in {"lookup", "filter_rank", "comparison"} or identity_answer)
                        and not route.get("needs_graph") and not route.get("needs_vector")
                        and not any(r.get("engine") in {"graph", "vector"}
                                    for r in (state.get("step_results") or {}).values()))
