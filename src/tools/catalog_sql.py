@@ -280,6 +280,19 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
                 lhs = f"({_numeric_expr(col)})" if flag["numeric"] else f"BTRIM({col}::text)"
                 rhs = flag[polarity] if flag["numeric"] else literal(flag[polarity])
                 return f"{lhs} = {rhs}"
+        if spec and spec.value_type == "categorical" and spec.known_values and op in {"eq", "ne", "neq"}:
+            # A reviewed categorical domain is a closed set for equality.  Do
+            # not ask an LLM to choose the "nearest" member or weaken equality
+            # to a substring: either operation can turn a harmless zero-row
+            # result into a silently wrong classification.  Whitespace/case
+            # normalization is lossless; anything else must remain blocked.
+            matches = [candidate for candidate in spec.known_values
+                       if normalize(candidate) == normalize(str(value))]
+            if len(matches) != 1:
+                raise CompileError(
+                    f"등록되지 않은 범주값: {value!r} (컬럼 {record['column']})"
+                )
+            value = matches[0]
         if record.get("entity_identity"):
             if op != "contains" or record.get("column") != reviewed["상품명"].column:
                 raise CompileError("상품식별 표시는 검토된 상품명 contains 조건에만 허용됩니다")

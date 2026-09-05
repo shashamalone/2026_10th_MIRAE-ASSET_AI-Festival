@@ -73,6 +73,18 @@ class CompilerTests(unittest.TestCase):
         with self.assertRaises(c.CompileError):
             self.compile(schema)
 
+    def test_known_category_never_uses_nearest_value_or_like_fallback(self):
+        exact = resolved("채권", conditions=[
+            {"attribute": "채권종류", "operator": "eq", "value": " 국고채권 "},
+        ])
+        self.assertIn("base.bd_knd::text = E'국고채권'", self.compile(exact))
+
+        unreviewed = resolved("채권", conditions=[
+            {"attribute": "채권종류", "operator": "eq", "value": "국고채"},
+        ])
+        with self.assertRaisesRegex(c.CompileError, "등록되지 않은 범주값"):
+            self.compile(unreviewed)
+
     def test_named_lookup_retains_unverified_classification_caveat(self):
         step = {"domain": "국내ETF", "subtype": ["인덱스"], "product_name_entities": [{"surface_form": "KODEX 200"}]}
         schema = utils.build_resolved_schema(step, r.get_attribute_catalog("국내ETF"), [])
