@@ -11,6 +11,33 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_strict_comparators_are_preserved_from_user_words(self):
+        intent = {"conditions": [{"attribute": "수량", "value": "0", "operator": "gte"}]}
+        fixed, _ = evidence_contract.restore_explicit_comparators(intent, "수량이 0보다 큰 상품")
+        self.assertEqual(fixed["conditions"][0]["operator"], "gt")
+        fixed, _ = evidence_contract.restore_explicit_comparators(intent, "수량이 0 이상인 상품")
+        self.assertEqual(fixed["conditions"][0]["operator"], "gte")
+        from agent.intent_guard import _fix_condition
+        self.assertEqual(_fix_condition({"operator": ">"})[0]["operator"], "gt")
+
+    def test_return_display_matches_explicit_ranking_measure(self):
+        intent = {"sort": {"attribute": "매수수익률"}, "output_requirements": {"fields": ["수익률"]}}
+        fixed, _ = evidence_contract.restore_explicit_comparators(intent, "매수수익률 순으로 수익률 보여줘")
+        self.assertEqual(fixed["output_requirements"]["fields"], ["매수수익률"])
+
+    def test_boolean_aliases_do_not_require_llm_resolution(self):
+        forbidden = Mock()
+        forbidden.with_structured_output.side_effect = AssertionError("LLM forbidden")
+        mapping, missing = utils.resolve_concepts_for_domain("국내ETF", ["판매 여부", "거래 정지 여부"], "", forbidden)
+        self.assertEqual(missing, [])
+        self.assertEqual(mapping["거래 정지 여부"].column, "pd_tr_yn")
+
+    def test_identity_plan_has_no_document_search_without_document_topics(self):
+        intent = {"identity_comparison": {"classes": ["A", "C"]}, "product_domain": [{"domain": "펀드", "subtype": []}],
+                  "output_requirements": {"fields": ["대표종목번호"], "narrative_topics": []}, "answer_format": "list_with_narrative"}
+        plan = self.planner.plan_query_node({"intent": intent, "question": "클래스 비교"})
+        self.assertFalse(plan["route"]["needs_vector"])
+
     def test_region_is_exposure_only_for_explicit_asset_phrase(self):
         intent = {"product_domain": [{"domain": "해외ETF", "subtype": ["주식형"]}], "conditions": []}
         fixed, notes = utils.preserve_explicit_investment_region(intent, "미국 주식형 ETF 중 보수 낮은 상품")

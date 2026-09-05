@@ -224,10 +224,9 @@ DOMAIN_SALE_POLICY: dict[str, dict[str, str]] = {
     "채권": {
         "mode": "no_filter",
         "reason": (
-            "buyable_quantity는 주최측이 무효라고 공지한 컬럼이고(21,882행 중 "
-            "634행만 값이 있으며 그중 다수가 0), 이 테이블에는 상장폐지나 "
-            "거래종료를 나타내는 컬럼 자체가 없다. 따라서 채권은 '판매 가능' "
-            "조건을 SQL에 걸지 않고 전 종목을 구매가능으로 간주한다."
+            "기존 카탈로그는 buyable_quantity 무효 공지를 근거로 판매 가능 필터를 비활성화했다. "
+            "원공지가 현재 배포본에 적용되는지는 별도 확인이 필요하다. 필터 미적용은 전 종목의 실제 "
+            "주문 가능 여부가 확인됐다는 뜻이 아니다. 명시적으로 요청한 수량 수치 비교와 주문 가능 판정을 구분한다."
         ),
     },
     "국내ETF": {
@@ -643,6 +642,7 @@ RDB_SCHEMA["펀드"] = {
 # Output-only semantic views. These are not physical columns or filter aliases.
 # Dependencies are official raw columns; class membership/labels come from TBox.
 BOND_OUTPUT_VIEWS = {
+    "등급서열규칙": {"kind": "rating_order", "inputs": (), "aliases": ("등급 서열 규칙", "신용등급 서열", "등급 순서")},
     "원본등급값": {"kind": "raw_rating", "inputs": ("crd_grd",),
                  "aliases": ("원본 등급값", "원본 신용등급", "원등급", "원시 등급값")},
     "온톨로지분류값": {"kind": "rating", "inputs": ("crd_grd",),
@@ -1385,11 +1385,14 @@ BOND_ATTRIBUTES["세후수익률"] = AttributeSpec(
     column="after_tax_yield", value_type="numeric",
     note="개인 세후 운용수익률(%). 법인 세후(corp_after_tax_yield)와 구분하며 결측은 보완하지 않는다.",
 )
+DOMESTIC_ETF_ATTRIBUTES["거래정지여부"] = AttributeSpec(
+    column="pd_tr_yn", value_type="boolean", note="원천 0=정상, 1=거래정지. NULL은 미확인.")
+FUND_ATTRIBUTES["대표종목번호"] = AttributeSpec(column="rptt_ksd_itm_no", value_type="text", note="대표예탁원종목번호 원천키. 개별 종목번호와 구분한다.")
 SEMANTIC_ALIASES = {
-    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리"},
-    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},
+    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리", "원신용등급": "신용등급"},
+    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "판매여부": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},
     "해외ETF": {"AUM": "순자산", "현재AUM": "순자산", "순자산(AUM)": "순자산", "총보수": "총보수율", "총보수요율": "총보수율"},
-    "펀드": {"판매상태": "판매가능여부", "AUM": "순자산"},
+    "펀드": {"판매상태": "판매가능여부", "판매여부": "판매가능여부", "AUM": "순자산"},
 }
 for _domain, _aliases in SEMANTIC_ALIASES.items():
     for _alias, _canonical in _aliases.items():

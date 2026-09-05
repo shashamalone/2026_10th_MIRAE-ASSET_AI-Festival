@@ -185,7 +185,7 @@ INTENT_ANALYSIS_JSON_SCHEMA = {
                     },
                     "operator": {
                         "type": "string",
-                        "enum": ["eq", "gte", "lte", "between", "contains"],
+                        "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "between", "contains"],
                         "description": "'이상'=gte, '이하'=lte, '인'=eq, '사이'=between, '포함/관련'=contains. 문장의 어미로 결정한다.",
                     },
                     "value": {"type": "string"},

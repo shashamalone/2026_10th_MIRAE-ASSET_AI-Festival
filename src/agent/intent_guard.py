@@ -14,10 +14,13 @@ _OPERATOR_ALIASES = {
     "eq": "eq", "=": "eq", "==": "eq", "인": "eq",
     "gte": "gte", ">=": "gte", "이상": "gte",
     "lte": "lte", "<=": "lte", "이하": "lte",
+    "gt": "gt", ">": "gt", "초과": "gt",
+    "lt": "lt", "<": "lt", "미만": "lt",
+    "ne": "ne", "!=": "ne", "<>": "ne",
     "between": "between", "사이": "between",
     "contains": "contains", "포함": "contains", "관련": "contains",
 }
-_ALLOWED_OPERATORS = {"eq", "gte", "lte", "between", "contains"}
+_ALLOWED_OPERATORS = {"eq", "ne", "gt", "gte", "lt", "lte", "between", "contains"}
 
 _ORDER_ALIASES = {"asc": "asc", "오름차순": "asc", "desc": "desc", "내림차순": "desc"}
 

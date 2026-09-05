@@ -14,6 +14,30 @@ def _non_identity_topics(topics: list[str]) -> list[str]:
     return [t for t in topics if not re.search(r"동일|같은.*펀드|상장\s*클래스|별도\s*상품|동시에\s*나타나는\s*이유", t)]
 
 
+def restore_explicit_comparators(intent: dict, question: str) -> tuple[dict, list[str]]:
+    text = re.sub(r"\s+", "", question).casefold()
+    conditions, notes = [], []
+    operators = {"큰": "gt", "초과": "gt", "이상": "gte", "작은": "lt", "미만": "lt", "이하": "lte"}
+    for original in intent.get("conditions") or []:
+        condition = dict(original)
+        attribute = re.sub(r"\s+", "", condition.get("attribute", "")).casefold()
+        value = re.sub(r"\s+", "", str(condition.get("value", ""))).casefold()
+        if attribute and value and condition.get("operator") != "between":
+            match = re.search(re.escape(attribute) + r"(?:이|가|은|는)?" + re.escape(value) + r"(?:보다)?(큰|초과|이상|작은|미만|이하)", text)
+            if match and condition.get("operator") != operators[match[1]]:
+                condition["operator"] = operators[match[1]]
+                notes.append(f"원문 경계조건 보존: {attribute} {condition['operator']} {value}; 초과/이상을 바꾸지 않습니다.")
+        conditions.append(condition)
+    output = dict(intent.get("output_requirements") or {})
+    sort_attribute = (intent.get("sort") or {}).get("attribute") or ""
+    if sort_attribute.endswith("수익률") and re.sub(r"\s+", "", sort_attribute).casefold() in text:
+        fields = list(output.get("fields") or [])
+        if "수익률" in fields and sort_attribute != "수익률":
+            output["fields"] = [sort_attribute if f == "수익률" else f for f in fields]
+            notes.append(f"일반 '수익률' 출력 요청은 원문에 명시된 정렬 지표 '{sort_attribute}'로 구체화했습니다.")
+    return {**intent, "conditions": conditions, "output_requirements": output}, notes
+
+
 def request_blockers(intent: dict, question: str, *, today: date | None = None) -> list[str]:
     blockers = []
     if intent.get("issuer_type_conflict"):

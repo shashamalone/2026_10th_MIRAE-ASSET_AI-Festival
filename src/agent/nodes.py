@@ -116,6 +116,8 @@ def verify_intent_node(state: PipelineState) -> dict:
         trace_msg = "의도 분석 검수 완료: 수정 사항 없음 (원본 유지)"
 
     final_intent, guard_notes = guard_intent(final_intent)
+    final_intent, comparator_notes = evidence_contract.restore_explicit_comparators(final_intent, question)
+    guard_notes.extend(comparator_notes)
     final_intent, class_notes = evidence_contract.restore_class_comparison(final_intent, question)
     guard_notes.extend(class_notes)
     final_intent, cross_notes = evidence_contract.restore_cross_market_identity(final_intent, question)
@@ -1905,6 +1907,11 @@ def _render_execution_limits(state: PipelineState) -> str:
         notes.append("아래 관계는 적재된 스냅샷에서 조회한 결과입니다. 기간별 이력·사건일을 대조하는 조회가 구현되지 않아 요청 기간 전체의 이력 또는 현재 편입 여부를 확정할 수 없습니다. 뉴스 언급을 편입 사실로 간주하지 않습니다.")
     if re.search(r"중복률|중복도", question):
         notes.append("편입종목 중복도는 동일 기준일의 전체 보유내역과 종목 식별자·비중, 클래스 중복 제거가 확인되어야 계산할 수 있습니다. 현재 실행 경로에는 이 전수 대조·계산 단계가 없어 수치 중복률을 제공하지 않습니다. 일부 검색된 편입관계는 계산 결과가 아닙니다.")
+    if re.search(r"매수\s*가능|판매\s*가능", question):
+        for domain in (state.get("intent") or {}).get("product_domain") or []:
+            policy = rdb_schema.get_sale_policy(domain.get("domain", ""))
+            if policy.get("mode") == "no_filter":
+                notes.append(f"{domain['domain']}: 카탈로그 정책상 판매·매수 가능 여부를 확정하지 않습니다. 수량 원천값 조회와 실제 주문 가능 판정은 다릅니다. {policy.get('reason', '')}")
     for sid, result in (state.get("step_results") or {}).items():
         reason = result.get("skipped_reason") or result.get("error")
         if reason:

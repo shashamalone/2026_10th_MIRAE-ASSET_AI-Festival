@@ -349,6 +349,11 @@ def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
                 item.update(status="derivation_unavailable", detail=view["reason"])
                 items[catalog_sql.normalize(view["attribute"])] = item
                 continue
+            if view["kind"] == "rating_order":
+                order = rdb_schema.get_attribute_catalog("채권")["신용등급"].value_order
+                item.update(value=" < ".join(order), detail="rdb_schema 신용등급 서열(낮음→높음). AA0·A0 등의 0은 원천 중립등급 표기입니다. 신용평가 보고서 원문을 확보했다는 뜻은 아닙니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
             if view["kind"] == "return_series":
                 parts = []
                 for column, period in zip(columns, view["periods"]):

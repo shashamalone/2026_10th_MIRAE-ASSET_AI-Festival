@@ -536,6 +536,8 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     # 3) Vector 단계: 서술형 답변이 필요하면 마지막에 하나
     # -----------------------------------------------------------------
     needs_vector = bool(narrative_topics) or answer_format in ("narrative", "list_with_narrative")
+    if intent.get("identity_comparison") and not narrative_topics:
+        needs_vector = False
     if needs_vector:
         upstream = rdb_step_ids or terminal_graph_step_ids
         plan.append(
