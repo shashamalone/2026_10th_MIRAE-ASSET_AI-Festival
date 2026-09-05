@@ -11,6 +11,15 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_relative_event_dates_use_execution_date_not_invented_year(self):
+        intent = {"conditions": [{"attribute": "사건일", "operator": "gte", "value": "2023-01-01"}]}
+        fixed, _ = evidence_contract.restore_relative_event_window(intent, "최근 6개월 연결 이력", today=date(2026, 9, 5))
+        self.assertEqual((fixed["conditions"][0]["value"], fixed["conditions"][0]["value_2"]), ("2026-03-05", "2026-09-05"))
+        fixed, _ = evidence_contract.restore_relative_event_window(intent, "최근 1개월 사건", today=date(2024, 3, 31))
+        self.assertEqual(fixed["conditions"][0]["value"], "2024-02-29")
+        self.assertFalse(evidence_contract.restore_relative_event_window(intent, "2025-01-01 기준 최근 6개월 사건")[1])
+        self.assertFalse(evidence_contract.restore_relative_event_window(intent, "최근 6개월 수익률")[1])
+
     def test_explicit_parent_children_union_keeps_other_constraints(self):
         intent = {"product_domain": [{"domain": "국내ETF"}], "output_requirements": {"fields": ["상품명", "편입비중"]}, "relations": [
             {"id": "P", "subject_domain": "Company", "relation": "subsidiary_of", "object_entity": "예시전자"},

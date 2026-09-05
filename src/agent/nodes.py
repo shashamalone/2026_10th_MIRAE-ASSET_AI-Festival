@@ -118,6 +118,8 @@ def verify_intent_node(state: PipelineState) -> dict:
     final_intent, guard_notes = guard_intent(final_intent)
     final_intent, comparator_notes = evidence_contract.restore_explicit_comparators(final_intent, question)
     guard_notes.extend(comparator_notes)
+    final_intent, time_notes = evidence_contract.restore_relative_event_window(final_intent, question)
+    guard_notes.extend(time_notes)
     final_intent, class_notes = evidence_contract.restore_class_comparison(final_intent, question)
     guard_notes.extend(class_notes)
     final_intent, cross_notes = evidence_contract.restore_cross_market_identity(final_intent, question)
@@ -1789,7 +1791,12 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                     if dates:
                         for date_column in dates:
                             binding = next((b for b in bindings if b["key"] == date_column), None)
-                            items.append(_field_evidence(f"{label}({date_column})", binding, row, failure))
+                            metric_date = normalized in {"aum기준일", "수익률기준일", "수치기준일", "지표기준일"}
+                            date_label = f"{label} 검토용 원천 갱신일({date_column})" if metric_date else f"{label}({date_column})"
+                            item = _field_evidence(date_label, binding, row, failure)
+                            if metric_date:
+                                item["detail"] = "카탈로그에 연결된 원천별 날짜입니다. 해당 수치 자체의 관측일로 하나를 확정하거나 모두 같은 기준일로 간주하지 않습니다."
+                            items.append(item)
                         continue
                 # A request for source column names is provenance, not a DB value.
                 if utils.is_source_column_request(label):

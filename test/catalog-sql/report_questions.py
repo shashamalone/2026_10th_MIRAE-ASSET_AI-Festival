@@ -6,6 +6,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def replay_section(run, qid):
+    lines = []
+    for path in sorted(run.glob(f"*replay*/{qid}.json")):
+        replay = json.loads(path.read_text(encoding="utf-8"))
+        lines += ["", f"### 수정 후 무료 조회 검증 ({path.parent.name})", "",
+                  "저장된 의도로 SQL/결정론적 Graph를 검증했습니다. 의도 분석·임베딩·설명 LLM 재실행이 아니며 단회 정답률로 계산하지 않습니다.",
+                  "", "```json", json.dumps(replay.get("verification"), ensure_ascii=False, indent=2), "```",
+                  "", (replay.get("answer") or {}).get("answer", "(답변 없음)")]
+        for result in (replay.get("step_results") or {}).values():
+            for field, language in (("sql", "sql"), ("sparql", "sparql")):
+                if result.get(field):
+                    lines += ["", "```" + language, result[field], "```"]
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path, required=True)
@@ -47,6 +62,7 @@ def main():
                   "", "### 이번 실제 단회 답변", ""]
         if not trace:
             lines.append("아직 실제 실행하지 않았습니다. 이전 답변이나 오프라인 재생을 새 실행으로 표시하지 않습니다.")
+            lines += replay_section(run, qid)
             continue
         answer = trace.get("answer") or {}
         lines.append(answer.get("answer") or "(최종 answer 없음)")
@@ -75,18 +91,22 @@ def main():
         lines += ["", "실제 실행 로그:", "", "```text", "\n".join(trace.get("trace_messages") or []), "```"]
         if trace.get("exception"):
             lines += ["", "예외:", "", "```text", str(trace["exception"]), "```"]
-        for replay_path in sorted(run.glob(f"*replay*/{qid}.json")):
-            replay = json.loads(replay_path.read_text(encoding="utf-8"))
-            lines += ["", f"### 수정 후 무료 조회 검증 ({replay_path.parent.name})", "",
-                      "이전 의도 기록을 사용한 SQL/결정론적 Graph 검증입니다. 의도 분석·임베딩·설명 LLM을 다시 실행하지 않았으며 단회 정답률로 집계하지 않습니다.",
-                      "", "```json", json.dumps(replay.get("verification"), ensure_ascii=False, indent=2), "```",
-                      "", (replay.get("answer") or {}).get("answer", "(답변 없음)")]
-            for result in (replay.get("step_results") or {}).values():
-                for field, language in (("sql", "sql"), ("sparql", "sparql")):
-                    if result.get(field):
-                        lines += ["", "```" + language, result[field], "```"]
+        lines += replay_section(run, qid)
     path = run / "문항별_수정검토_Q5_Q7-Q35.md"
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    todo = ["# Q5·Q7–Q35 작업 및 후속 검토", "", "## 이번 작업", "",
+            "- [x] Vector 출처 계약, 상품/기업 식별, 분류·조건·단위·원천 날짜 수정",
+            "- [x] 클래스 동일성, 관계 경로 범위, 조건 합집합/교집합, NULL 사유 출력",
+            "- [x] 회귀검증 및 문항별 실제 질문·이전/단회 답변·조회 과정·무료 검증 기록",
+            "- [ ] Clova 연결 복구 후 아직 실행하지 않은 Q33–Q35의 단회 검증 여부 사용자 확인",
+            "- [ ] commander 독립 검토 및 통합 승인 (merge/deploy/Release 수행하지 않음)",
+            "- [ ] 한글↔영문↔ISIN 기업/증권 연결 자료 및 누락 편입내역·문서 자료 확보",
+            "- [ ] 매수가능수량 무효 원공지의 현재 배포본 적용 범위 확인", "",
+            "35×3 acceptance는 사용자 지시(문항당 1회)를 우선하여 실행하지 않았습니다. 이미 시도한 문항을 자동 재실행하지 않습니다.",
+            "코드 회귀 통과와 정답률은 다릅니다. 상세 판정은 문항별 보고서 참조.", "",
+            "## 문항별 상태", "", "| 문항 | 상태 |", "| --- | --- |"]
+    todo += [f"| {qid} | {reviews.get(qid, {}).get('status', '검토 대기')} |" for qid in ids]
+    (run / "TODO.md").write_text("\n".join(todo) + "\n", encoding="utf-8")
     print(json.dumps({"report": str(path), "executed": len(traces), "requested": len(ids),
                       "blank_answers": [q for q, t in traces.items() if not (t.get("answer") or {}).get("answer")]}, ensure_ascii=False))
 

@@ -114,8 +114,9 @@ nonmutation and plan-to-SQL-to-answer execution without an answer-model call.
   The compiler does not invent missing filters or translate unknown categories.
 - Numeric units without an established conversion (especially foreign-currency
   AUM) are rejected. No exchange rate is fabricated.
-- UNION retains the pre-existing fixed four-column result contract; per-metric
-  provenance and supplementary fields require a separate consumer-contract change.
+- UNION ranks canonical identifiers, then hydrates selected identities with
+  catalog-bound supplementary fields and provenance. Failed hydration remains
+  explicit; foreign currencies are never combined into an unconverted AUM rank.
 - Existing domain subtype/risk-order catalog semantics still require independent
   financial review. A valid SQL query alone is not proof of a correct answer.
 - Description aliases and `as_of_column` are metadata, not evidence that a value
@@ -127,3 +128,28 @@ nonmutation and plan-to-SQL-to-answer execution without an answer-model call.
 - Some legacy manual overrides match exact SQL strings. `E'...'` literals and
   qualified columns can evade those heuristics without changing SQL semantics.
   Any apparent pass-rate gain therefore also requires semantic review.
+
+## Q5 / Q7–Q35 remediation diagnostics (2026-09-05)
+
+- `run_sequence.py` paces unique question attempts and refuses an existing output
+  directory. Paid attempts must not be repeated to replace a failure. Stop on
+  repeated provider outages; no schema safety or release checks are bypassed.
+- `replay_rdb.py` reuses a saved intent from the single trace or previous audit.
+  Model calls are forbidden, optional Graph queries are read-only, and Vector
+  search is explicitly not replayed. This is not end-to-end answer accuracy.
+- `report_questions.py` records all 30 scoped questions (Q5, Q7–Q35), their old
+  and single-attempt answers, SQL/SPARQL, source metadata, follow-up replays, and
+  remaining blockers. It updates the agent-scoped TODO from review decisions.
+- `summarize_trace_results.py` reports runtime statuses, tokens and latency,
+  never a correctness score. The diagnosis spans several code commits.
+- Relation facts require source ID and as-of date. Missing Graph document
+  metadata is disclosed. A classification link is not a holding, a risk grade
+  is not an industry-risk explanation, and a source update date is not proof of
+  the numeric observation date.
+- Explicit parent-and-subsidiary enumerations use a scoped OR group; other
+  independent requirements retain AND. Company names reach bond issuer filters,
+  never the product-ISIN filter. Legal designators are normalized in exact
+  organization comparisons without fuzzy company matching.
+- Provider errors left Q33–Q35 without paid attempts. Q30 overlapped a logging
+  patch but failed at initial intent API access; exclude it from clean-build
+  comparisons. No final frozen-build/official score is claimed.

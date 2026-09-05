@@ -54,7 +54,7 @@ def main():
         if (out / f"{qid}.json").exists():
             raise ValueError(f"Existing replay {qid}; preserve it and use a separate run")
         trace_path = run / "live" / qid / "traces.jsonl"
-        trace = json.loads(trace_path.read_text(encoding="utf-8"))
+        trace = json.loads(trace_path.read_text(encoding="utf-8")) if trace_path.exists() else {"question": cases[qid]["question"]}
         original = trace.get(args.intent_stage) or cases[qid].get(args.intent_stage) or trace.get("intent") or cases[qid].get("intent")
         if not original:
             raise ValueError(f"No saved intent: {qid}")
@@ -65,13 +65,14 @@ def main():
              patch.object(graph_orchestrator, "_llm_plan", forbidden), \
              patch.object(utils, "_resolve_unknown_concepts_via_llm", return_value={}):
             state["intent"], _ = guard_intent(state["intent"])
-            for restore in (evidence_contract.restore_explicit_comparators, evidence_contract.restore_class_comparison, evidence_contract.restore_cross_market_identity,
+            for restore in (evidence_contract.restore_explicit_comparators, evidence_contract.restore_relative_event_window, evidence_contract.restore_class_comparison, evidence_contract.restore_cross_market_identity,
                             utils.preserve_explicit_investment_region, utils.preserve_explicit_output_requests):
                 state["intent"], _ = restore(state["intent"], question)
             state["intent"], _ = utils.preserve_overseas_exposure_scope(state["intent"], question)
             state["intent"], _ = utils.restore_shared_theme_scope(state["intent"], question)
             state["intent"], _ = utils.resolve_named_product_domains(state["intent"])
             state["intent"], _ = utils.prune_inferred_named_subtypes(state["intent"], question)
+            state["intent"], _ = utils.validate_issuer_subjects(state["intent"], question)
             state.update(plan_query_db.plan_query_node(state))
             if not args.allow_graph and any(s["engine"] == "graph" for s in state["plan"]):
                 raise ValueError(f"RDB-only replay cannot bypass Graph dependencies: {qid}")

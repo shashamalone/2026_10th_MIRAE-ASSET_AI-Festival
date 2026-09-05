@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+import calendar
 import re
 
 
@@ -40,6 +41,36 @@ def restore_explicit_comparators(intent: dict, question: str) -> tuple[dict, lis
         sort["limit"] = ""
         notes.append("원문에 개수 제한·최상위 요청이 없어 임의로 추가된 결과 개수 제한을 제거했습니다.")
     return {**intent, "conditions": conditions, "output_requirements": output, "sort": sort}, notes
+
+
+def restore_relative_event_window(intent: dict, question: str, *, today: date | None = None) -> tuple[dict, list[str]]:
+    """Fix invented event dates only for explicit relative-month requests.
+
+    This does not manufacture event history, use a return period as an event
+    filter, or override a user-specified absolute reference date.
+    """
+    match = re.search(r"최근\s*(\d{1,2})\s*개월", question)
+    if not match or not re.search(r"이력|사건|뉴스", question) or re.search(r"20\d{2}[-/.년]", question):
+        return intent, []
+    months = int(match[1])
+    if not 1 <= months <= 60:
+        return intent, []
+    today = today or date.today()
+    index = today.year * 12 + today.month - 1 - months
+    year, month_index = divmod(index, 12)
+    month = month_index + 1
+    start = date(year, month, min(today.day, calendar.monthrange(year, month)[1]))
+    conditions, changed = [], False
+    for original in intent.get("conditions") or []:
+        condition = dict(original)
+        if re.sub(r"\s+", "", condition.get("attribute", "")) in {"사건일", "사건발생일"}:
+            condition.update(operator="between", value=start.isoformat(), value_2=today.isoformat(),
+                             time_window_relative=f"최근 {months}개월")
+            changed = True
+        conditions.append(condition)
+    if not changed:
+        return intent, []
+    return {**intent, "conditions": conditions}, [f"상대 사건 기간을 실행일 {today} 기준 {start}~{today}로 복구했습니다. 기간 이력 데이터의 존재는 별도로 검증합니다."]
 
 
 GRAPH_FIELD_CONCEPTS = {"편입비중", "종목별비중", "편입기준일", "편입내역기준일"}
