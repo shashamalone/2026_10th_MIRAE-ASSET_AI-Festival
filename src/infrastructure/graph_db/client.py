@@ -16,7 +16,8 @@ Oxigraph GraphDB 읽기 전용 클라이언트.
 - 장애 처리: 저장소를 열거나 읽을 수 없는 경우에만 다음 transport로
   failover한다. 잘못된 SPARQL과 정상적인 빈 결과는 장애로 간주하지 않는다.
 - SPARQL 안전성: SERVICE가 없는 SELECT/ASK만 허용하고, INSERT·DELETE·
-  UPDATE 계열 키워드는 차단한다. 결과는 최대 10,000행으로 제한한다.
+  UPDATE 계열 키워드는 차단한다. 결과는 기본 최대 10,000행으로 제한하며,
+  ``max_rows=None``은 엔티티 인덱스 구축처럼 전체를 읽어야 하는 내부 호출 전용이다.
 - HTTP timeout: ``OXIGRAPH_TIMEOUT``으로 조정할 수 있으며 기본값은 60초다.
 - ``triple_count``: 선택된 GraphDB transport에서 전체 triple 수를 확인한다.
 
@@ -114,7 +115,7 @@ class OxigraphClient:
             timeout if timeout is not None else os.getenv("OXIGRAPH_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS))
         )
 
-    def query(self, sparql: str) -> bool | list[dict[str, Any]]:
+    def query(self, sparql: str, *, max_rows: int | None = MAX_ROWS) -> bool | list[dict[str, Any]]:
         kind = _validate_query(sparql)
         failures: list[str] = []
         attempted_paths: set[str] = set()
@@ -133,14 +134,14 @@ class OxigraphClient:
                 continue
             attempted_paths.add(path_key)
             try:
-                return self._query_store(path, sparql, kind)
+                return self._query_store(path, sparql, kind, max_rows=max_rows)
             except GraphStoreUnavailable as exc:
                 failures.append(f"{transport}: {exc}")
                 logger.warning("Oxigraph %s unavailable; trying next transport: %s", transport, exc)
 
         if self.endpoint:
             try:
-                return self._query_http(sparql, kind)
+                return self._query_http(sparql, kind, max_rows=max_rows)
             except (OSError, RuntimeError) as exc:
                 failures.append(f"endpoint: {type(exc).__name__}: {exc}")
 
@@ -164,7 +165,9 @@ class OxigraphClient:
         except Exception as exc:
             raise GraphStoreUnavailable(f"Graph store open 실패({path}): {exc}") from exc
 
-    def _query_store(self, path: Path, sparql: str, kind: str) -> bool | list[dict[str, Any]]:
+    def _query_store(
+        self, path: Path, sparql: str, kind: str, max_rows: int | None = MAX_ROWS
+    ) -> bool | list[dict[str, Any]]:
         try:
             result = self._store(str(path)).query(sparql)
             if kind == "ASK":
@@ -172,8 +175,8 @@ class OxigraphClient:
             variables = [variable.value for variable in result.variables]
             rows = []
             for solution in result:
-                if len(rows) >= MAX_ROWS:
-                    raise ValueError(f"Graph 결과가 상한 {MAX_ROWS:,}행을 초과했습니다")
+                if max_rows is not None and len(rows) >= max_rows:
+                    raise ValueError(f"Graph 결과가 상한 {max_rows:,}행을 초과했습니다")
                 rows.append(
                     {
                         name: (solution[name].value if solution[name] is not None else None)
@@ -186,7 +189,9 @@ class OxigraphClient:
         except OSError as exc:
             raise GraphStoreUnavailable(f"Graph store query 실패({path}): {exc}") from exc
 
-    def _query_http(self, sparql: str, kind: str) -> bool | list[dict[str, Any]]:
+    def _query_http(
+        self, sparql: str, kind: str, max_rows: int | None = MAX_ROWS
+    ) -> bool | list[dict[str, Any]]:
         import requests
 
         response = requests.post(
@@ -202,7 +207,7 @@ class OxigraphClient:
         rows = []
         for binding in payload.get("results", {}).get("bindings", []):
             rows.append({key: value.get("value") for key, value in binding.items()})
-        return rows[:MAX_ROWS]
+        return rows if max_rows is None else rows[:max_rows]
 
     def triple_count(self) -> int:
         result = self.query(
