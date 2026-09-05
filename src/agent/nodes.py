@@ -31,6 +31,7 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import math
@@ -1576,7 +1577,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
     """§10: route.domains + 고정 스냅샷 날짜 대신, state["step_results"]를
     순회해 각 엔진이 실제로 무엇을 근거로 썼는지 조립한다.
 
-    - RDB 단계: 공식 데이터셋명, 조회 건수, 기준일, 근거 컬럼. SQL 전문과
+    - RDB 단계: 공식 데이터셋명, 조회 건수, 기준일. SQL 전문, 물리 컬럼과
       내부 단계 ID는 사용자에게 노출하지 않는다. merged_into로
       다른 단계에 흡수됐거나(§9 UNION 그룹의 비대표 멤버) skipped/error인
       단계는 실제로 근거를 낸 게 없으므로 뺀다.
@@ -1602,16 +1603,10 @@ def _build_retrieved_context(state: PipelineState) -> str:
             if result.get("merged_into") or result.get("skipped_reason") or result.get("error") or not result.get("sql"):
                 continue
             domain = str(result.get("domain") or "")
-            columns = list(dict.fromkeys(
-                binding.get("column") for binding in result.get("output_fields") or []
-                if binding.get("column")
-            ))
             summary = (
                 f"{dataset_labels.get(domain, domain + ' 데이터')} · "
                 f"{rdb_schema.DATA_SNAPSHOT_DATE} · {result.get('count', 0)}건"
             )
-            if columns:
-                summary += " · 근거 컬럼: " + ", ".join(columns)
             parts.append(summary)
             for detail in result.get("hydration_queries") or []:
                 if not detail.get("error"):
@@ -2004,6 +1999,31 @@ def _invoke_answer_with_field_fallback(llm, messages: list, has_field_answer: bo
                 "think_trace": "확보된 항목별 상태와 근거를 출력했으며 추가 설명 생성은 실패했습니다."}
 
 
+def _sanitize_generated_narrative(value: object) -> str:
+    """Keep prose only; structured values are rendered by the code contract.
+
+    Some structured-output providers have returned a mapping in ``answer`` or
+    its Python-literal string form.  Appending that value before the verified
+    field contract exposes implementation syntax and duplicates every value.
+    Vector citations and deterministic fields are appended separately, so a
+    mapping/list here can be discarded without losing retrieved evidence.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if not text or text[0] not in "[{":
+        return text
+    parsed: object
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        try:
+            parsed = ast.literal_eval(text)
+        except (SyntaxError, ValueError):
+            return text
+    return "" if isinstance(parsed, (dict, list)) else text
+
+
 def _render_vector_sources(step_results: dict) -> str:
     """Execution-bound references survive model omissions, blanks and outages.
 
@@ -2267,9 +2287,7 @@ def generate_answer_node(state: PipelineState) -> dict:
     )
     
     # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
-    answer_text = response.get("answer") or ""
-    if not isinstance(answer_text, str):
-        answer_text = json.dumps(answer_text, ensure_ascii=False, default=str)
+    answer_text = _sanitize_generated_narrative(response.get("answer"))
     if field_answer:
         answer_text = "\n\n".join(part for part in [answer_text.strip(), field_answer] if part)
     if vector_sources:

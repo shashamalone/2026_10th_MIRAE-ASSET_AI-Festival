@@ -74,7 +74,8 @@ class AnswerContractTests(unittest.TestCase):
         self.assertNotIn("raw.prbd01n001.buyable_quantity", answer)
         context = self.response(state)["retrieved_context"]
         self.assertIn("국내채권마스터 · 2026-08-24 · 1건", context)
-        self.assertIn("raw.prbd01n001.buyable_quantity", context)
+        self.assertNotIn("raw.", context)
+        self.assertNotIn("근거 컬럼", context)
         self.assertNotIn("SQL:", context)
         self.assertIn("4.266", answer)
         self.llm.with_structured_output.assert_not_called()
@@ -319,6 +320,28 @@ class AnswerContractTests(unittest.TestCase):
                 self.assertIn(reply, answer)
         self.assertIn("요청 항목별 RDB 상태", invocation.call_args.args[0][1][1])
 
+    def test_mapping_shaped_narrative_does_not_duplicate_verified_values(self):
+        state = self.state()
+        state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
+        state["step_results"]["v"] = {
+            "engine": "vector", "status": "ok", "count": 1,
+            "chunks": [{"document_id": "D", "chunk_id": "C",
+                        "chunk_text": "가상 문서의 위험 근거", "document_title": "가상 위험자료"}],
+        }
+        invocation = self.llm.with_structured_output.return_value.invoke
+        invocation.side_effect = None
+        for reply in [
+            {"상품명": "가상회사채 1-2", "매수가능수량": None},
+            "{'상품명': '가상회사채 1-2', '매수가능수량': None}",
+            '{"상품명": "가상회사채 1-2", "매수가능수량": null}',
+        ]:
+            with self.subTest(reply=reply):
+                invocation.return_value = {"answer": reply, "think_trace": "실행 요약"}
+                answer = self.answer(state)
+                self.assertFalse(answer.lstrip().startswith("{"))
+                self.assertEqual(answer.count("상품명: 가상회사채 1-2"), 1)
+                self.assertIn("Vector 문서 검색 출처", answer)
+
     def test_narrative_outage_keeps_retrieved_values(self):
         state = self.state()
         state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
@@ -329,7 +352,13 @@ class AnswerContractTests(unittest.TestCase):
         self.assertIn("추가 설명 생성에 실패", answer)
         self.assertIn("4.266", answer)
         self.assertNotIn("buyable_quantity", answer)
-        self.assertIn("buyable_quantity", response["retrieved_context"])
+        self.assertNotIn("buyable_quantity", response["retrieved_context"])
+
+    def test_public_sale_policy_has_no_internal_deployment_memo(self):
+        reason = rdb_schema.get_sale_policy("채권")["reason"]
+        self.assertIn("주최측 제공 설명", reason)
+        self.assertNotIn("배포본", reason)
+        self.assertNotIn("별도 확인", reason)
 
     def test_no_document_body_cannot_generate_a_risk_claim(self):
         state = self.state()
