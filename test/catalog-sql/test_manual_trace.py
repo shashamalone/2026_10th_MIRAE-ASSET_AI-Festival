@@ -140,11 +140,15 @@ class ManualTraceTests(unittest.TestCase):
                 trace.run_question("offline", env_file="absent")
         self.assertFalse(trace._RUN_LOCK.locked())
 
-    def test_notebook_is_clean_valid_python_and_defaults_to_no_paid_execution(self):
+    def test_notebook_is_clean_valid_python_and_offline_guard_prevents_paid_execution(self):
         notebook = json.loads((Path(__file__).with_name("manual_query_debug.ipynb")).read_text(encoding="utf-8"))
         self.assertEqual(notebook["nbformat"], 4)
+        self.assertEqual(sum(cell["cell_type"] == "code" for cell in notebook["cells"]), 2)
+        self.assertEqual(sum("trace.run_question(" in "".join(cell["source"])
+                             for cell in notebook["cells"]), 1)
         namespace = {"__name__": "__notebook_test__"}
-        with patch.object(trace, "run_question", side_effect=AssertionError("live execution forbidden")) as live, \
+        with patch.dict(os.environ, {"MIRAE_NOTEBOOK_OFFLINE_QA": "1"}), \
+             patch.object(trace, "run_question", side_effect=AssertionError("live execution forbidden")) as live, \
              patch("IPython.display.display"), patch("sys.stdout", new_callable=io.StringIO):
             for cell in notebook["cells"]:
                 if cell["cell_type"] != "code":
@@ -170,7 +174,8 @@ class ManualTraceTests(unittest.TestCase):
         report["step_results"]["v1"] = {"engine": "vector", "chunks": [{"chunk_text": "fixture text",
             "source_url": "https://example.invalid/fixture", "page_number": 1, "score": 0.8}]}
         namespace = {"__name__": "__notebook_test__", "REPORT": report}
-        with patch.object(trace, "run_question", side_effect=AssertionError("live execution forbidden")) as live, \
+        with patch.dict(os.environ, {"MIRAE_NOTEBOOK_OFFLINE_QA": "1"}), \
+             patch.object(trace, "run_question", side_effect=AssertionError("live execution forbidden")) as live, \
              patch("IPython.display.display") as display, patch("sys.stdout", new_callable=io.StringIO):
             for cell in notebook["cells"]:
                 if cell["cell_type"] == "code":

@@ -7,24 +7,25 @@ Task's original base: `4a7cb37`. No DB writes or new dependencies.
 
 [manual_query_debug.ipynb](manual_query_debug.ipynb)을 VS Code에서 열고
 `C:\Users\admin\.venvs\mirae-agent\Scripts\python.exe` (Python 3.13) 커널을 선택한다.
-환경 확인 셀을 실행한 뒤 `QUESTION`을 적고 `RUN_LIVE=True`로 바꿔 질문 입력 셀과
-실제 실행 셀을 차례로 실행한다. 초기 상태는 `RUN_LIVE=False`이므로 유료 호출이 없다.
-이 worktree의 `agent.graph.app.stream`을 직접 실행하며 18080 HTTP 서버를 사용하지 않는다.
+첫 코드 셀의 `QUESTION`만 바꾼 뒤 **Run All**을 한 번 누른다. 일반 실행에서는
+`agent.graph.app.stream`을 정확히 한 번 호출하며 18080 HTTP 서버를 거치지 않는다.
+따라서 Run All은 Clova·RDB·Graph·Vector의 실제 호출과 비용을 발생시킨다. 자동 검증
+환경에서는 네트워크 차단을 감지해 실행을 건너뛴다.
 
-의도 분석 원본/검수본, 계획·의존관계, 노드 입출력·시간, RDB SQL 및 상세 조회,
-Graph SPARQL, Vector 출처·청크, 실제 하위 호출·파라미터·전체 반환 데이터, 모델 사용량과
-최종 답변을 별도 셀에서 본다. API 헤더·키·모델 프롬프트나 비공개 추론은 수집하지 않는다.
-화면 `ROW_LIMIT=None`은 반환된 행을 모두 표시하지만 DB 쿼리 LIMIT를 늘리지는 않는다.
+최종 답변, 의도 원본/검수본, 계획·의존관계, RDB SQL, Graph SPARQL, Vector 출처,
+노드·하위 호출·모델 사용량을 한 개의 결과 셀에서 순서대로 본다. 긴 쿼리와 상세 JSON은
+접힌 영역으로 표시하고 대용량 내부 호출 결과는 크기만 요약한다. API 헤더·키·모델
+프롬프트나 비공개 추론은 수집하지 않는다. `ROW_LIMIT`은 화면 표시량만 제한한다.
 
 질문 전체 실행은 한 번이며 SDK 채팅 재시도와 SQL 429 대기 반복을 임시로 끈다.
 SQL 시도 예산은 1로 제한한다. 여러 계획 단계와 모델 호출은 여전히 있을 수 있다.
-같은 커널의 같은 질문은 실패한 경우에도 중복 실행을 차단하며 의도적인 재시도만
-`ALLOW_REPEAT=True`로 허용한다. 소스나 환경을 바꾸면 커널을 재시작한다.
+같은 커널의 같은 질문은 실패한 경우에도 중복 실행을 차단한다. 다른 질문은 `QUESTION`을
+바꾸고 Run All을 다시 누르면 된다. 같은 질문을 의도적으로 재시도할 때만
+`ALLOW_REPEAT=True`로 바꾼다. 소스나 환경을 바꾸면 커널을 재시작한다.
 
 결과는 `artifacts/runs/manual-<timestamp>-<uuid>/codex-t139-sql-0905/`에 저장한다.
-결과 확인 셀은 API를 호출하지 않는다. `LOAD_RUN`으로 이 폴더/trace.json 또는 이전
-테스트의 traces.jsonl을 열 수 있다. 과거 기록에 없는 노드 입력·호출은 복구하지 않는다.
-민감한 질문/DB/문서 내용은 저장되므로 공유 전 검토하고 노트북 출력을 지운다.
+`trace.json`, 쿼리 파일, 로그와 최종 답변이 남으므로 화면을 닫아도 실행 근거를 복구할
+수 있다. 민감한 질문/DB/문서 내용은 저장되므로 공유 전 검토하고 노트북 출력을 지운다.
 
 오프라인 검증 (패키지 설치 없음):
 
