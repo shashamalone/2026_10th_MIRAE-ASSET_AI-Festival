@@ -174,7 +174,10 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
     # 카탈로그가 확정한 조건·정렬·필드만으로 표현되는 질의는 LLM 없이 컴파일한다(2026-09-03 측정에서
     # RDB 오답 52회차의 원인이던 플래그 리터럴·폐기 컬럼·단위 오환산이 이 경로에서는 생기지 않는다).
     # 표현 불가(None)면 기존 LLM 초안→SQL 경로로 그대로 폴백한다.
-    compiled = sql_builder.compile_sql(resolved_schema, apply_limit=apply_limit)
+    compiled = sql_builder.compile_sql(
+        resolved_schema, apply_limit=apply_limit,
+        column_types=utils.remote_column_types(conn, resolved_schema["table"]),
+    )
     if compiled is not None:
         draft = "(결정론 컴파일 - LLM 초안 생략)"
         sql_result = compiled
@@ -276,7 +279,10 @@ def _execute_merged_target_group(
             continue
 
         schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=False, union_mode=True)
-        compiled = sql_builder.compile_sql(resolved_schema, apply_limit=False, union_mode=True)
+        compiled = sql_builder.compile_sql(
+            resolved_schema, apply_limit=False, union_mode=True,
+            column_types=utils.remote_column_types(conn, resolved_schema["table"]),
+        )
         if compiled is not None:
             sql_result = compiled
         else:

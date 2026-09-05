@@ -100,6 +100,18 @@ def _currency_mismatch(value: str, spec: AttributeSpec) -> bool:
 
 
 _OPS = {"eq": "=", "gte": ">=", "lte": "<=", ">": ">", "<": "<", "gt": ">", "lt": "<"}
+_NUMERIC_PG_TYPES = {"numeric", "double precision", "integer", "bigint", "real", "smallint", "decimal"}
+
+
+def _num_col(col: str, bare: str, column_types: dict[str, str] | None, *, force: bool = False) -> str:
+    """숫자 비교에 쓸 컬럼 식. 원격 타입이 text면 CAST(... AS NUMERIC)을 붙인다.
+    타입을 모르면(force=True인 날짜류만) 캐스팅한다 - 값이 '20270223'·'1' 같은
+    숫자 문자열이라 numeric 컬럼이든 text 컬럼이든 CAST가 안전하다."""
+    if column_types is None:
+        return f"CAST({col} AS NUMERIC)" if force else col
+    if column_types.get(bare, "") in _NUMERIC_PG_TYPES:
+        return col
+    return f"CAST({col} AS NUMERIC)"
 
 
 def _compile_numeric(column: str, op: str, value: str, value_2: str, spec: AttributeSpec) -> str | None:
@@ -159,9 +171,10 @@ def _compile_date(column: str, op: str, value: str, value_2: str) -> str | None:
     return None
 
 
-def compile_condition(c: dict, qualify) -> tuple[str | None, str | None]:
+def compile_condition(c: dict, qualify, column_types: dict[str, str] | None = None) -> tuple[str | None, str | None]:
     """조건 레코드 하나 → (WHERE 조각, 메모). 조각이 None이면 컴파일 불가.
-    조각이 빈 문자열이면 '조건을 의도적으로 뺐다'(금지 컬럼)이며 메모에 사유가 있다."""
+    조각이 빈 문자열이면 '조건을 의도적으로 뺐다'(금지 컬럼)이며 메모에 사유가 있다.
+    column_types는 원격 컬럼 타입(utils.remote_column_types). 숫자 비교인데 text 컬럼이면 CAST한다."""
     spec: AttributeSpec | None = c.get("spec")
     column = c.get("column")
     op = c.get("operator", "eq")
@@ -198,7 +211,7 @@ def compile_condition(c: dict, qualify) -> tuple[str | None, str | None]:
             return f"{col} LIKE {_q('%' + value + '%')}", None
         if op in _OPS:
             n = parse_korean_number(value)
-            return (f"{col} {_OPS[op]} {n:g}", None) if n is not None else (None, None)
+            return (f"{_num_col(col, bare, column_types)} {_OPS[op]} {n:g}", None) if n is not None else (None, None)
         return None, None
     vt = spec.value_type
     if vt == "unknown":           # LLM 폴백 매핑: 값 인코딩을 알 수 없다
@@ -240,16 +253,19 @@ def compile_condition(c: dict, qualify) -> tuple[str | None, str | None]:
         return None, None
 
     if vt == "numeric":
-        return _compile_numeric(col, op, value, value_2, spec), None
+        return _compile_numeric(_num_col(col, bare, column_types), op, value, value_2, spec), None
 
     if vt == "date_yyyymmdd_numeric":
-        return _compile_date(col, op, value, value_2), None
+        # 원격에서 YYYYMMDD 날짜 컬럼은 전부 text다(2026-09-05 실측). 타입을 모르면 항상 CAST.
+        return _compile_date(_num_col(col, bare, column_types, force=True), op, value, value_2), None
 
     return None, None   # ordinal without matched_values 등
 
 
-def compile_sql(resolved_schema: dict, *, apply_limit: bool = True, union_mode: bool = False) -> dict | None:
-    """resolved_schema → 완결 SQL(또는 union_mode 서브쿼리). 표현 불가면 None."""
+def compile_sql(resolved_schema: dict, *, apply_limit: bool = True, union_mode: bool = False,
+                column_types: dict[str, str] | None = None) -> dict | None:
+    """resolved_schema → 완결 SQL(또는 union_mode 서브쿼리). 표현 불가면 None.
+    column_types: 기본 테이블의 원격 컬럼 타입(utils.remote_column_types). 없으면 날짜류만 CAST한다."""
     joins = resolved_schema.get("joins") or []
     has_joins = bool(joins)
     table = resolved_schema["table"]
@@ -264,7 +280,7 @@ def compile_sql(resolved_schema: dict, *, apply_limit: bool = True, union_mode: 
     where: list[str] = []
     forbidden_hit = False
     for c in resolved_schema.get("conditions") or []:
-        frag, note = compile_condition(c, qualify)
+        frag, note = compile_condition(c, qualify, column_types)
         if frag is None:
             return None
         if note:
@@ -298,6 +314,9 @@ def compile_sql(resolved_schema: dict, *, apply_limit: bool = True, union_mode: 
             if spec is not None and spec.value_type == "ordinal" and spec.value_order:
                 cases = " ".join(f"WHEN {sort_col} = {_q(v)} THEN {i}" for i, v in enumerate(spec.value_order))
                 order_expr = f"CASE {cases} ELSE {len(spec.value_order)} END"
+            elif spec is not None and spec.value_type in ("numeric", "date_yyyymmdd_numeric"):
+                # text로 저장된 숫자/날짜를 문자열 순으로 정렬하면 '9' > '10'이 된다.
+                order_expr = _num_col(sort_col, bare, column_types, force=spec.value_type == "date_yyyymmdd_numeric")
             else:
                 order_expr = sort_col
             order_sql = f"\nORDER BY {order_expr} {direction} NULLS LAST"

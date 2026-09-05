@@ -134,10 +134,11 @@ class ConditionTest(unittest.TestCase):
         self.assertEqual(frag, "TRIM(pd_pbcm) = '에스케이하이닉스(주)'")
 
     def test_date_parsing(self):
-        spec = CAT["채권"]["만기일"]
-        self.assertEqual(sb.compile_condition(cond("만기일", "lte", "2027-12-31", spec), self.q)[0], "mat_dt <= 20271231")
-        self.assertEqual(sb.compile_condition(cond("만기일", "eq", "2027년", spec), self.q)[0], "mat_dt BETWEEN 20270101 AND 20271231")
-        self.assertEqual(sb.compile_condition(cond("만기일", "gte", "20260824", spec), self.q)[0], "mat_dt >= 20260824")
+        # 컬럼이 numeric이라고 알려진 경우: CAST 없이 숫자 비교
+        spec = CAT["채권"]["만기일"]; num = {"mat_dt": "numeric"}
+        self.assertEqual(sb.compile_condition(cond("만기일", "lte", "2027-12-31", spec), self.q, num)[0], "mat_dt <= 20271231")
+        self.assertEqual(sb.compile_condition(cond("만기일", "eq", "2027년", spec), self.q, num)[0], "mat_dt BETWEEN 20270101 AND 20271231")
+        self.assertEqual(sb.compile_condition(cond("만기일", "gte", "20260824", spec), self.q, num)[0], "mat_dt >= 20260824")
 
     def test_subtype_condition_without_spec(self):
         # utils.resolve_subtype_conditions 가 만드는 레코드: column·operator·value 확정, spec None
@@ -154,6 +155,26 @@ class ConditionTest(unittest.TestCase):
         self.assertEqual(rdb_schema.resolve_subtype_condition("해외ETF", "주식형")["value"], "Equity")
         self.assertEqual(rdb_schema.resolve_subtype_condition("국내ETF", "채권형")["value"], "채권")
         self.assertEqual(rdb_schema.resolve_subtype_condition("채권", "원화채권")["column"], "curr_cd")
+
+    def test_text_typed_numeric_columns_are_cast(self):
+        # 원격에서 mat_dt·cu_lev_fector 등은 text다(2026-09-05 실측). 숫자 비교는 CAST해야 한다.
+        types = {"mat_dt": "text", "cu_lev_fector": "text", "remaining_days": "double precision"}
+        frag, _ = sb.compile_condition(cond("만기일", "lte", "2027-12-31", CAT["채권"]["만기일"]), self.q, types)
+        self.assertEqual(frag, "CAST(mat_dt AS NUMERIC) <= 20271231")
+        rec = {"attribute": "상품유형(레버리지)", "operator": ">", "value": "1", "value_2": "", "column": "cu_lev_fector",
+               "spec": None, "valid": True, "invalid_reason": None, "matched_values": None}
+        self.assertEqual(sb.compile_condition(rec, self.q, types)[0], "CAST(cu_lev_fector AS NUMERIC) > 1")
+        # 진짜 numeric 컬럼은 캐스팅하지 않는다
+        frag, _ = sb.compile_condition(cond("잔존기간", "lte", "3년", CAT["채권"]["잔존기간"]), self.q, types)
+        self.assertEqual(frag, "remaining_days <= 1095")
+        # 타입을 모르면 날짜류만 CAST(양쪽 타입에 안전), 일반 numeric은 그대로
+        frag, _ = sb.compile_condition(cond("만기일", "gte", "20260824", CAT["채권"]["만기일"]), self.q, None)
+        self.assertEqual(frag, "CAST(mat_dt AS NUMERIC) >= 20260824")
+
+    def test_sort_on_text_numeric_column_is_cast(self):
+        s = schema("국내ETF", sort={"attribute": "상장일", "column": "pd_lstg_dt", "order": "desc", "limit": "5", "spec": CAT["국내ETF"]["상장일"]})
+        sql = sb.compile_sql(s, column_types={"pd_lstg_dt": "text"})["sql"]
+        self.assertIn("ORDER BY CAST(pd_lstg_dt AS NUMERIC) DESC NULLS LAST", sql)
 
     def test_quote_escape(self):
         frag, _ = sb.compile_condition(cond("상품명", "contains", "O'Neil", CAT["해외ETF"]["상품명"]), self.q)

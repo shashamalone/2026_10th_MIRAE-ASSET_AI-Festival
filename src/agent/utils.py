@@ -731,6 +731,25 @@ def available_tables(conn) -> set[str] | None:
     return _AVAILABLE_TABLES
 
 
+_COLUMN_TYPES: dict[str, dict[str, str]] = {}
+
+
+def remote_column_types(conn, table: str) -> dict[str, str] | None:
+    """테이블(schema.table)의 원격 컬럼 타입. 테이블당 프로세스 1회 조회한다.
+    rdb_schema의 로컬 타입 표기는 원격과 어긋난 곳이 있어(2026-09-05 실측:
+    mat_dt·isu_dt·pd_lstg_dt·pd_lste_dt·cu_lev_fector가 원격에선 전부 text)
+    숫자 비교 시 CAST 여부는 이 실측값으로 정한다. 조회 실패면 None."""
+    if table not in _COLUMN_TYPES:
+        try:
+            sch, tbl = table.split(".", 1)
+            rows = run_sql(conn, "SELECT column_name, data_type FROM information_schema.columns "
+                                 f"WHERE table_schema = '{sch}' AND table_name = '{tbl}'")
+            _COLUMN_TYPES[table] = {r["column_name"]: r["data_type"] for r in rows}
+        except Exception:  # noqa: BLE001
+            return None
+    return _COLUMN_TYPES[table]
+
+
 def missing_join_tables(conn, resolved_schema: dict) -> list[str]:
     """resolved_schema.joins가 참조하는 테이블 중 DB에 없는 것. 실행 전에 걸러
     '확인할 수 없음'으로 답하게 한다 - 없는 테이블에 LLM 재시도를 붓지 않는다."""
