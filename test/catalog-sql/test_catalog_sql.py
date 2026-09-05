@@ -60,7 +60,8 @@ class CompilerTests(unittest.TestCase):
 
     def test_default_domain_filters(self):
         self.assertIn("base.pd_grp_no = E'ETF'", self.compile())
-        self.assertIn("base.prvo_pbff_desc = E'공모'", self.compile(resolved("펀드")))
+        # Reviewed fund caveat is conditional, not permission to add a filter.
+        self.assertNotIn("base.prvo_pbff_desc =", self.compile(resolved("펀드")))
 
     def test_explicit_etn_overrides_default(self):
         schema = resolved()

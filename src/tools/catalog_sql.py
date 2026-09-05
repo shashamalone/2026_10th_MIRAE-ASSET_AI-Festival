@@ -300,10 +300,6 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         refs.add((table, "pd_grp_no"))
         where.append(f"base.pd_grp_no = {literal(group)}")
         assumptions.append(f"{domain} 상품군 조건: {group}")
-    if domain == "펀드" and "prvo_pbff_desc" not in used_condition_columns:
-        refs.add((table, "prvo_pbff_desc"))
-        where.append("base.prvo_pbff_desc = E'공모'")
-        assumptions.append("대상 상품군은 공모펀드이며 명시적 사모 조건이 없는 경우 공모만 조회했습니다.")
     sort = resolved.get("sort")
     sort_expr = typed(sort, ranking=True) if sort else None
     if sort_expr:

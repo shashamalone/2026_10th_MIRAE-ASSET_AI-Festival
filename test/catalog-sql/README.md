@@ -58,3 +58,6 @@ it overwrites tracked historical output files.
 - Golden answer-token matching is diagnostic, not the competition's final score.
   Review retrieval evidence, unsupported inference, omissions, latency and cost
   separately, with a fixed code/data release recorded in each run manifest.
+- Some legacy manual overrides match exact SQL strings. `E'...'` literals and
+  qualified columns can evade those heuristics without changing SQL semantics.
+  Any apparent pass-rate gain therefore also requires semantic review.
