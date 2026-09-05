@@ -47,7 +47,7 @@ from tools.schemas import INTENT_ANALYSIS_JSON_SCHEMA, SQL_OUTPUT_JSON_SCHEMA,FI
 from agent.state import ready_step_ids
 
 from agent.graph_logic import graph_orchestrator
-from tools import rdb_schema
+from tools import holdings_provenance, rdb_schema
 from tools import schema_snapshot
 from tools import catalog_sql
 from agent import utils
@@ -1639,6 +1639,13 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 f"Graph 관계 근거 · {rel_desc} · {status_text} · "
                 f"{len(result.get('rows') or [])}건{evidence_note}"
             )
+            # 편입(Holding) 관계는 골드셋 22번이 "편입내역 문서명과 근거 문장"을
+            # 요구하는데, 그래프의 fp:sourceId 에는 운용사 브랜드명만 있다.
+            # 문서명·URL·기준일은 수집 사이드카에서 뽑은 인덱스에 있으므로
+            # 여기서 조인해 붙인다(배포된 Oxigraph 가 읽기 전용이라 트리플로
+            # 넣을 수 없다). 붙는 게 없으면 아무것도 추가하지 않는다.
+            for citation_line in holdings_provenance.describe_rows(result.get("rows") or []):
+                parts.append(f"편입내역 문서 근거 · {citation_line}")
         elif engine == "vector":
             if result.get("status") == "chained":
                 continue

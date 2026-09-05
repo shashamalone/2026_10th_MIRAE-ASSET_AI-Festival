@@ -219,6 +219,18 @@ class OxigraphClient:
         return rows if max_rows is None else rows[:max_rows]
 
     def triple_count(self) -> int:
+        # GRAPH 절만 쓴다. 예전에는 `{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } }`
+        # 였는데, HTTP transport(Oxigraph 서버)는 기본 그래프를 네임드 그래프의
+        # 합집합으로 취급하므로 두 분기가 같은 트리플을 각각 한 번씩 잡아
+        # 정확히 2배가 나왔다(2026-09-05 실측: 실제 1,169,374 -> 보고 2,338,748).
+        #
+        # 반대로 `{ ?s ?p ?o }`만 남기면 store transport가 깨진다. pyoxigraph의
+        # Store.query()는 use_default_graph_as_union 기본값이 False라서, 이
+        # 프로젝트처럼 ABox/TBox를 전부 네임드 그래프(http://mafest.ai/graph/...)에
+        # 넣는 구성에서는 0을 돌려준다.
+        #
+        # GRAPH 절은 두 transport 모두에서 같은 값을 준다. 데이터가 전부 네임드
+        # 그래프에 있다는 전제이며, build_graph 파이프라인이 그렇게 적재한다.
         result = self.query(
             """
             SELECT (COUNT(*) AS ?count)
