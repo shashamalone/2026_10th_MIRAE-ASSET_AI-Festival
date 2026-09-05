@@ -128,6 +128,32 @@ class CompilerTests(unittest.TestCase):
         self.assertIn(" OR ", sql)
         self.assertEqual(sql.count("POSITION("), 2)
 
+    def test_exact_official_abbreviation_precedes_partial_name(self):
+        sql = self.compile(resolved(entities=["KODEX 200"]))
+        self.assertIn("LOWER(REPLACE(base.pd_abrv_nm::text, ' ', '')) = E'kodex200'", sql)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM raw.pref01n001 AS identity_probe", sql)
+
+    def test_missing_identity_column_blocks_safely(self):
+        del self.snap["tables"]["raw.pref01n001"]["columns"]["pd_abrv_nm"]
+        with self.assertRaises(physical.SchemaContractError):
+            self.compile(resolved(entities=["KODEX 200"]))
+
+    def test_user_substring_filter_does_not_become_exact_lookup(self):
+        sql = self.compile(resolved(conditions=[{"attribute": "상품명", "operator": "contains", "value": "KODEX"}]))
+        self.assertNotIn("NOT EXISTS", sql)
+
+    def test_model_cannot_inject_internal_or_identity_flags(self):
+        schema = resolved(conditions=[{"attribute": "상품명", "operator": "contains", "value": "KODEX",
+                                      "entity_identity": True, "any_group": "malicious"}])
+        self.assertFalse(schema["conditions"][0]["entity_identity"])
+        self.assertIsNone(schema["conditions"][0]["any_group"])
+
+    def test_identity_marker_rejects_non_name_columns(self):
+        schema = resolved(entities=["KODEX"])
+        schema["conditions"][0]["column"] = "pd_net_tamt"
+        with self.assertRaises(c.CompileError):
+            self.compile(schema)
+
     def test_literal_substrings_not_like_patterns(self):
         sql = self.compile(resolved(entities=["O'Reilly_%\\ETF"]))
         self.assertIn("o''reilly_%\\\\etf", sql)

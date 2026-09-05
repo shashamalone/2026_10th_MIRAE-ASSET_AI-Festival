@@ -1340,6 +1340,15 @@ for _domain, _aliases in SEMANTIC_ALIASES.items():
     for _alias, _canonical in _aliases.items():
         ATTRIBUTE_CATALOG[_domain][_alias] = ATTRIBUTE_CATALOG[_domain][_canonical]
 
+# Entity names have a different contract from arbitrary substring filters.
+# Prefer an exact official name/abbreviation/code over similarly named products.
+PRODUCT_IDENTITY_COLUMNS = {
+    "채권": ("pd_nm", "pd_abrv_nm", "pd_no"),
+    "국내ETF": ("pd_nm", "pd_abrv_nm", "pd_itm_no", "pd_ticker"),
+    "해외ETF": ("pd_nm", "pd_abrv_nm", "pd_itm_no", "pd_isin_cd"),
+    "펀드": ("itm_nm", "itm_abrv_nm", "itm_no"),
+}
+
 
 # 도메인별 개념 카탈로그의 검증 수준. 넷 다 2026-08-24 배포본 data.xlsx로
 # 직접 프로파일링해서 검증했으므로 전부 verified다.

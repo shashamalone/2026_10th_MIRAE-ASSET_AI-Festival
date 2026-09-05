@@ -130,12 +130,15 @@ def build_condition_list(step: dict) -> list[dict]:
 
     subtype은 여기서 다루지 않는다(resolve_subtype_conditions가 별도로
     처리해서 build_resolved_schema가 직접 합친다)."""
-    conditions: list[dict] = [dict(c) for c in step.get("conditions", [])]
+    # Internal OR/identity markers can only be produced below, not by model
+    # output that happens to contain additional JSON properties.
+    conditions: list[dict] = [{key: c[key] for key in ("attribute", "operator", "value", "value_2") if key in c}
+                             for c in step.get("conditions", [])]
 
     for e in step.get("product_name_entities") or []:
         # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
         # contains로 매칭한다.
-        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names"})
+        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names", "entity_identity": True})
         if step.get("domain") == "해외ETF" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.^-]{0,19}", e["surface_form"]):
             # Tickers and RICs are identifiers, not substrings of a fund's full
             # legal name. Resolve both via reviewed catalogue concepts.
@@ -420,6 +423,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             "matched_values": None,
             "org_name_variants": None,
             "any_group": c.get("any_group"),
+            "entity_identity": c.get("entity_identity", False),
         }
         if spec is not None:
             valid, reason, matched_val = validate_ordinal_value(spec, c["value"])

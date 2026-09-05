@@ -243,6 +243,23 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         op, value = record.get("operator"), record.get("value")
         if value is None or not str(value).strip():
             raise CompileError("빈 필터 값")
+        if record.get("entity_identity"):
+            if op != "contains" or record.get("column") != reviewed["상품명"].column:
+                raise CompileError("상품식별 표시는 검토된 상품명 contains 조건에만 허용됩니다")
+            columns = rdb_schema.PRODUCT_IDENTITY_COLUMNS[domain]
+            for identity_column in columns:
+                identifier(identity_column)
+                refs.add((table, identity_column))
+            needle = literal(str(value).replace(" ", "").lower())
+
+            def exact(alias):
+                return " OR ".join(f"LOWER(REPLACE({alias}.{name}::text, ' ', '')) = {needle}" for name in columns)
+
+            # The existence check is over the same approved base table. It is
+            # generated from reviewed identifiers, never from an LLM SQL string.
+            fallback = f"POSITION({needle} IN LOWER(REPLACE({col}::text, ' ', ''))) > 0"
+            return (f"(({exact('base')}) OR (NOT EXISTS (SELECT 1 FROM {table} AS identity_probe "
+                    f"WHERE {exact('identity_probe')}) AND {fallback}))")
         if op == "in":
             values = value if isinstance(value, list) else [v.strip() for v in str(value).split(",")]
             if not values or any(not str(v).strip() for v in values):
