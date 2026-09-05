@@ -140,12 +140,41 @@ class ManualTraceTests(unittest.TestCase):
                 trace.run_question("offline", env_file="absent")
         self.assertFalse(trace._RUN_LOCK.locked())
 
+    def test_env_layers_keep_task_values_and_fill_missing_runtime_config(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            task_env = root / "task.env"
+            common_env = root / "common.env"
+            task_env.write_text(
+                "CLOVASTUDIO_API_KEY=task-key\nTASK_ID=T-144\n", encoding="utf-8"
+            )
+            common_env.write_text(
+                "CLOVASTUDIO_API_KEY=common-key\n"
+                "DB_HOST=db.example.invalid\n"
+                "OXIGRAPH_FALLBACK_ENDPOINT=http://graph.example.invalid:7878/query\n",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                loaded = trace._load_env_files([task_env, common_env])
+                self.assertEqual(loaded, [task_env.resolve(), common_env.resolve()])
+                self.assertEqual(os.environ["CLOVASTUDIO_API_KEY"], "task-key")
+                self.assertEqual(os.environ["TASK_ID"], "T-144")
+                self.assertEqual(os.environ["DB_HOST"], "db.example.invalid")
+                self.assertEqual(
+                    os.environ["OXIGRAPH_FALLBACK_ENDPOINT"],
+                    "http://graph.example.invalid:7878/query",
+                )
+
     def test_notebook_is_clean_valid_python_and_offline_guard_prevents_paid_execution(self):
         notebook = json.loads((Path(__file__).with_name("manual_query_debug.ipynb")).read_text(encoding="utf-8"))
         self.assertEqual(notebook["nbformat"], 4)
         self.assertEqual(sum(cell["cell_type"] == "code" for cell in notebook["cells"]), 2)
         self.assertEqual(sum("trace.run_question(" in "".join(cell["source"])
                              for cell in notebook["cells"]), 1)
+        notebook_source = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
+        self.assertIn("ENV_FILES = trace.discover_env_files(ROOT)", notebook_source)
+        self.assertIn("env_files=ENV_FILES", notebook_source)
+        self.assertNotIn("T-116-fix-sql-truth", notebook_source)
         namespace = {"__name__": "__notebook_test__"}
         with patch.dict(os.environ, {"MIRAE_NOTEBOOK_OFFLINE_QA": "1"}), \
              patch.object(trace, "run_question", side_effect=AssertionError("live execution forbidden")) as live, \

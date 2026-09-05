@@ -12,6 +12,13 @@ Task's original base: `4a7cb37`. No DB writes or new dependencies.
 따라서 Run All은 Clova·RDB·Graph·Vector의 실제 호출과 비용을 발생시킨다. 자동 검증
 환경에서는 네트워크 차단을 감지해 실행을 건너뛴다.
 
+설정은 `MIRAE_RUNTIME_ENV_FILE`(지정한 경우), 현재 worktree의 `.env`, 기본
+checkout의 `.env` 순으로 읽는다. 앞 파일의 값은 유지하고 뒤 파일에서는 누락된
+DB·Graph 등 공통 런타임 설정만 보완한다. 따라서 task 메타데이터와 Clova 키만 든
+worktree `.env`가 존재해도 기본 checkout의 DB 설정을 가리지 않는다. 노트북에는
+읽은 파일 경로와 설정 상태만 표시하며 키와 비밀번호 값은 출력하지 않는다. 설정을
+바꾼 뒤에는 커널을 재시작하고 Run All을 한 번 실행한다.
+
 최종 답변, 의도 원본/검수본, 계획·의존관계, RDB SQL, Graph SPARQL, Vector 출처,
 노드·하위 호출·모델 사용량을 한 개의 결과 셀에서 순서대로 본다. 긴 쿼리와 상세 JSON은
 접힌 영역으로 표시하고 대용량 내부 호출 결과는 크기만 요약한다. API 헤더·키·모델

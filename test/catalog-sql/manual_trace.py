@@ -62,6 +62,55 @@ def dependency_status():
             for name in ("IPython", "ipykernel", "dotenv", "langgraph", "langchain_naver", "psycopg2")}
 
 
+def discover_env_files(root: Path = ROOT) -> list[Path]:
+    """작업용 설정을 우선하고 기본 checkout 설정으로 빈 항목을 보완한다.
+
+    Git worktree의 ``.env``는 agent/task/data 경로만 담는 경우가 있다. 그
+    파일이 존재한다는 이유로 DB/Graph 런타임 설정이 든 기본 checkout의
+    ``.env``를 무시하지 않는다. 명시적 ``MIRAE_RUNTIME_ENV_FILE``이 있으면
+    가장 먼저 읽고, 같은 실제 파일은 한 번만 반환한다.
+    """
+    candidates: list[Path] = []
+    explicit = os.getenv("MIRAE_RUNTIME_ENV_FILE")
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+    candidates.append(Path(root) / ".env")
+    try:
+        common_dir = subprocess.check_output(
+            ["git", "rev-parse", "--git-common-dir"], cwd=root,
+            text=True, encoding="utf-8",
+        ).strip()
+        common_path = Path(common_dir)
+        if not common_path.is_absolute():
+            common_path = Path(root) / common_path
+        candidates.append(common_path.resolve().parent / ".env")
+    except (OSError, subprocess.CalledProcessError):
+        pass
+
+    selected, seen = [], set()
+    for candidate in candidates:
+        path = candidate.resolve()
+        key = os.path.normcase(str(path))
+        if key not in seen and path.is_file():
+            seen.add(key)
+            selected.append(path)
+    return selected
+
+
+def _load_env_files(env_files: list[str | Path]) -> list[Path]:
+    from dotenv import load_dotenv
+
+    files = [Path(path).resolve() for path in env_files]
+    if not files:
+        raise FileNotFoundError("읽을 설정 파일이 없습니다. worktree 또는 기본 checkout의 .env를 확인하세요.")
+    for path in files:
+        if not path.is_file():
+            raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {path}")
+        # 앞 계층(명시적 파일, worktree)을 우선하고 뒤 파일은 빈 변수만 채운다.
+        load_dotenv(path, override=False)
+    return files
+
+
 class Redactor:
     KEYS = {"api_key", "authorization", "password", "secret", "access_token", "refresh_token", "database_url", "dsn"}
 
@@ -333,7 +382,8 @@ def _save_report(report, run_dir):
                 (queries_dir / f"{call['call_id']:03d}.{field}").write_text(call[field], encoding="utf-8")
 
 
-def run_question(question, *, env_file, question_id="manual", allow_repeat=False, on_event=None):
+def run_question(question, *, env_file=None, env_files=None, question_id="manual",
+                 allow_repeat=False, on_event=None):
     global _LOADED_SOURCE_HASH
     question = str(question).strip()
     if not question:
@@ -348,13 +398,10 @@ def run_question(question, *, env_file, question_id="manual", allow_repeat=False
         signature = hashlib.sha256((fingerprint + "\n" + question).encode()).hexdigest()
         if signature in _ATTEMPTED and not allow_repeat:
             raise RuntimeError("이 커널에서 이미 시도한 질문입니다. 결과 확인 셀을 사용하세요. 의도적인 재실행만 ALLOW_REPEAT=True로 허용하세요.")
-        env_file = Path(env_file).resolve()
-        if not env_file.is_file():
-            raise FileNotFoundError(f"설정 파일을 찾을 수 없습니다: {env_file}")
-        from dotenv import load_dotenv
-        load_dotenv(env_file, override=False)
+        selected_env_files = list(env_files or ([env_file] if env_file else discover_env_files()))
+        loaded_env_files = _load_env_files(selected_env_files)
         if not any(os.getenv(k) for k in ("CLOVA_API_KEY", "CLOVASTUDIO_API_KEY", "clova")):
-            raise RuntimeError("Clova 키가 없습니다. ENV_FILE을 확인하세요. 노트북에 키를 직접 붙여넣지 마세요.")
+            raise RuntimeError("Clova 키가 없습니다. ENV_FILES를 확인하세요. 노트북에 키를 직접 붙여넣지 마세요.")
         if str(ROOT / "src") not in sys.path:
             sys.path.insert(0, str(ROOT / "src"))
         loaded = sys.modules.get("agent.nodes")
@@ -368,7 +415,9 @@ def run_question(question, *, env_file, question_id="manual", allow_repeat=False
         _ATTEMPTED.add(signature)
         redactor = Redactor()
         recorder = Recorder(redactor)
-        manifest.update(run_id=run_id, started_at=datetime.now(timezone.utc).isoformat(), env_file=str(env_file),
+        manifest.update(run_id=run_id, started_at=datetime.now(timezone.utc).isoformat(),
+                        env_file=str(loaded_env_files[0]),
+                        env_files=[str(path) for path in loaded_env_files],
                         whole_question_attempts=1, sdk_chat_retries=0, sql_retry_budget=1, output_dir=str(run_dir))
         with (run_dir / "run.log").open("x", encoding="utf-8") as log, \
              (run_dir / "events.jsonl").open("x", encoding="utf-8") as events:
