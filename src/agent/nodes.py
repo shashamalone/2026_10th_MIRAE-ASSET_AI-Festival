@@ -941,10 +941,11 @@ def rdb_search_node(state: PipelineState) -> dict:
                 # 기다리므로 이 함수는 아무것도 안 바꾸고 그대로 통과시킨다.
                 handoff_step = _apply_graph_handoff(step, all_step_results)
                 if handoff_step is not step and not handoff_step.get("graph_handoff_blocked"):
-                    injected = handoff_step["conditions"][-1]
-                    trace_msgs.append(
-                        f"RDB 검색 [{step_id}]: Graph 핸드오프 - 상품코드 {len(injected['value'].split(', '))}개 조건 주입"
-                    )
+                    if handoff_step.get("issuer_name_entities"):
+                        trace_msgs.append(f"RDB 검색 [{step_id}]: Graph 기업관계의 발행사 후보 {len(handoff_step['issuer_name_entities'])}개를 원본 발행사 컬럼과 대조")
+                    else:
+                        injected = handoff_step["conditions"][-1]
+                        trace_msgs.append(f"RDB 검색 [{step_id}]: Graph 핸드오프 - 상품코드 {len(injected['value'].split(', '))}개 조건 주입")
                 result = _execute_target_step(handoff_step, state.get("question", ""), conn, apply_limit, max_retries)
             step_results[step_id] = result
 
