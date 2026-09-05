@@ -187,45 +187,21 @@ class OxigraphClient:
             raise GraphStoreUnavailable(f"Graph store query 실패({path}): {exc}") from exc
 
     def _query_http(self, sparql: str, kind: str) -> bool | list[dict[str, Any]]:
-        """데이터 플랫폼 API(/db/sparql)로 질의한다.
-
-        이 endpoint 는 표준 SPARQL 프로토콜이 **아니다**. 2026-09-05 실측:
-
-          - 요청: Content-Type 이 반드시 ``text/plain; charset=utf-8`` 이어야
-            한다. ``application/sparql-query`` 로 보내면 HTTP 415 로 거부된다.
-          - 응답: SPARQL 1.1 JSON(``results.bindings``)이 아니라 서버 봉투
-            ``{columns, rows, row_count, truncated, elapsed_ms}`` 로 온다.
-            rows 는 이미 ``{변수명: 값}`` 형태라 binding["value"] 추출이 없다.
-            ASK 는 ``rows[0]["boolean"]`` 에 담겨 온다.
-
-        서버가 내부 Oxigraph 에 표준 프로토콜로 프록시하면서 응답만 자기
-        형식으로 감싸기 때문이다. 내부 주소(OXIGRAPH_URL 기본 http://graph:7878)
-        는 Docker 내부 호스트명이라 외부에서 직결할 수 없다.
-        """
         import requests
 
         response = requests.post(
             self.endpoint,
             data=sparql.encode("utf-8"),
-            headers={"Content-Type": "text/plain; charset=utf-8"},
+            headers={"Content-Type": "application/sparql-query", "Accept": "application/sparql-results+json"},
             timeout=self.timeout,
         )
         response.raise_for_status()
         payload = response.json()
-        rows = payload.get("rows") or []
-
         if kind == "ASK":
-            return bool(rows[0].get("boolean")) if rows else False
-
-        # 서버는 자체 상한(API_MAX_ROWS, 기본 100)에서 결과를 자르고 truncated 를
-        # 함께 준다. 로컬 store 경로에는 없던 제약이라 조용히 넘기면 "행이 없다"가
-        # 아니라 "행이 잘렸다"를 못 알아챈다.
-        if payload.get("truncated"):
-            logger.warning(
-                "Graph endpoint 응답이 서버 상한에서 잘렸습니다(truncated=true, %d행). "
-                "결과가 불완전할 수 있습니다.",
-                len(rows),
-            )
+            return bool(payload.get("boolean"))
+        rows = []
+        for binding in payload.get("results", {}).get("bindings", []):
+            rows.append({key: value.get("value") for key, value in binding.items()})
         return rows[:MAX_ROWS]
 
     def triple_count(self) -> int:
