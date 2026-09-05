@@ -28,7 +28,7 @@ class FakeClient(OxigraphClient):
         self.outcomes = outcomes
         self.calls: list[str] = []
 
-    def _query_store(self, path: Path, sparql: str, kind: str):
+    def _query_store(self, path: Path, sparql: str, kind: str, max_rows=None):
         name = "remote" if path.name == "remote-store" else "local"
         self.calls.append(name)
         outcome = self.outcomes[name]
@@ -36,7 +36,7 @@ class FakeClient(OxigraphClient):
             raise outcome
         return outcome
 
-    def _query_http(self, sparql: str, kind: str):
+    def _query_http(self, sparql: str, kind: str, max_rows=None):
         self.calls.append("endpoint")
         outcome = self.outcomes.get("endpoint", [])
         if isinstance(outcome, Exception):

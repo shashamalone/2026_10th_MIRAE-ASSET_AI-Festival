@@ -13,17 +13,28 @@ Graph URI와 사용자 표기를 분리하는 exact-first entity resolver.
 company_master.csv`가 이 워크스페이스에 없어 동작하지 않는다 - CSV가 없으면
 `_company_master`가 빈 dict를 돌려주고 그 다음 단계(3단계, 정규형/세그먼트
 완전일치)로 조용히 넘어간다. 1·3단계가 대부분의 표기 흔들림을 이미 커버한다.
+
+[성능] 3단계는 첫 호출 때 한 번 만드는 프로세스 내 인덱스(`_entity_index`)로
+조회한다. 원래의 클래스 전체 SPARQL 스캔은 호출당 2.6~6.1s였고(2026-09-05
+실측) 인덱스 구축이 실패하면 그 경로로 폴백한다.
 """
 from __future__ import annotations
 
 import csv
 import json
+import logging
+import pickle
+import re
+import time
 from functools import lru_cache
+from pathlib import Path
 
 from agent.graph_logic import graph_engine
 from kb.config import ROOT
 from agent.graph_logic.graph_ids import normalize_organization_name, normalize_text
 from tools.graph_schema import FP
+
+logger = logging.getLogger(__name__)
 
 
 # ── partial(부분일치) 전용 질의 템플릿 ────────────────────────────────────────
@@ -183,8 +194,12 @@ def _rows_to_candidates(rows: list[dict], class_name: str) -> list[dict]:
 
 
 def clear_entity_cache() -> None:
-    """company_master 캐시 비우기. 데이터 재빌드 후나 테스트에서 호출한다."""
+    """company_master 캐시와 3단계 엔티티 인덱스 비우기. 데이터 재빌드 후나
+    테스트에서 호출한다."""
+    global _INDEX_FAILURE
     _company_master.cache_clear()
+    _entity_index.cache_clear()
+    _INDEX_FAILURE = None
 
 
 def _result(status: str, text: str, class_name: str, candidates: list[dict],
@@ -207,19 +222,205 @@ def _segment_match(var: str, literal: str) -> str:
             f'CONCAT("/", LCASE({literal}), "/")))')
 
 
+# ── 3단계용 정규형·세그먼트 인덱스 ──────────────────────────────────────────
+# _normalized_literal_candidates_sparql 은 클래스 전체를 읽고 FILTER(REPLACE(
+# LCASE(...)))로 거른다. 리터럴 제약이 WHERE 패턴에 없어 색인을 못 타고 호출당
+# 2.6~6.1s 가 걸렸다(2026-09-05 실측). role=product 는 클래스 5개를 돌고 5단계
+# type-suffix 재시도가 그걸 두 번 하므로 seed 하나에 60s 가 나왔다(Q10).
+# 첫 호출 때 한 번 만드는 dict 로 "어느 entity 가 걸릴 수 있는가"만 좁히고,
+# 실제 행은 원래 SPARQL 에 VALUES ?entity 만 얹어 Oxigraph 가 그대로 내게 한다.
+# FILTER 의 행 단위 적용·DISTINCT·행 순서(canonical_name 이 여기에 좌우된다)를
+# Python 으로 흉내 내지 않기 위해서다. 키 규칙은 _segment_match 와 같아야 한다:
+# 값의 LCASE 후 [\s_-] 제거, "/" 로 나눈 세그먼트의 모든 연속 구간(전체 포함).
+
+_PREFIX_IRI = {
+    "fp": FP,
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+}
+_INDEX_FAILURE: str | None = None  # 구축 실패 사유. 있으면 SPARQL 경로로 폴백한다.
+
+
+def _iris(term: str) -> tuple[str, ...]:
+    """'fp:productName|fp:productShortName' 같은 술어 표기 → IRI 목록."""
+    out = []
+    for part in term.split("|"):
+        prefix, local = part.split(":", 1)
+        out.append(_PREFIX_IRI[prefix] + local)
+    return tuple(out)
+
+
+def _sparql_norm(value: object) -> str:
+    """_segment_match 의 REPLACE(LCASE(STR(?v)), "[\\s_-]+", "") 와 같은 정규형."""
+    return re.sub(r"[\s_\-]+", "", str(value).lower())
+
+
+def _segment_keys(norm: str) -> set[str]:
+    """CONTAINS("/"+norm+"/", "/"+lit+"/") 를 참으로 만드는 lit 전체 집합.
+    "/" 세그먼트의 모든 연속 구간이며 전체 문자열도 포함한다."""
+    segs = norm.split("/")
+    keys: set[str] = set()
+    for i in range(len(segs)):
+        for j in range(i, len(segs)):
+            key = "/".join(segs[i:j + 1])
+            if key:
+                keys.add(key)
+    return keys
+
+
+def _class_closure(class_name: str) -> set[str]:
+    rows = graph_engine.sparql(f"""
+PREFIX fp: <http://mafest.ai/product#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?c WHERE {{ ?c rdfs:subClassOf* fp:{class_name} }}
+""")
+    return {r["c"] for r in rows}
+
+
+def _values_by_entity(iri: str) -> dict[str, list[str]]:
+    rows = graph_engine.sparql(f"SELECT ?entity ?v WHERE {{ ?entity <{iri}> ?v }}", max_rows=None)
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        if r.get("v") is not None:
+            out.setdefault(r["entity"], []).append(r["v"])
+    return out
+
+
+_INDEX_CACHE_VERSION = 1
+_INDEX_CACHE_PATH = ROOT / "artifacts" / "graph_entity_index.pkl"
+
+
+def _store_signature() -> dict | None:
+    """캐시 유효성 키: 실제로 열린 스토어 경로와 그 안 파일들의 최신 mtime.
+    스토어를 다시 빌드하면 mtime 이 바뀌어 캐시가 자동으로 무효화된다."""
+    client = getattr(graph_engine, "_CLIENT", None)
+    path = getattr(client, "remote_store_path", None) or getattr(client, "local_store_path", None)
+    if not path or not Path(path).is_dir():
+        return None
+    mtime = max((p.stat().st_mtime for p in Path(path).rglob("*") if p.is_file()), default=0.0)
+    return {"version": _INDEX_CACHE_VERSION, "store": str(path), "mtime": mtime,
+            "classes": sorted(NORMALIZED_CLASSES)}
+
+
+def _load_index_cache(signature: dict | None):
+    if signature is None or not _INDEX_CACHE_PATH.is_file():
+        return None
+    try:
+        with _INDEX_CACHE_PATH.open("rb") as handle:
+            payload = pickle.load(handle)
+        if payload.get("signature") == signature:
+            return payload["index"]
+    except Exception as exc:  # noqa: BLE001 - 캐시는 최적화일 뿐, 깨지면 다시 만든다
+        logger.warning("entity index cache unreadable, rebuilding: %s", exc)
+    return None
+
+
+def _save_index_cache(signature: dict | None, index: dict) -> None:
+    if signature is None:
+        return
+    try:
+        _INDEX_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _INDEX_CACHE_PATH.with_suffix(".pkl.tmp")
+        with tmp.open("wb") as handle:
+            pickle.dump({"signature": signature, "index": index}, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(_INDEX_CACHE_PATH)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("entity index cache not saved: %s", exc)
+
+
+@lru_cache(maxsize=1)
+def _entity_index() -> dict[str, dict[str, frozenset[str]]]:
+    """class_name → 세그먼트 키 → 그 키가 name/label/alt/code 어느 하나에 있는 entity URI.
+
+    FILTER 의 OR 조건과 같은 범위라 원래 질의가 돌려줄 entity 의 상위집합이다.
+    구축에 약 15s(1.17M 트리플, 2026-09-05 실측)가 걸려 artifacts/ 에 pickle 로
+    남기고, 스토어 경로·mtime 이 같으면 다음 프로세스는 그것을 읽는다."""
+    signature = _store_signature()
+    cached = _load_index_cache(signature)
+    if cached is not None:
+        logger.info("graph entity index loaded from cache: %s", _INDEX_CACHE_PATH)
+        return cached
+    t0 = time.perf_counter()
+    types = graph_engine.sparql(
+        "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+        "SELECT ?entity ?type WHERE { ?entity rdf:type ?type }",
+        max_rows=None,
+    )
+    entities_by_type: dict[str, set[str]] = {}
+    for r in types:
+        entities_by_type.setdefault(r["type"], set()).add(r["entity"])
+
+    label_iri = _PREFIX_IRI["rdfs"] + "label"
+    alt_iri = _PREFIX_IRI["skos"] + "altLabel"
+    spec: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
+    needed = {label_iri, alt_iri}
+    for cls in NORMALIZED_CLASSES:
+        name_p, code_p = _class_spec(cls)
+        spec[cls] = (_iris(name_p), _iris(code_p))
+        needed.update(spec[cls][0])
+        needed.update(spec[cls][1])
+    values = {iri: _values_by_entity(iri) for iri in needed}
+
+    index: dict[str, dict[str, frozenset[str]]] = {}
+    for cls, (name_iris, code_iris) in spec.items():
+        members: set[str] = set()
+        for c in _class_closure(cls):
+            members |= entities_by_type.get(c, set())
+        bucket: dict[str, set[str]] = {}
+        for ent in members:
+            keys: set[str] = set()
+            for iri in (*name_iris, label_iri, alt_iri, *code_iris):
+                for v in values[iri].get(ent, ()):
+                    keys |= _segment_keys(_sparql_norm(v))
+            for key in keys:
+                bucket.setdefault(key, set()).add(ent)
+        index[cls] = {key: frozenset(ents) for key, ents in bucket.items()}
+    logger.info("graph entity index built: %d classes, %.1fs", len(index), time.perf_counter() - t0)
+    _save_index_cache(signature, index)
+    return index
+
+
 def _normalized_literal_candidates(text: str, class_name: str) -> list[dict]:
-    """공백·구분자를 지운 정규형의 세그먼트 완전일치 후보를 찾는다."""
+    """공백·구분자를 지운 정규형의 세그먼트 완전일치 후보를 찾는다.
+
+    인덱스로 걸릴 수 있는 entity 를 고른 뒤, 그 entity 로 제한한 원래 SPARQL 을
+    실행한다. 후보·행 순서·LIMIT 100 이 스캔 판과 같다. 인덱스를 못 만들면
+    스캔 판으로 폴백한다 - 빈 인덱스로 not_found 를 내는 것은 조용한 오답이라
+    허용하지 않는다."""
+    global _INDEX_FAILURE
+    index = None
+    if _INDEX_FAILURE is None:
+        try:
+            index = _entity_index()
+        except Exception as exc:  # noqa: BLE001 - 어떤 실패든 폴백해야 한다
+            _INDEX_FAILURE = f"{type(exc).__name__}: {exc}"
+            logger.warning("entity index unavailable, falling back to SPARQL scan: %s", _INDEX_FAILURE)
+    if index is None:
+        return _normalized_literal_candidates_sparql(text, class_name)
+    hits = index.get(class_name, {}).get(_normalized_key(text).lower())
+    if not hits:
+        return []
+    return _normalized_literal_candidates_sparql(text, class_name, entities=sorted(hits))
+
+
+def _normalized_literal_candidates_sparql(text: str, class_name: str, *,
+                                          entities: list[str] | None = None) -> list[dict]:
+    """3단계의 원래 SPARQL. ``entities`` 가 없으면 클래스 전체 스캔(인덱스 폴백·
+    회귀 테스트 기준값)이고, 있으면 VALUES 로 그 entity 만 본다."""
     name_property, code_property = _class_spec(class_name)
     literal = json.dumps(_normalized_key(text), ensure_ascii=False)
     filters = " || ".join(_segment_match(v, literal)
                           for v in ("name", "label", "alt", "code"))
+    values_clause = ""
+    if entities:
+        values_clause = "  VALUES ?entity { " + " ".join(f"<{uri}>" for uri in entities) + " }\n"
     query = f"""
 PREFIX fp: <http://mafest.ai/product#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 SELECT DISTINCT ?entity ?name ?label ?alt ?code WHERE {{
-  ?entity rdf:type ?actual_class .
+{values_clause}  ?entity rdf:type ?actual_class .
   ?actual_class rdfs:subClassOf* fp:{class_name} .
   OPTIONAL {{ ?entity {name_property} ?name }}
   OPTIONAL {{ ?entity rdfs:label ?label }}
@@ -247,6 +448,7 @@ def resolve_entity(text: str, class_name: str = "Company", *,
     2) normalized_exact         (기업 전용) 법인격·약칭 제거 후 완전일치
     3) normalized_literal_exact 공백·구분자 제거 후 완전일치
        normalized_segment_exact 위와 같되 "/" 세그먼트로 일치
+                                (프로세스 내 인덱스 조회, 실패 시 SPARQL 스캔)
     4) partial_candidates       allow_partial 일 때만, 후보 제시 전용
     5) *_type_stripped          말미 상품군 토큰을 뗀 문자열로 1~4 를 한 번 더
 
