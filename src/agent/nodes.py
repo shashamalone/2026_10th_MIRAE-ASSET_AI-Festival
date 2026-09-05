@@ -130,6 +130,8 @@ def verify_intent_node(state: PipelineState) -> dict:
     guard_notes.extend(issuer_notes)
     final_intent, region_notes = utils.preserve_explicit_investment_region(final_intent, question)
     guard_notes.extend(region_notes)
+    final_intent, exposure_notes = utils.preserve_overseas_exposure_scope(final_intent, question)
+    guard_notes.extend(exposure_notes)
     final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
     guard_notes.extend(request_notes)
     trace = [trace_msg]
@@ -825,6 +827,8 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
     for dep_id in step.get("depends_on") or []:
         dep_result = step_results.get(dep_id) or {}
         if dep_result.get("engine") == "graph":
+            if dep_result.get("coverage_truncated") and (step.get("sort") or {}).get("attribute"):
+                return {**step, "graph_handoff_blocked": "선행 관계 조회가 반환 상한에 도달하여 전체 후보를 확보하지 못했습니다. 일부 후보로 전체 최고·순위를 확정하지 않습니다."}
             codes = dep_result.get("entity_codes") or []
             if dep_result.get("error") or dep_result.get("status") not in (None, "ok") or not codes:
                 return {**step, "graph_handoff_blocked":
@@ -986,7 +990,7 @@ def _build_graph_frame(relation: dict, relations_by_id: dict[str, dict]) -> dict
         "relation_scope": True,
         "requested_fields": [],
         "constraints": [],
-        "limit": 100,
+        "limit": 500,
     }
 
 
@@ -1083,6 +1087,8 @@ def graph_search_node(state: PipelineState) -> dict:
             "entity": result.get("entity"),
             "sparql": result.get("sparql"),
             "graph_plan": result.get("graph_plan") or result.get("plan"),
+            "evidence_level": result.get("evidence_level"),
+            "coverage_truncated": result.get("coverage_truncated", False),
             "note": result.get("note"),
         }
         trace_msgs.append(
@@ -1919,6 +1925,10 @@ def _render_execution_limits(state: PipelineState) -> str:
         if result.get("engine") == "graph" and result.get("status") not in (None, "ok", "chained"):
             notes.append(f"{sid}: 관계 근거 미확보 ({result.get('status')}); "
                          "편입·발행·자회사·동일 상품 관계를 확인한 결과가 아닙니다.")
+        if result.get("engine") == "graph" and result.get("note"):
+            notes.append(f"{sid}: {result['note']}")
+        if result.get("coverage_truncated"):
+            notes.append(f"{sid}: 관계 조회 반환 상한에 도달했습니다. 목록 완전성·전체 순위는 확인되지 않았습니다.")
     return "조회 한계\n\n" + "\n".join(f"- {n}" for n in dict.fromkeys(notes)) if notes else ""
 
 
@@ -1935,6 +1945,8 @@ def _render_graph_results(step_results: dict) -> str:
         description = "; ".join(f"{e['subject']} → {e['predicate']} → {e['object']}" for e in paths)
         lines = [f"Graph 관계 조회 근거 [{sid}]", f"실행 경로: {description or '경로 정보 미확보'}",
                  f"반환 {len(rows)}건 중 {min(len(rows), 20)}건 표시. 분류 연결과 실제 편입 관계는 서로 대체하지 않습니다."]
+        if result.get("note"):
+            lines.append(result["note"])
         for index, row in enumerate(rows[:20], 1):
             values = []
             for key, value in row.items():

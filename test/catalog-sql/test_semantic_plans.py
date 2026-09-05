@@ -11,6 +11,43 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_graph_source_records_do_not_require_nonexistent_documents(self):
+        from types import SimpleNamespace
+        compiled = SimpleNamespace(evidence_columns=("h_as_of", "h_source", "h_document", "h_document_title"), tbox_provenance=())
+        evidence, reason = self.graph.resolve_evidence([{"h_as_of": "2026-07-10", "h_source": "SourceFile"}], compiled)
+        self.assertFalse(reason)
+        self.assertEqual(evidence[0]["document_status"], "metadata_missing")
+        self.assertEqual(evidence[0]["kind"], "source_record")
+        self.assertTrue(self.graph.resolve_evidence([{"h_as_of": "2026-07-10"}], compiled)[1])
+        self.assertTrue(self.graph.resolve_evidence([{"h_as_of": "2026-07-10", "h_source": ""}], compiled)[1])
+
+    def test_capped_graph_candidates_cannot_be_global_top_rank(self):
+        step = {"depends_on": ["g"], "sort": {"attribute": "AUM"}}
+        results = {"g": {"engine": "graph", "status": "ok", "entity_codes": ["X"], "coverage_truncated": True}}
+        self.assertIn("전체 후보", self.nodes._apply_graph_handoff(step, results)["graph_handoff_blocked"])
+
+    def test_overseas_exposure_does_not_exclude_domestic_listing(self):
+        intent = {"product_domain": [{"domain": "해외ETF", "subtype": ["패시브"]}], "conditions": [], "sort": {"domains": ["해외ETF"]}}
+        fixed, _ = utils.preserve_overseas_exposure_scope(intent, "해외주식에 투자하는 ETF 중 순자산 2조원")
+        self.assertEqual({d["domain"] for d in fixed["product_domain"]}, {"국내ETF", "해외ETF"})
+        self.assertTrue(any(c["attribute"] == "투자자산유형" and c["value"] == "주식" for c in fixed["conditions"]))
+        self.assertFalse(utils.preserve_overseas_exposure_scope(intent, "해외주식에 투자하는 해외 상장 ETF")[1])
+
+    def test_broad_overseas_is_not_a_literal_country(self):
+        intent = {"product_domain": [{"domain": "해외ETF"}], "conditions": []}
+        fixed, notes = utils.preserve_explicit_investment_region(intent, "해외 채권 ETF")
+        self.assertFalse(notes)
+        records, _ = utils.resolve_subtype_conditions("해외ETF", ["채권 ETF"])
+        self.assertTrue(all(r["valid"] for r in records))
+        self.assertEqual(records[0]["column"], "wu_inv_ast_type")
+
+    def test_unrequested_top_one_is_removed_not_confused_with_months(self):
+        intent = {"sort": {"attribute": "순자산", "limit": "1"}}
+        fixed, _ = evidence_contract.restore_explicit_comparators(intent, "6개월 수익률을 비교해줘")
+        self.assertEqual(fixed["sort"]["limit"], "")
+        fixed, _ = evidence_contract.restore_explicit_comparators(intent, "상위 1개를 비교해줘")
+        self.assertEqual(fixed["sort"]["limit"], "1")
+
     def test_strict_comparators_are_preserved_from_user_words(self):
         intent = {"conditions": [{"attribute": "수량", "value": "0", "operator": "gte"}]}
         fixed, _ = evidence_contract.restore_explicit_comparators(intent, "수량이 0보다 큰 상품")

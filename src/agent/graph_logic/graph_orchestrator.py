@@ -293,11 +293,19 @@ def resolve_evidence(rows: list[dict], compiled) -> tuple[list[dict], str]:
     클래스가 없는 plan은 TBox의 sourceTable/sourceColumn을 근거로 쓰고,
     그것마저 없으면 무근거이므로 ABSTAIN한다."""
     if compiled.evidence_columns:
+        core = [column for column in compiled.evidence_columns if column.endswith(("_as_of", "_source"))]
+        if not core:
+            return [], "관계의 기준일·원천 식별자 계약이 없습니다"
         missing = [index for index, row in enumerate(rows)
-                   if any(row.get(column) is None for column in compiled.evidence_columns)]
+                   if any(row.get(column) is None or str(row.get(column)).strip() == "" for column in core)]
         if missing:
-            return [], f"evidence 누락 행: {missing[:10]}"
-        return _evidence(rows, compiled.evidence_columns), ""
+            return [], f"기준일·원천 식별자 evidence 누락 행: {missing[:10]}"
+        evidence = _evidence(rows, compiled.evidence_columns)
+        for item in evidence:
+            absent = [c for c in compiled.evidence_columns if c not in core and not rows[item["row"]].get(c)]
+            item.update(kind="source_record", document_status="metadata_missing" if absent else "metadata_present",
+                        missing_document_fields=absent)
+        return evidence, ""
     if not compiled.tbox_provenance:
         return [], "evidence 부재: plan에 근거 클래스도 TBox provenance(sourceTable/sourceColumn)도 없다"
     return [{"kind": "tbox_source", "property": curie, "source_table": table,
@@ -427,6 +435,9 @@ def run(question: str, frame: dict, *,
                 "sparql": compiled.sparql, "attempts": attempts, "evidence": [],
                 "entity_codes": [], "trace": trace + [abstain_reason]}
     entity_codes = _extract_entity_codes(plan, rows)
+    document_missing = any(e.get("document_status") == "metadata_missing" for e in evidence)
+    note = ("관계 원천 식별자와 기준일은 확인했지만 연결된 문서 메타데이터·본문은 미확보입니다. "
+            "데이터셋에 기록된 관계만 제시하며 공식 문서 인용·위험 주장 또는 현재 편입 확인으로 간주하지 않습니다." if document_missing else "")
     return {
         "status": "ok" if rows else "empty",
         "rows": rows,
@@ -436,6 +447,9 @@ def run(question: str, frame: dict, *,
         "sparql": compiled.sparql,
         "attempts": attempts,
         "evidence": evidence,
+        "evidence_level": "source_record" if document_missing else "document_metadata_or_tbox",
+        "note": note,
+        "coverage_truncated": len(rows) >= int(plan.get("limit") or 100),
         "entity_codes": entity_codes,
         "tbox_provenance": [list(x) for x in compiled.tbox_provenance],
         "trace": trace,
@@ -537,6 +551,7 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
         "graph_plan": plan,
         "sparql": "\n\n".join(sparqls),
         "evidence": evidence,
+        "coverage_truncated": len(all_rows) >= limit,
         "entity_codes": entity_codes,
         "tbox_provenance": [list(x) for x in compiled.tbox_provenance] if compiled else [],
         "trace": trace,

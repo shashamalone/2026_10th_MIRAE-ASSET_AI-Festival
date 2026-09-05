@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--snapshot-seed", type=Path, required=True)
     parser.add_argument("--ids", required=True)
     parser.add_argument("--label", default="rdb-replay")
+    parser.add_argument("--intent-stage", choices=["verified_intent", "intent"], default="verified_intent")
     args = parser.parse_args()
     run = args.run.resolve()
     if (ROOT / "artifacts/runs").resolve() not in run.parents or "codex-t139-sql-0905" not in run.parts:
@@ -50,7 +51,7 @@ def main():
             raise ValueError(f"Existing replay {qid}; preserve it and use a separate run")
         trace_path = run / "live" / qid / "traces.jsonl"
         trace = json.loads(trace_path.read_text(encoding="utf-8"))
-        original = trace.get("verified_intent") or cases[qid].get("verified_intent") or trace.get("intent") or cases[qid].get("intent")
+        original = trace.get(args.intent_stage) or cases[qid].get(args.intent_stage) or trace.get("intent") or cases[qid].get("intent")
         if not original:
             raise ValueError(f"No saved intent: {qid}")
         question = trace["question"]
@@ -61,6 +62,7 @@ def main():
             for restore in (evidence_contract.restore_explicit_comparators, evidence_contract.restore_class_comparison, evidence_contract.restore_cross_market_identity,
                             utils.preserve_explicit_investment_region, utils.preserve_explicit_output_requests):
                 state["intent"], _ = restore(state["intent"], question)
+            state["intent"], _ = utils.preserve_overseas_exposure_scope(state["intent"], question)
             state["intent"], _ = utils.resolve_named_product_domains(state["intent"])
             state["intent"], _ = utils.prune_inferred_named_subtypes(state["intent"], question)
             state.update(plan_query_db.plan_query_node(state))
@@ -82,6 +84,7 @@ def main():
             state["answer"] = json.loads(response["answer"])
         state["verification"] = {"mode": "saved-intent-read-only-sql", "paid_calls": 0,
                                  "intent_source": "single_trace" if trace.get("verified_intent") else "previous_audit",
+                                 "intent_stage": args.intent_stage,
                                  "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                                  "release_id": schema_snapshot.snapshot_release_id(snap),
                                  "limitation": "의도 재분석·Vector·Graph·설명 LLM 없이 검증. 새 단회 정답률로 계산하지 않음."}

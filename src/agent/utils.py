@@ -73,6 +73,9 @@ def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[di
             text = text.replace(entity["surface_form"], " ")
     regions = set()
     for entry in _ontology_labels("InvestmentRegion"):
+        if entry["label"] in {"해외", "국내외", "글로벌"}:
+            # Broad market/exposure terms are not a particular country.
+            continue
         for alias in entry["aliases"]:
             if re.search(r"(?<![가-힣A-Za-z])" + re.escape(alias) + r"\s+(?:주식|채권)(?:형|에\s*투자|\s*투자)?", text):
                 regions.add(entry["label"])
@@ -91,6 +94,31 @@ def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[di
             conditions.append({"domain": name, "attribute": "투자지역", "operator": "eq", "value": region, "value_2": ""})
             added.append(f"'{region} 주식/채권'의 명시적 투자지역 조건 보존: {name}. 상장시장과 구분합니다.")
     return ({**intent, "conditions": conditions}, added) if added else (intent, [])
+
+
+def preserve_overseas_exposure_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Overseas investment is not itself proof of an overseas listing.
+
+    Keep the original foreign scope, but restore domestic-listed candidates;
+    unsupported FX/period requests in the foreign branch remain explicit.
+    """
+    text = re.sub(r"\s+", "", question)
+    match = re.search(r"해외(주식|채권)에투자", text)
+    if not match or re.search(r"해외ETF|해외상장|외국상장|미국상장", text):
+        return intent, []
+    domains = intent.get("product_domain") or []
+    if len(domains) != 1 or domains[0].get("domain") != "해외ETF":
+        return intent, []
+    conditions = list(intent.get("conditions") or [])
+    domestic = [{**c, "domain": "국내ETF"} for c in conditions if c.get("domain") == "해외ETF"]
+    domestic.extend([{"domain": "국내ETF", "attribute": "투자자산유형", "operator": "eq", "value": match[1], "value_2": ""},
+                     {"domain": "국내ETF", "attribute": "투자지역", "operator": "ne", "value": "국내", "value_2": ""}])
+    sort = dict(intent.get("sort") or {})
+    if sort.get("domains"):
+        sort["domains"] = list(dict.fromkeys([*sort["domains"], "국내ETF"]))
+    fixed = {**intent, "conditions": conditions + domestic, "sort": sort,
+             "product_domain": [*domains, {"domain": "국내ETF", "subtype": list(domains[0].get("subtype") or [])}]}
+    return fixed, ["'해외 자산에 투자'는 해외 상장과 다르므로 국내 상장 ETF 후보도 조회합니다. 해외 상장 범위는 유지하며 통화·수익률 미지원 조건을 숨기지 않습니다."]
 
 
 def lookup_product_identities(names: list[str]) -> list[dict]:
@@ -544,6 +572,10 @@ def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[di
     notes: list[str] = []
     for value in subtype or []:
         mapped = rdb_schema.resolve_subtype_condition(domain, value)
+        if domain in {"국내ETF", "해외ETF"} and value.upper() not in {"ETF", "ETN"}:
+            stripped = re.sub(r"\s*(?:ETF|ETN)$", "", value, flags=re.IGNORECASE).strip()
+            mapped = mapped or rdb_schema.resolve_subtype_condition(domain, stripped)
+            value = stripped
         if domain in {"채권", "펀드"} and value in {"원화", "원화채권", "원화표시"}:
             mapped = {"column": "curr_cd", "operator": "eq", "value": "KRW"}
         if domain in {"국내ETF", "해외ETF"} and value.upper() in {"ETF", "ETN"}:
