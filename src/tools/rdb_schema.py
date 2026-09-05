@@ -101,25 +101,6 @@ class AttributeSpec:
     known_values: list[str] = field(default_factory=list)  # categorical일 때 참고용
     true_condition: str = ""  # numeric_flag일 때: "> 0" 같은 조건
 
-    # ------------------------------------------------------------------
-    # 이 컬럼이 raw.* 기본 테이블이 아니라 enriched.* 같은 보강 테이블에
-    # 있을 때만 세 필드를 채운다. 셋 다 비어 있으면(기본값) 예전과 완전히
-    # 같게 동작한다 - 기존 카탈로그 항목은 전부 이 필드들을 안 쓰므로
-    # 하위호환이 깨지지 않는다.
-    #
-    #   join_table: 보강 테이블 전체 이름(스키마 포함). 예: "enriched.etf_kr_enriched"
-    #   join_alias: 그 테이블에 붙일 별칭. 예: "ee"
-    #   join_on:    JOIN 조건. 기본 테이블은 항상 "base"로 별칭이 고정된다.
-    #               예: "ee.pd_itm_no = base.pd_itm_no"
-    #
-    # column 값 자체도 join_table을 쓸 때는 별칭을 붙여서 적는다(예:
-    # "ee.charge_rt_final"). 기본 테이블 컬럼은 지금처럼 별칭 없이 적으면
-    # 되고(예: "pd_net_tamt"), utils.format_resolved_schema가 JOIN이 하나
-    # 라도 있는 쿼리에서만 자동으로 "base." 접두어를 붙여 준다.
-    join_table: str = ""
-    join_alias: str = ""
-    join_on: str = ""
-
     # 이 컬럼이 회사/기관 이름을 담는 컬럼이면 True. "SK하이닉스"(질문에서
     # 흔히 쓰는 영문+한글 혼용 약칭)와 "에스케이하이닉스(주)"(원천 데이터의
     # 순한글 정식 표기) 같은 표기 차이 때문에 exact match가 0건으로
@@ -152,44 +133,6 @@ DOMAIN_TABLE_INFO: dict[str, dict[str, str]] = {
     "해외ETF": {"table": "raw.pref02n001"},
     "펀드": {"table": "raw.prfd01n001"},
 }
-
-
-# ---------------------------------------------------------------------------
-# 보강(enriched) 테이블 참조 정보. AttributeSpec.join_table에 실제로 쓰이는
-# 값들을 여기 한곳에 모아 문서화한다(코드가 이 딕셔너리를 직접 읽지는
-# 않는다 - AttributeSpec 쪽에 이미 필요한 값이 다 박혀 있다. 이건 어떤
-# 보강 테이블이 왜 존재하는지 사람이 한눈에 보기 위한 참조용이다).
-#
-# 2026-08-31 기준 실제로 검증하고 연결한 건 국내ETF의 etf_kr_enriched
-# 하나뿐이다("총보수율" 카탈로그 참고). 나머지는 데이터가 확인됐지만
-# (bond_kr_enriched) 아직 카탈로그에 연결하지 않았거나, 관계 테이블
-# (etf_holding 등)이 아직 안 들어와서 연결할 수 없는 상태다.
-# ---------------------------------------------------------------------------
-ENRICHED_TABLE_INFO: dict[str, dict[str, str]] = {
-    "국내ETF": {
-        "table": "enriched.etf_kr_enriched",
-        "join_key": "pd_itm_no",
-        "status": "연결됨(총보수율)",
-        "note": (
-            "1,780건, raw.pref01n001과 pd_itm_no 1:1 완전 대응 확인. "
-            "LSEG 정적 메타데이터로 총보수(charge_rt_final), 복제방식(replication), "
-            "기초시장(base_market), 기초자산(base_asset), 환헤지(hedge_type) 보강."
-        ),
-    },
-    "채권": {
-        "table": "enriched.bond_kr_enriched",
-        "join_key": "(pd_no, pd_exg_mkt, info_seq)",
-        "status": "확인됨, 아직 카탈로그 미연결",
-        "note": (
-            "21,882건. is_sellable(Y/N)이 만기 경과(49건) 여부로 정확히 계산되어 "
-            "있어, 현재 DOMAIN_SALE_POLICY['채권']의 no_filter(조건 자체를 안 거는) "
-            "방식보다 정밀하게 '판매 가능'을 표현할 수 있다. crd_grd_rank(1=AAA, "
-            "숫자가 클수록 나쁜 등급)는 신용등급 정렬을 CASE WHEN 없이 그 컬럼 "
-            "하나로 처리할 수 있게 해준다. 다음 작업 대상."
-        ),
-    },
-}
-
 
 # ---------------------------------------------------------------------------
 # "판매 가능"을 도메인별로 어떻게 처리할지에 대한 방침.
@@ -739,7 +682,25 @@ BOND_ATTRIBUTES: dict[str, AttributeSpec] = {
     "채권종류": AttributeSpec(
         column="bd_knd",
         value_type="categorical",
-        note="예탁원 기준 채권종류명 41종. 뒤쪽 공백 패딩이 있어 TRIM(bd_knd) 비교를 권장. 0.7% 결측.",
+        # [2026-09-04 추가] 서버에 직접 SELECT DISTINCT TRIM(bd_knd)로 실측한
+        # 32종 전체(예: 위에서 "41종"이라던 것은 부정확한 옛 추정치). 이전엔
+        # known_values가 비어 있어서 verify_intent가 "국고채"(상품소분류
+        # std_pd_scls_nm 쪽 값, SUBTYPE_CONDITION_MAP 참고)를 이 개념의 값으로
+        # 잘못 채워도 아무도 잡아주지 못했다 - 실제 컬럼 값은 "국고채권"이라
+        # TRIM(bd_knd) = '국고채'가 항상 0건으로 실패했다(실측). known_values를
+        # 채워두면 utils.format_resolved_schema가 값 불일치를 SQL 생성 LLM에게
+        # 미리 경고해 준다.
+        known_values=[
+            "Conduit회사채", "MBS", "국고채권", "국민주택1종", "국민주택2종",
+            "금융지주회사채", "기업인수목적회사채", "기타금융투자전업회사채",
+            "기타금융회사채", "도시철도공채", "모집지방채", "보험회사채",
+            "부동산투자회사채", "시설대여채(리스)", "신용카드채", "외국환평형기금",
+            "유동화수익증권", "유동화회사채", "일반은행채", "일반지방공사채",
+            "일반특수법인채", "일반회사채", "재정증권", "증권금융채(특수금융)",
+            "지방공사보상채권", "지역개발채", "집합투자회사채", "통화안정채권",
+            "투자매매.중개채", "특수보상채권", "특수은행채", "할부금융채",
+        ],
+        note="예탁원 기준 채권종류명 32종(실측). 뒤쪽 공백 패딩이 있어 TRIM(bd_knd) 비교를 권장. 0.7% 결측.",
     ),
     "모집구분": AttributeSpec(
         column="bd_ofr_tcd",
@@ -922,20 +883,11 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
         ),
     ),
     "총보수율": AttributeSpec(
-        column="ee.charge_rt_final",
+        column="cu_charge_rt",
         value_type="numeric",
-        join_table="enriched.etf_kr_enriched",
-        join_alias="ee",
-        join_on="ee.pd_itm_no = base.pd_itm_no",
         note=(
-            "원본 cu_charge_rt는 87.8% 결측이라 정렬 기준으로 쓰기 어려웠다. "
-            "LSEG 외부 데이터로 보강한 charge_rt_final을 대신 쓴다(결측 38.3%로 "
-            "크게 개선됨 - 2026-08-31 pd_itm_no 1:1 조인으로 실측 검증 완료). "
-            "주최측 원본 값(cu_charge_rt)이 있으면 그 값을 그대로 쓰고 없을 "
-            "때만 LSEG 값으로 채운 컬럼이다(charge_rt_source='RDB'인 67건 "
-            "전부 원본과 정확히 일치함을 확인했다). 남은 결측 681건 중 545건은 "
-            "ETN(이 값이 원천적으로 없는 상품군)이고 136건만 진짜 ETF인데도 "
-            "LSEG가 못 찾은 경우다."
+            "87.8% 결측이라 정렬 기준으로 쓰기는 어렵지만 raw.pref01n001에 "
+            "실재하는 유일한 총보수 컬럼이다."
         ),
     ),
     "기초지수": AttributeSpec(
@@ -1274,9 +1226,6 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
     "국내ETF": [
         "이 테이블에는 ETN(545건)이 섞여 있다. 질문이 ETF만 요구하면 pd_grp_no = 'ETF' 조건을 건다.",
         "반도체, 2차전지 같은 테마 조건은 등호로 풀 수 없다. pd_nm LIKE '%키워드%' 매칭으로만 가능하다.",
-        "총보수율 조건이나 정렬이 필요하면 원본 cu_charge_rt(87.8% 결측) 대신 "
-        "enriched.etf_kr_enriched의 charge_rt_final을 쓴다(카탈로그가 이미 이렇게 "
-        "매핑되어 있고, [해석된 스키마]에 필요한 JOIN 절이 자동으로 포함된다).",
         "순자산은 pd_net_tamt를 쓴다. du_last_aum도 있지만 값이 미세하게 다르다.",
     ],
     "해외ETF": [

@@ -251,11 +251,7 @@ SQL_WRITE_SYSTEM_PROMPT = """당신은 자연어로 정리된 쿼리 로직을 �
 PostgreSQL SQL로 옮기는 Agent입니다.
  
 [절대 규칙]
-- FROM 절은 [해석된 스키마]의 "테이블:" 줄과 그 바로 아래 JOIN 줄(있다면)을
-  정확히 그대로 옮기세요. JOIN 줄이 없으면 이전처럼 테이블 하나만 씁니다.
-  JOIN 줄이 있으면 반드시 그 별칭(AS base, AS ee 등)을 그대로 유지하세요 -
-  별칭을 빼거나 바꾸면 SELECT/WHERE/ORDER BY에 적힌 컬럼명(예: base.pd_nm,
-  ee.charge_rt_final)과 안 맞아서 SQL이 깨집니다.
+- FROM 절은 [해석된 스키마]의 "테이블:" 줄을 정확히 그대로 옮기세요.
 - SELECT, WHERE, ORDER BY에는 [해석된 스키마]에 나온 실제 컬럼명(별칭
   포함)만 쓰세요. 목록에 없는 컬럼을 지어내면 안 됩니다.
 - [자연어 초안]에 서술된 로직을 빠짐없이 그대로 SQL로 옮기세요.

@@ -129,11 +129,80 @@ def build_condition_list(step: dict) -> list[dict]:
     conditions: list[dict] = [dict(c) for c in step.get("conditions", [])]
 
     for e in step.get("product_name_entities") or []:
-        # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
-        # contains로 매칭한다.
-        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": ""})
+        # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) 기본은 eq가
+        # 아니라 contains로 매칭한다. 다만 정확히 일치하는 상품이 실제로
+        # 있다고 이미 확인된 경우(resolve_product_name_exactness가
+        # match_mode="exact"로 표시)만 eq를 쓴다 - "KODEX 200"(질문 표기,
+        # 공백 있음)을 contains로 찾으면 실제 상품(DB 표기 "KODEX200",
+        # 공백 없음)은 못 찾고 "KODEX 200가치저변동" 같은 파생상품 14개만
+        # 걸려서 정작 원하는 상품이 후보에 아예 없었다(2026-09-04 실측).
+        # 정확일치가 없으면 지금까지와 동일하게 contains로 폴백한다.
+        if e.get("match_mode") == "exact" and e.get("resolved_name"):
+            # 사용자가 쓴 표기(surface_form)가 아니라 실제로 확인된 정식
+            # pd_nm(resolved_name)으로 eq 비교한다 - surface_form은 애초에
+            # 정식명의 일부일 뿐이라 그대로 eq에 쓰면 거의 항상 0건이 된다.
+            conditions.append({"attribute": "상품명", "operator": "eq", "value": e["resolved_name"], "value_2": ""})
+        else:
+            conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": ""})
 
     return conditions
+
+
+def resolve_product_name_exactness(conn, domain: str, step: dict) -> None:
+    """step["product_name_entities"]의 각 항목에 대해, 정확히 일치하는
+    상품이 실제로 DB에 있는지 확인하고, 찾으면 그 항목에
+    match_mode="exact" + resolved_name(실제 pd_nm 원문)을 남긴다
+    (build_condition_list가 이 표시를 보고 그 실제 이름으로 eq 조건을
+    만든다). 못 찾으면 아무것도 바꾸지 않고 기존 contains(LIKE) 동작으로
+    그대로 폴백한다 - 이 함수는 상황을 나아지게만 하고 나빠지게 하지
+    않는다.
+
+    [surface_form == 실제 pd_nm 전체를 비교하지 않는 이유] 상품명은
+    거의 항상 "삼성 KODEX200 증권상장지수투자신탁[주식]"처럼 운용사명·
+    boilerplate 접미사가 붙은 정식명이고, 질문은 "KODEX 200"처럼 그
+    일부만 쓴다 - 그래서 완전일치(TRIM(col)=값)는 사실상 항상 0건이라
+    처음 짠 버전은 폴백만 계속 타서 아무 효과가 없었다(2026-09-04 실측).
+    대신 "공백을 뺀 검색어가 공백을 뺀 이름에 포함되는 후보들 중 가장
+    짧은 이름"을 정답으로 본다 - 이 상품군은 기함(旗艦) 상품이 가장
+    단순한 이름을 쓰고, 파생/테마 변형 상품은 그 이름에 수식어를 덧붙인
+    더 긴 이름을 쓰는 명명 관행이 있다(실측: "삼성 KODEX200 증권상장
+    지수투자신탁[주식]"이 "삼성 KODEX 200가치저변동증권상장지수투자
+    신탁[주식]" 등 14개 변형보다 짧고, 검색어 "KODEX 200"을 공백 없이
+    비교하면 15개 전부에 포함된다). 공백 유무 표기가 어느 쪽이든(기함
+    상품 쪽에 공백이 없을 수도, 있을 수도 있음) 이 방식은 항상 동일하게
+    동작한다.
+
+    conn이 없거나(단독 호출) 확인 쿼리 자체가 실패해도(네트워크 등)
+    예외를 던지지 않고 조용히 넘어간다 - 이 사전 확인은 정확도를 높이는
+    보조 수단이지, 없으면 조회 전체가 막혀야 하는 필수 단계가 아니다."""
+    entities = step.get("product_name_entities") or []
+    if not conn or not entities:
+        return
+    spec = rdb_schema.get_attribute_catalog(domain).get("상품명")
+    entry = rdb_schema.get_domain_entry(domain)
+    if spec is None or entry is None:
+        return
+    for e in entities:
+        name = (e.get("surface_form") or "").strip()
+        if not name:
+            continue
+        despaced = name.replace(" ", "").replace("'", "''")
+        probe_sql = (
+            # PostgreSQL은 SELECT DISTINCT일 때 ORDER BY 표현식이 SELECT
+            # 목록에 그대로 있어야 한다(LENGTH(...)는 없어서 실패했었다,
+            # 2026-09-04 실측: InvalidColumnReference) - LIMIT 1이라 어차피
+            # 중복은 문제되지 않으므로 DISTINCT를 뺐다.
+            f"SELECT TRIM({spec.column}) AS name FROM {entry['table']} "
+            f"WHERE REPLACE(TRIM({spec.column}), ' ', '') LIKE '%{despaced}%' "
+            f"ORDER BY LENGTH(TRIM({spec.column})) ASC LIMIT 1"
+        )
+        try:
+            rows = run_sql(conn, probe_sql, label="상품명 정확일치 확인 쿼리")
+        except Exception:
+            continue
+        if rows and rows[0].get("name"):
+            e["match_mode"] = "exact"
+            e["resolved_name"] = rows[0]["name"]
 
 
 def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[dict], list[str]]:
@@ -308,13 +377,22 @@ def resolve_ordinal_matched_values(spec: AttributeSpec, operator: str, value: st
 # ---------------------------------------------------------------------------
 # 3) 해석된 스키마 조립
 # ---------------------------------------------------------------------------
-def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec], unresolved: list[str]) -> dict:
+def build_resolved_schema(
+    step: dict, concept_to_spec: dict[str, AttributeSpec], unresolved: list[str], conn=None,
+) -> dict:
     """컬럼 매핑 + 값 검증까지 끝난 조건/정렬/필드 구조를 만든다.
     unresolved_concepts나 invalid_conditions가 비어 있지 않으면
-    SQL을 생성하면 안 된다는 신호다(호출부가 판단)."""
+    SQL을 생성하면 안 된다는 신호다(호출부가 판단).
+
+    conn을 주면 build_condition_list를 부르기 전에
+    resolve_product_name_exactness로 상품명 정확일치 여부를 먼저 확인한다
+    (§ "KODEX 200"류 공백 표기 불일치 사고 방지). conn이 없으면(테스트 등)
+    이 사전확인만 건너뛰고 나머지는 그대로 동작한다."""
     domain = step["domain"]
     entry = rdb_schema.get_domain_entry(domain)
     table = entry["table"]
+
+    resolve_product_name_exactness(conn, domain, step)
 
     resolved_conditions = []
     invalid_conditions = []
@@ -455,25 +533,6 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
 
     blocking_unresolved = [c for c in unresolved if c in blocking_concepts]
 
-    # 이 단계가 실제로 쓰는 AttributeSpec 중 join_table이 채워진 것들을
-    # 전부 모아 JOIN 절을 조립한다. 같은 보강 테이블을 여러 조건/필드가
-    # 같이 쓰면(예: 총보수율 조건 + 총보수율 정렬) 중복 JOIN을 만들지
-    # 않도록 join_table 기준으로 한 번만 등록한다.
-    joins: list[str] = []
-    seen_join_tables: set[str] = set()
-
-    def _register_join(spec: AttributeSpec | None) -> None:
-        if spec and spec.join_table and spec.join_table not in seen_join_tables:
-            seen_join_tables.add(spec.join_table)
-            joins.append(f"LEFT JOIN {spec.join_table} AS {spec.join_alias} ON {spec.join_on}")
-
-    for c in resolved_conditions:
-        _register_join(c.get("spec"))
-    if resolved_sort:
-        _register_join(resolved_sort.get("spec"))
-    for f in resolved_fields:
-        _register_join(f.get("spec"))
-
     return {
         "domain": domain,
         "table": table,
@@ -483,7 +542,6 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         "unresolved_concepts": blocking_unresolved,
         "invalid_conditions": invalid_conditions,
         "notes": notes,
-        "joins": joins,
     }
 
 
@@ -504,30 +562,12 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
     같아야 한다), ORDER BY/LIMIT은 절대 넣지 말라고 명시한다(바깥쪽
     UNION 전체 쿼리가 정렬·절단을 전담한다). apply_limit은 union_mode일
     때 항상 False와 같은 효과이므로 별도로 확인하지 않는다."""
-    joins = resolved_schema.get("joins") or []
-    has_joins = bool(joins)
-
-    def _qualify(column: str | None) -> str | None:
-        """JOIN이 하나라도 있는 쿼리에서, 별칭이 아직 안 붙은(기본 테이블)
-        컬럼에 "base." 접두어를 붙인다. 보강 테이블 컬럼(예: ee.charge_rt_final)은
-        AttributeSpec.column에 이미 별칭이 박혀 있으므로("." 포함) 손대지
-        않는다. JOIN이 없는 쿼리(절대다수)는 이 함수가 아무것도 안 바꾸고
-        예전과 완전히 같은 텍스트를 만든다."""
-        if not has_joins or not column or "." in column:
-            return column
-        return f"base.{column}"
-
-    if has_joins:
-        lines = [f"테이블: {resolved_schema['table']} AS base"]
-        for j in joins:
-            lines.append(f"  {j}")
-    else:
-        lines = [f"테이블: {resolved_schema['table']}"]
+    lines = [f"테이블: {resolved_schema['table']}"]
     lines.append("조건:")
 
     for c in resolved_schema["conditions"]:
         spec: AttributeSpec | None = c["spec"]
-        column = _qualify(c["column"])
+        column = c["column"]
         line = f"  - {c['attribute']} {c['operator']} {c['value']!r} -> 컬럼 {column}"
         if spec:
             line += f" (value_type={spec.value_type})"
@@ -559,6 +599,21 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
                 )
             elif spec.value_order:
                 line += f", 값 순서(낮은 값부터): {spec.value_order}"
+            elif spec.known_values and str(c["value"]) not in spec.known_values:
+                # categorical 조건인데 LLM이 넣은 값이 실제 유효값 목록에
+                # 없는 경우다. 예: "채권종류" 조건에 "국고채"(std_pd_scls_nm
+                # 쪽 값)를 넣었는데 실제 bd_knd 유효값은 "국고채권"이라
+                # TRIM(bd_knd) = '국고채'가 늘 0건으로 실패했다(2026-09-04
+                # 실측). 여태 known_values는 선언만 되고 아무 데서도 안 읽혀서
+                # 이런 값 불일치를 아무도 잡아주지 못했다 - 여기서 SQL 생성
+                # LLM에게 직접 경고해서 그 자리에서 고치게 한다.
+                options_repr = ", ".join(repr(v) for v in spec.known_values)
+                line += (
+                    f"\n    ⚠️ {c['value']!r}는 이 컬럼의 실제 유효값 목록에 없다. "
+                    f"유효값: [{options_repr}]. 목록에서 가장 가까운 값으로 바꾸거나, "
+                    f"그래도 애매하면 TRIM({column}) LIKE '%{c['value']}%'로 완화해서 "
+                    f"써라 - 목록에 없는 값을 그대로 등호(=)로 비교하면 항상 0건이 된다."
+                )
             if spec.true_condition:
                 line += f", 참 조건: {column} {spec.true_condition}"
             if spec.note:
@@ -567,7 +622,7 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
 
     if resolved_schema["sort"] and not union_mode:
         s = resolved_schema["sort"]
-        sort_column = _qualify(s["column"])
+        sort_column = s["column"]
         lines.append(f"정렬: {s['attribute']} -> 컬럼 {sort_column}, {s['order']}")
         # PostgreSQL은 DESC 정렬에서 NULL을 "가장 큰 값"으로 취급해 맨
         # 앞으로 보낸다(ASC는 반대로 맨 뒤). 정렬 기준 컬럼에 NULL이
@@ -600,7 +655,7 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
             lines.append(f"  참고: {s['spec'].note}")
 
     if resolved_schema["fields"] and not union_mode:
-        fields_desc = ", ".join(f"{f['attribute']}->{_qualify(f['column'])}" for f in resolved_schema["fields"])
+        fields_desc = ", ".join(f"{f['attribute']}->{f['column']}" for f in resolved_schema["fields"])
         lines.append(
             f"SELECT에 반드시 포함할 필드(전부, 빠짐없이): {fields_desc}\n"
             f"  이 중 상품명은 질문에 명시적으로 요청되지 않았어도 항상 포함된다 - "
@@ -617,14 +672,14 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
         # 합니다" 에러로 깨진다.
         code_field = next((f for f in resolved_schema["fields"] if f["attribute"] == "상품코드"), None)
         name_field = next((f for f in resolved_schema["fields"] if f["attribute"] == "상품명"), None)
-        sort_column = _qualify(resolved_schema["sort"]["column"]) if resolved_schema["sort"] else None
+        sort_column = resolved_schema["sort"]["column"] if resolved_schema["sort"] else None
         domain_literal = resolved_schema["domain"].replace("'", "''")
         lines.append(
             "[UNION ALL 서브쿼리 모드] 이 SELECT는 최종 결과가 아니라, 다른 도메인의 "
             "SELECT문들과 UNION ALL로 합쳐질 조각 하나입니다. SELECT 목록에 반드시 "
             "아래 4개만, 이 순서 그대로, 정확히 이 별칭으로 쓰세요(그 외 필드는 넣지 마세요):\n"
-            f"  {_qualify(code_field['column']) if code_field else '(상품코드 컬럼 없음)'} AS code,\n"
-            f"  {_qualify(name_field['column']) if name_field else '(상품명 컬럼 없음)'} AS name,\n"
+            f"  {code_field['column'] if code_field else '(상품코드 컬럼 없음)'} AS code,\n"
+            f"  {name_field['column'] if name_field else '(상품명 컬럼 없음)'} AS name,\n"
             f"  '{domain_literal}' AS domain,\n"
             f"  {sort_column if sort_column else '(정렬 컬럼 없음)'} AS sort_value\n"
             "이 서브쿼리에는 ORDER BY와 LIMIT을 절대 쓰지 마세요 - 정렬과 개수 제한(TOP N)은 "
@@ -667,7 +722,26 @@ def get_pg_connection():
         session.headers["Authorization"] = f"Bearer {api_key}"
     return session
 
-def run_sql(conn, sql: str) -> list[dict]:
+def repair_unclosed_quote(sql: str) -> str:
+    """SQL 생성 LLM(HyperCLOVA X, 구조화 출력)이 LIKE 패턴처럼 문자열이
+    맨 끝에 오는 경우 닫는 작은따옴표(')를 빠뜨리고 그 자리에서 출력을
+    끝내버리는 경우가 실측으로 반복 확인됐다(2026-09-04: "...LIKE
+    '%현대해상화재보험7(후)(콜/후)%" / "...LIKE '%국고채권 02000-3106(21-5)%"
+    처럼 SQL 맨 끝 따옴표 하나가 통째로 없어 SyntaxError로 실패 -> 매번
+    LLM 재시도(_fix_sql)로만 겨우 복구되고 있었다). 이스케이프('' = 리터럴
+    작은따옴표 한 개)를 감안해서 실제 따옴표 개수가 홀수이고 SQL이
+    따옴표로 끝나 있지 않으면 마지막에 따옴표 하나를 보태서, LLM을 다시
+    부르지 않고도(그래서 재시도 횟수·API 요청·rate limit 노출을 줄이면서)
+    고쳐본다. 이 휴리스틱으로 여전히 안 고쳐지면(예: 따옴표가 중간에서
+    깨진 경우) run_sql이 그대로 실패하고 기존 _fix_sql(LLM) 경로로
+    넘어가므로 순수 추가 안전장치일 뿐 기존 동작을 막지 않는다."""
+    unescaped = sql.replace("''", "")
+    if unescaped.count("'") % 2 == 1 and not sql.rstrip().endswith("'"):
+        return sql + "'"
+    return sql
+
+
+def run_sql(conn, sql: str, label: str = "조회 SQL") -> list[dict]:
     """conn(=requests.Session)으로 POST /db/sql을 호출해 SQL을 실행하고
     행을 dict 목록으로 돌려준다. INSERT/UPDATE 없이 SELECT만 실행한다고
     가정한다.
@@ -685,7 +759,15 @@ def run_sql(conn, sql: str) -> list[dict]:
     그대로 쓴다."""
     safe_sql = sql.replace('%', '%%')
 
-    print(f"\n[DEBUG] 서버로 전송하는 SQL:\n{sql}\n")
+    # label로 이 SQL이 무슨 목적인지 구분해서 찍는다. run_sql은 실제 데이터
+    # 조회뿐 아니라 상품명 정확일치 확인(resolve_product_name_exactness),
+    # VectorDB의 product_master/product_coverage 조회 등 여러 곳에서
+    # 공유해서 쓰는데, 전부 같은 "[DEBUG] 서버로 전송하는 SQL:"로만 찍혀서
+    # 노트북에서 어느 SQL이 실제 답변용 조회이고 어느 게 내부 보조 쿼리인지
+    # 구분이 안 됐다(2026-09-04 실측 - "SQL문이 여러 개, 순서가 뒤죽박죽으로
+    # 보인다"는 혼란의 실제 원인). 기본값("조회 SQL")은 이전 문구와 거의
+    # 같아서 라벨을 안 넘기는 기존 호출부는 동작이 그대로다.
+    print(f"\n[DEBUG] {label} 전송:\n{sql}\n")
 
     resp = conn.post(
         f"{RDB_API_BASE_URL}/db/sql",
