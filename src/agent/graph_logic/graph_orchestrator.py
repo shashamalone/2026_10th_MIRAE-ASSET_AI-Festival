@@ -26,10 +26,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from urllib.parse import quote
 
 from agent.graph_logic import graph_engine
 from agent.get_clova import _llm_plan
 from agent.graph_logic.graph_entity import resolve_entity, resolve_frame_seed
+from agent.graph_logic.graph_ids import reviewed_holding_security_alias
 from agent.graph_logic.graph_plan import (
     _ID,
     company_holding_etf_plan,
@@ -337,6 +339,106 @@ def _extract_entity_codes(plan: dict, rows: list[dict]) -> list[str]:
     return codes
 
 
+def _run_reviewed_holding_alias(entity_text: str, *, limit: int = 500) -> dict | None:
+    """검토된 외국 증권 통칭을 실제 적재 label/code 묶음으로 조회한다.
+
+    공급사별 ticker suffix와 ISIN 때문에 같은 기초종목이 여러 Security URI로
+    존재한다. 단일 URI를 임의 선택하면 ETF 일부가 누락되므로, 검토된
+    label/code 조건에 맞는 URI를 모두 보유관계에 연결한다. 등록되지 않은
+    문자열은 ``None``을 반환해 일반 exact-first 경로로 넘긴다.
+    """
+    aliases = reviewed_holding_security_alias(entity_text)
+    if aliases is None:
+        return None
+
+    row_limit = min(max(int(limit or 500), 1), 500)
+    sparqls = []
+    for security_code in aliases["codes"]:
+        security_uri = f"http://mafest.ai/instance/sec-{quote(security_code, safe='')}"
+        sparqls.append(f"""
+PREFIX fp: <http://mafest.ai/product#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?etf_code ?etf_name ?security_code ?security_name
+                ?weight ?holding_as_of ?holding_source WHERE {{
+  ?holding fp:holdingSecurity <{security_uri}> ;
+           fp:asOf ?holding_as_of ;
+           fp:sourceId ?holding_source .
+  ?etf fp:hasHolding ?holding ;
+       fp:productCode ?etf_code ;
+       fp:productShortName ?etf_name .
+  OPTIONAL {{ ?holding fp:weight ?weight }}
+  <{security_uri}> fp:securityCode ?security_code ;
+                   rdfs:label ?security_name .
+}}
+ORDER BY ?etf_code ?security_code
+LIMIT {row_limit}
+""")
+    sparql = "\n\n".join(sparqls)
+    plan = {
+        "mode": "reviewed_holding_security_alias",
+        "outputs": [
+            {"node": "etf", "property": "fp:productCode", "alias": "etf_code"},
+            {"node": "etf", "property": "fp:productShortName", "alias": "etf_name"},
+            {"node": "holding", "property": "fp:weight", "alias": "weight", "optional": True},
+            {"node": "holding", "property": "fp:asOf", "alias": "holding_as_of"},
+            {"node": "holding", "property": "fp:sourceId", "alias": "holding_source"},
+        ],
+        "limit": row_limit,
+    }
+    keyed_rows: dict[tuple[str, str], dict] = {}
+    errors = []
+    for query in sparqls:
+        try:
+            for row in graph_engine.sparql(query):
+                key = (str(row.get("etf_code") or ""), str(row.get("security_code") or ""))
+                keyed_rows.setdefault(key, row)
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
+    rows = list(keyed_rows.values())
+    if errors:
+        return {
+            "status": "abstain_graph_execution_failed", "rows": [],
+            "entity_codes": [], "evidence": [], "sparql": sparql,
+            "graph_plan": plan,
+            "trace": [f"reviewed holding alias 실행 실패: {error}" for error in errors],
+        }
+    evidence = [
+        {
+            "row": index,
+            "holding_as_of": row.get("holding_as_of"),
+            "holding_source": row.get("holding_source"),
+            "kind": "source_record",
+            "document_status": "metadata_missing",
+            "missing_document_fields": ["document", "document_title"],
+        }
+        for index, row in enumerate(rows)
+    ]
+    entity_codes = list(dict.fromkeys(
+        str(row["etf_code"]) for row in rows if row.get("etf_code")
+    ))
+    return {
+        "status": "ok" if rows else "empty",
+        "rows": rows,
+        "entity": {
+            "text": entity_text,
+            "class_uri": FP + "Security",
+            "canonical_name": entity_text,
+            "match_mode": "reviewed_holding_security_alias",
+        },
+        "graph_plan": plan,
+        "sparql": sparql,
+        "evidence": evidence,
+        "evidence_level": "source_record",
+        "coverage_truncated": len(rows) >= row_limit,
+        "entity_codes": entity_codes,
+        "note": (
+            "검토된 한글 통칭을 적재된 영문 종목명·ticker·ISIN과 대조했습니다. "
+            "관계 기준일과 원천 식별자는 확인했지만 연결된 문서 본문은 미확보입니다."
+        ),
+        "trace": [f"reviewed holding alias: {entity_text!r}, rows={len(rows)}"],
+    }
+
+
 def run(question: str, frame: dict, *,
         generator: Callable[[str, dict, SchemaFragment, dict | None, list[str]], dict] | None = None,
         max_corrections: int = MAX_CORRECTIONS) -> dict:
@@ -348,6 +450,18 @@ def run(question: str, frame: dict, *,
     검증 실패 plan은 실행하지 않고 오류를 되돌려 최대 max_corrections회 다시
     생성한다."""
     trace = []
+    if frame.get("relation_scope"):
+        relations = frame.get("relations") or []
+        root = relations[0] if relations else {}
+        entities = frame.get("entities") or []
+        if (root.get("relation") in {"holds", "holding", "held_by", "편입", "보유"}
+                and entities):
+            reviewed = _run_reviewed_holding_alias(
+                entities[0].get("text", ""), limit=frame.get("limit") or 500
+            )
+            if reviewed is not None:
+                reviewed["trace"] = trace + reviewed.get("trace", [])
+                return reviewed
     seed = resolve_frame_seed(question, frame)
     if seed["status"] == "not_found" and frame.get("relation_scope"):
         root = (frame.get("relations") or [{}])[0]
@@ -460,6 +574,43 @@ def run(question: str, frame: dict, *,
     }
 
 
+def _theme_candidates(keyword: str, *, partial: bool) -> list[dict]:
+    """Theme 클래스만 좁게 조회한다.
+
+    범용 entity resolver의 원격 인덱스 구축은 전체 그래프 속성을 읽으므로
+    176개뿐인 Theme 조회에는 과하다. 언어태그와 무관하게 STR(label)을
+    exact/contains로 비교하고, 그래프에 실제 존재하는 Theme URI만 반환한다.
+    """
+    literal = json.dumps(keyword, ensure_ascii=False)
+    comparison = (f"CONTAINS(LCASE(STR(?label)), LCASE({literal}))" if partial
+                  else f"LCASE(STR(?label)) = LCASE({literal})")
+    query = f"""
+PREFIX fp: <http://mafest.ai/product#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?entity ?label WHERE {{
+  ?entity rdf:type fp:Theme ; rdfs:label ?label .
+  FILTER({comparison})
+}}
+ORDER BY ?entity ?label
+LIMIT 100
+"""
+    entities: dict[str, dict] = {}
+    for row in graph_engine.sparql(query):
+        uri = str(row.get("entity") or "")
+        if not uri:
+            continue
+        label = str(row.get("label") or "")
+        entities.setdefault(uri, {
+            "uri": uri,
+            "class_uri": FP + "Theme",
+            "canonical_name": label,
+            "names": (label,),
+            "codes": (),
+        })
+    return list(entities.values())
+
+
 def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100) -> dict:
     """"<키워드> 테마 ETF" 전용 결정적 경로.
 
@@ -470,9 +621,9 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
     쓰는 "반도체" 같은 키워드는 LSEG 176테마 taxonomy에서 애초에 여러
     하위 테마("K-반도체", "글로벌반도체" 등)에 걸쳐 있는 게 정상이고,
     "이 키워드를 포함하는 테마 전부"가 곧 사용자의 원래 의도다(2026-09-02
-    실측: resolve_entity("반도체","Theme")는 not_found, allow_partial=True로
-    돌리면 정확히 이 두 후보가 나온다). 그래서 여기서는 resolve_entity
-    (allow_partial=True)로 후보 테마를 전부 찾아 후보마다
+    실측: exact "반도체"는 없고 partial 조회에서 정확히 이 두 후보가
+    나온다). 그래서 여기서는 Theme 전용 exact/partial 조회로 후보를 찾아
+    후보마다
     theme_membership_plan을 반복 실행해 합친다 - 테마 후보는 이미 그래프에
     실재하는 확정된 분류값이라, 회사명처럼 "존재하지 않는 걸 지어내는"
     위험 없이(최악의 경우도 "관련성이 옅은 테마까지 포함" 정도) 여러 개를
@@ -487,14 +638,42 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
         return {"status": "abstain_no_seed_text", "rows": [], "evidence": [],
                 "entity_codes": [], "trace": ["테마 키워드가 비어 있음"]}
 
-    resolved = resolve_entity(keyword, "Theme", allow_partial=True)
-    if resolved["status"] == "not_found":
+    facet_groups: list[tuple[str, list[dict]]] = []
+    facets = list(dict.fromkeys(part for part in keyword.split() if part))
+    try:
+        exact = _theme_candidates(keyword, partial=False)
+        if exact:
+            facet_groups.append((keyword, exact))
+        # "중국 반도체"처럼 taxonomy의 두 독립 축을 띄어 쓴 표현은 그
+        # 전체 문자열과 정확히 일치하는 Theme 하나가 없다. 전체 표현을
+        # 먼저 조회한 뒤에만 공백 토큰별 후보를 구하고, 아래에서 ETF 코드
+        # 교집합을 취한다. 어느 한 facet도 Graph에서 확인되지 않으면 기존
+        # 안전 계약대로 not_found다.
+        elif len(facets) > 1:
+            for facet in facets:
+                candidates = _theme_candidates(facet, partial=True)
+                if not candidates:
+                    facet_groups = []
+                    break
+                facet_groups.append((facet, candidates))
+        else:
+            partial = _theme_candidates(keyword, partial=True)
+            if partial:
+                facet_groups.append((keyword, partial))
+    except Exception as exc:
+        return {"status": "abstain_graph_execution_failed", "rows": [],
+                "evidence": [], "entity_codes": [],
+                "trace": [f"theme 후보 조회 실패: {type(exc).__name__}: {exc}"]}
+    if not facet_groups:
         trace.append(f"theme: not_found ({keyword!r})")
         return {"status": "abstain_entity_not_found", "rows": [], "evidence": [],
                 "entity_codes": [], "trace": trace}
 
-    candidates = [resolved] if resolved["status"] == "resolved" else list(resolved["candidates"])
-    trace.append(f"theme candidates: {[c.get('canonical_name') for c in candidates]}")
+    flat_candidates = [candidate for _, candidates in facet_groups for candidate in candidates]
+    trace.append("theme facet candidates: " + str({
+        facet: [candidate.get("canonical_name") for candidate in candidates]
+        for facet, candidates in facet_groups
+    }))
 
     try:
         fragment = catalog().select_fragment(
@@ -508,39 +687,59 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
                  f"properties={len(fragment.properties)}")
 
     plan = theme_membership_plan(limit=limit)
-    validation = validate_graph_plan(plan, candidates[0], fragment, catalog())
+    validation = validate_graph_plan(plan, flat_candidates[0], fragment, catalog())
     if not validation.ok:
-        return {"status": "abstain_invalid_graph_plan", "rows": [], "entity": candidates[0],
+        return {"status": "abstain_invalid_graph_plan", "rows": [], "entity": flat_candidates[0],
                 "schema_fragment": fragment.as_dict(), "graph_plan": plan,
                 "evidence": [], "entity_codes": [],
                 "trace": trace + [f"plan 검증 실패: {validation.errors}"]}
 
-    all_rows: list[dict] = []
+    rows_by_facet: list[list[dict]] = []
     sparqls: list[str] = []
     compiled = None
-    for candidate in candidates:
-        try:
-            compiled = compile_graph_plan(plan, candidate, fragment, catalog())
-            rows = graph_engine.sparql(compiled.sparql)
-        except Exception as exc:
-            trace.append(f"theme={candidate.get('canonical_name')}: 실행 실패 - "
-                         f"{type(exc).__name__}: {exc}")
-            continue
-        sparqls.append(compiled.sparql)
-        for row in rows:
-            tagged = dict(row)
-            tagged["_matched_theme"] = candidate.get("canonical_name")
-            all_rows.append(tagged)
-        trace.append(f"theme={candidate.get('canonical_name')}: {len(rows)}건")
+    for facet, candidates in facet_groups:
+        facet_rows: dict[str, dict] = {}
+        for candidate in candidates:
+            try:
+                compiled = compile_graph_plan(plan, candidate, fragment, catalog())
+                rows = graph_engine.sparql(compiled.sparql)
+            except Exception as exc:
+                trace.append(f"theme={candidate.get('canonical_name')}: 실행 실패 - "
+                             f"{type(exc).__name__}: {exc}")
+                continue
+            sparqls.append(compiled.sparql)
+            for row in rows:
+                tagged = dict(row)
+                tagged["_matched_theme"] = candidate.get("canonical_name")
+                key = str(row.get("etf_code") or json.dumps(row, sort_keys=True, default=str))
+                facet_rows.setdefault(key, tagged)
+            trace.append(f"theme={candidate.get('canonical_name')}: {len(rows)}건")
+        rows_by_facet.append(list(facet_rows.values()))
 
     if not sparqls:
-        return {"status": "abstain_graph_execution_failed", "rows": [], "entity": candidates[0],
+        return {"status": "abstain_graph_execution_failed", "rows": [], "entity": flat_candidates[0],
                 "schema_fragment": fragment.as_dict(), "graph_plan": plan,
                 "evidence": [], "entity_codes": [], "trace": trace}
 
+    if len(rows_by_facet) == 1:
+        all_rows = rows_by_facet[0]
+    else:
+        common_codes = set.intersection(*[
+            {str(row.get("etf_code")) for row in rows if row.get("etf_code")}
+            for rows in rows_by_facet
+        ])
+        all_rows = []
+        for row in rows_by_facet[0]:
+            if str(row.get("etf_code")) in common_codes:
+                tagged = dict(row)
+                tagged["_matched_theme_facets"] = [facet for facet, _ in facet_groups]
+                all_rows.append(tagged)
+        trace.append(f"compound theme intersection: facets={len(facet_groups)}, "
+                     f"etf_codes={len(common_codes)}")
+
     evidence, abstain_reason = resolve_evidence(all_rows, compiled)
     if abstain_reason:
-        return {"status": "abstain_evidence_missing", "rows": [], "entity": candidates[0],
+        return {"status": "abstain_evidence_missing", "rows": [], "entity": flat_candidates[0],
                 "schema_fragment": fragment.as_dict(), "graph_plan": plan,
                 "sparql": "\n\n".join(sparqls), "evidence": [], "entity_codes": [],
                 "trace": trace + [abstain_reason]}
@@ -550,7 +749,10 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
         "status": "ok" if all_rows else "empty",
         "rows": all_rows,
         "entity": {"canonical_name": keyword,
-                   "candidates": [c.get("canonical_name") for c in candidates]},
+                   "candidate_facets": {
+                       facet: [candidate.get("canonical_name") for candidate in candidates]
+                       for facet, candidates in facet_groups
+                   }},
         "schema_fragment": fragment.as_dict(),
         "graph_plan": plan,
         "sparql": "\n\n".join(sparqls),

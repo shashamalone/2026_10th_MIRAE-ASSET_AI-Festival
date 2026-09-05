@@ -22,6 +22,29 @@ _ORGANIZATION_ALIASES = {
 _LEGAL_FORM = re.compile(r"\(주\)|㈜|\(유\)|주식회사|유한회사")
 _SEPARATORS = re.compile(r"[\s·,._\-]+")
 
+# 사용자가 실제로 쓰는 한글 통칭과 관계 원천의 영문 종목명/식별자를 잇는
+# 검토된 별칭이다. 부분 문자열 유사도나 LLM 번역을 실행 시점에 사용하지
+# 않는다. 각 항목은 적재된 원천에서 직접 대조한 label/code만 허용한다.
+#
+# 캠브리콘: relations/etf_holding.csv 및 instances_company.ttl에서
+# Cambricon / 688256 / CNE1000041R8 표기를 확인했다(holding as_of 2026-07-10).
+_REVIEWED_HOLDING_SECURITY_ALIASES = {
+    "캠브리콘": {
+        "label_contains": ("cambricon",),
+        "codes": (
+            "688256 C1 EQUITY", "688256 C1 Equity",
+            "688256 CH", "688256 CH Equity", "CNE1000041R8",
+        ),
+    },
+    "cambricon": {
+        "label_contains": ("cambricon",),
+        "codes": (
+            "688256 C1 EQUITY", "688256 C1 Equity",
+            "688256 CH", "688256 CH Equity", "CNE1000041R8",
+        ),
+    },
+}
+
 
 def normalize_text(value: object) -> str:
     """표시 문자열 비교용 정규형. URI 생성에는 사용하지 않는다."""
@@ -41,6 +64,20 @@ def normalize_organization_name(value: object) -> str:
     for source in sorted(_ORGANIZATION_ALIASES, key=len, reverse=True):
         text = text.replace(source, _ORGANIZATION_ALIASES[source])
     return text.upper()
+
+
+def reviewed_holding_security_alias(value: object) -> dict[str, tuple[str, ...]] | None:
+    """편입증권 통칭의 검토된 Graph label/code 묶음을 돌려준다.
+
+    한 종목이 공급사별 Bloomberg suffix와 ISIN으로 여러 Security URI에
+    나뉘어 적재될 수 있어 단일 URI로 임의 축약하지 않는다. 호출자는 이
+    식별자 묶음과 실제 Graph label/code를 대조해 모든 해당 URI를 조회한다.
+    등록되지 않은 통칭에는 ``None``을 반환해 일반 exact-first resolver의
+    안전 계약을 그대로 유지한다.
+    """
+    key = normalize_text(value)
+    spec = _REVIEWED_HOLDING_SECURITY_ALIASES.get(key)
+    return {name: tuple(values) for name, values in spec.items()} if spec else None
 
 
 def expand_organization_aliases(value: object) -> list[str]:

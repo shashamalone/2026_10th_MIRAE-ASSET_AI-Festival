@@ -22,6 +22,12 @@ _OPERATOR_ALIASES = {
 }
 _ALLOWED_OPERATORS = {"eq", "ne", "gt", "gte", "lt", "lte", "between", "contains"}
 
+_EXPLICIT_OVERSEAS_ETF_SCOPE = re.compile(
+    r"(?:해외\s*ETF|(?:해외|미국|중국|홍콩|일본|유럽)\s*(?:증시|거래소)?\s*(?:상장|거래)|"
+    r"NYSE|NASDAQ|AMEX|HKEX|SSE|SZSE)",
+    re.IGNORECASE,
+)
+
 _ORDER_ALIASES = {"asc": "asc", "오름차순": "asc", "desc": "desc", "내림차순": "desc"}
 
 
@@ -278,6 +284,35 @@ def _drop_redundant_theme_conditions(conditions: list[dict], relations: list[dic
     return kept, notes
 
 
+def _drop_redundant_theme_subtypes(product_domains: list[dict],
+                                    relations: list[dict]) -> tuple[list[dict], list[str]]:
+    """Graph 테마와 같은 상품 subtype을 RDB 가상 필터로 중복 실행하지 않는다."""
+    themes_by_domain: dict[str, list[str]] = {}
+    for relation in relations:
+        if relation.get("entity_role") != "theme":
+            continue
+        domain = str(relation.get("subject_domain") or "")
+        value = re.sub(r"\s+", "", str(relation.get("object_entity") or "")).casefold()
+        if value:
+            themes_by_domain.setdefault(domain, []).append(value)
+
+    fixed, notes = [], []
+    for item in product_domains:
+        domain = str(item.get("domain") or "")
+        theme_values = themes_by_domain.get(domain, [])
+        kept = []
+        for subtype in item.get("subtype") or []:
+            key = re.sub(r"\s+", "", str(subtype)).casefold()
+            if key and any(key in theme for theme in theme_values):
+                notes.append(
+                    f"{domain} 하위유형 {subtype!r}: 동일 값이 Graph 테마 관계에 있어 RDB 중복 필터에서 제거"
+                )
+            else:
+                kept.append(subtype)
+        fixed.append({**item, "subtype": kept})
+    return fixed, notes
+
+
 def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
     """Use explicit path endpoints, never unrelated question clauses, as scope.
 
@@ -335,7 +370,32 @@ def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
             notes.append(f"{c.get('domain')} 편입 여부는 명시된 Graph 관계로 검증하므로 중복 가상 컬럼을 제거했습니다.")
         else:
             kept.append(c)
-    fixed = {**intent, "relations": relations, "conditions": kept}
+    product_domains = [dict(item) for item in intent.get("product_domain") or []]
+    raw_question = str(intent.get("raw_question") or "")
+    has_holding_relation = any(r.get("relation") == "holds" for r in relations)
+    unqualified_etf = (
+        has_holding_relation
+        and re.search(r"(?:ETF|상장지수)", raw_question, re.IGNORECASE)
+        and not _EXPLICIT_OVERSEAS_ETF_SCOPE.search(raw_question)
+    )
+    # "중국 반도체 ETF"의 중국은 투자지역/테마이지 상장 시장 지정이 아니다.
+    # 적재된 보유관계가 국내 상장 ETF productCode를 반환하는데 분석기가
+    # 해외ETF로 잡으면 Graph 성공 뒤 RDB에서 전부 0건이 된다. 해외 상장·
+    # 거래소를 명시하지 않은 편입 ETF 질문만 국내ETF로 안전하게 교정한다.
+    if unqualified_etf and any(item.get("domain") == "해외ETF" for item in product_domains):
+        product_domains = [
+            {**item, "domain": "국내ETF"} if item.get("domain") == "해외ETF" else item
+            for item in product_domains
+        ]
+        relations = [
+            {**relation, "subject_domain": "국내ETF"}
+            if relation.get("subject_domain") in {"ETF", "해외ETF"} else relation
+            for relation in relations
+        ]
+        notes.append("상장 시장을 명시하지 않은 편입 ETF 질문의 해외ETF 오분류를 국내ETF로 교정했습니다.")
+
+    fixed = {**intent, "product_domain": product_domains,
+             "relations": relations, "conditions": kept}
     if not relations and intent.get("relations") and intent.get("task") == "relation":
         fixed["task"] = "filter_rank"
     return fixed, notes
@@ -379,6 +439,12 @@ def guard_intent(intent: dict) -> tuple[dict, list[str]]:
         fixed_relations.append(fr)
         notes.extend(rnotes)
     fixed["relations"] = fixed_relations
+
+    fixed_domains, subtype_notes = _drop_redundant_theme_subtypes(
+        fixed.get("product_domain") or [], fixed_relations
+    )
+    fixed["product_domain"] = fixed_domains
+    notes.extend(subtype_notes)
 
     fixed_conditions, drop_notes = _drop_redundant_theme_conditions(fixed_conditions, fixed_relations)
     fixed["conditions"] = fixed_conditions

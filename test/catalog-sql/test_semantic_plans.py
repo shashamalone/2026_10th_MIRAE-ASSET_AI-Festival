@@ -2,6 +2,7 @@
 from datetime import date
 import json
 import os
+from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -320,6 +321,88 @@ class SemanticPlanTests(unittest.TestCase):
         plan, _ = self.graph._fast_plan("", frame, "Security")
         self.assertEqual(next(n for n in plan["nodes"] if n["id"] == "seed")["class_uri"], "fp:Security")
         self.assertNotIn("fp:issuedByCompany", [e["predicate"] for e in plan["edges"]])
+
+    def test_reviewed_foreign_security_alias_returns_all_source_identifiers(self):
+        from agent.graph_logic.graph_ids import reviewed_holding_security_alias
+
+        aliases = reviewed_holding_security_alias("캠브리콘")
+        self.assertEqual(aliases["label_contains"], ("cambricon",))
+        self.assertIn("CNE1000041R8", aliases["codes"])
+        rows = [
+            {"etf_code": "KR1", "etf_name": "첫 ETF", "security_code": "688256 C1 Equity",
+             "security_name": "Cambricon Technologies Corp Ltd", "weight": "10.0",
+             "holding_as_of": "2026-07-10", "holding_source": "TEST"},
+            {"etf_code": "KR2", "etf_name": "둘 ETF", "security_code": "CNE1000041R8",
+             "security_name": "CAMBRICON TECHNOLOGIES CORP", "weight": "9.0",
+             "holding_as_of": "2026-07-10", "holding_source": "TEST"},
+        ]
+        with patch.object(self.graph.graph_engine, "sparql", return_value=rows) as query:
+            result = self.graph._run_reviewed_holding_alias("캠브리콘")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["entity_codes"], ["KR1", "KR2"])
+        self.assertEqual(len(result["evidence"]), 2)
+        executed = "\n".join(call.args[0] for call in query.call_args_list)
+        self.assertIn("688256", executed)
+        self.assertIn("CNE1000041R8", executed)
+        self.assertIsNone(self.graph._run_reviewed_holding_alias("등록되지 않은 통칭"))
+
+    def test_compound_theme_is_intersection_of_verified_facets(self):
+        def candidates(text, *, partial):
+            if text == "중국 반도체":
+                return []
+            return [{"uri": f"urn:theme:{text}",
+                     "class_uri": "http://mafest.ai/product#Theme", "canonical_name": text,
+                     "names": (text,), "codes": ()}]
+
+        fragment = Mock()
+        fragment.selection_mode = "fixture"
+        fragment.classes = ["fp:Theme", "fp:ETF"]
+        fragment.properties = ["fp:relatedToTheme"]
+        fragment.as_dict.return_value = {"classes": ["fp:Theme", "fp:ETF"]}
+        graph_catalog = Mock()
+        graph_catalog.select_fragment.return_value = fragment
+        compiled = lambda candidate: SimpleNamespace(
+            sparql=candidate["canonical_name"], evidence_columns=(),
+            tbox_provenance=(("fp:relatedToTheme", "relations.etf_theme", "theme"),),
+        )
+        rows = {
+            "중국": [{"etf_code": code, "etf_name": code} for code in ("A", "B", "C")],
+            "반도체": [{"etf_code": code, "etf_name": code} for code in ("B", "C", "D")],
+        }
+        with patch.object(self.graph, "_theme_candidates", side_effect=candidates), \
+             patch.object(self.graph, "catalog", return_value=graph_catalog), \
+             patch.object(self.graph, "validate_graph_plan", return_value=Mock(ok=True)), \
+             patch.object(self.graph, "compile_graph_plan",
+                          side_effect=lambda _p, candidate, _f, _c: compiled(candidate)), \
+             patch.object(self.graph.graph_engine, "sparql",
+                          side_effect=lambda query: rows[query]):
+            result = self.graph.run_theme_membership("중국 반도체 ETF", "중국 반도체")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["entity_codes"], ["B", "C"])
+        self.assertTrue(all(row["_matched_theme_facets"] == ["중국", "반도체"]
+                            for row in result["rows"]))
+
+    def test_unqualified_foreign_theme_etf_is_domestic_but_explicit_listing_is_not(self):
+        from agent.intent_guard import guard_intent
+
+        base = {
+            "product_domain": [{"domain": "해외ETF", "subtype": ["반도체"]}],
+            "target_entities": [], "conditions": [],
+            "relations": [
+                {"id": "R1", "subject_domain": "ETF", "relation": "holds",
+                 "object_entity": "캠브리콘", "entity_role": "product"},
+                {"id": "R2", "subject_domain": "ETF", "relation": "tagged_with",
+                 "object_entity": "중국 반도체", "entity_role": "theme"},
+            ],
+        }
+        fixed, notes = guard_intent({**base, "raw_question": "캠브리콘이 편입된 중국 반도체 ETF"})
+        self.assertEqual(fixed["product_domain"][0]["domain"], "국내ETF")
+        self.assertEqual(fixed["product_domain"][0]["subtype"], [])
+        self.assertEqual({r["subject_domain"] for r in fixed["relations"]}, {"국내ETF"})
+        self.assertTrue(any("해외ETF 오분류" in note for note in notes))
+
+        explicit, _ = guard_intent({**base, "raw_question": "중국 거래소에 상장된 ETF 중 캠브리콘 편입 상품"})
+        self.assertEqual(explicit["product_domain"][0]["domain"], "해외ETF")
 
     def test_company_and_security_codes_do_not_leak_into_product_handoff(self):
         plan = {"outputs": [{"property": "fp:productCode", "alias": "product"},
