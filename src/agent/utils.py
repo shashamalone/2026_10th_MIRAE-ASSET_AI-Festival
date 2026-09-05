@@ -39,6 +39,7 @@ from decimal import Decimal
 from typing import Any
 
 from agent.graph_logic import graph_ids
+from agent.evidence_contract import is_identity_field
 from tools import rdb_schema
 from tools import catalog_sql
 from agent.prompts import COLUMN_RESOLUTION_SYSTEM_PROMPT
@@ -52,12 +53,44 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
 # A provenance request is a set of source-date columns, not one guessed column.
 PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일", "수치갱신일",
-                       "수치기준일", "지표기준일", "수익률기준일"}
+                       "수치기준일", "지표기준일", "수익률기준일", "데이터기준일", "수치의갱신일"}
 
 
 def is_source_column_request(label: str) -> bool:
     name = catalog_sql.normalize(label)
-    return any(s in name for s in ("컬럼", "필드")) and any(s in name for s in ("근거", "출처"))
+    return (any(s in name for s in ("컬럼", "필드")) and any(s in name for s in ("근거", "출처"))) or name in {"전략원문의출처", "전략원문출처"}
+
+
+def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """A region directly modifying an asset is exposure, not listing venue.
+
+    Accept only catalogue regions and explicit asset grammar, not product names
+    or the broad phrase '미국 ETF' whose venue/exposure is ambiguous.
+    """
+    text = question
+    for entity in intent.get("target_entities") or []:
+        if entity.get("entity_type") == "product_name" and entity.get("surface_form"):
+            text = text.replace(entity["surface_form"], " ")
+    regions = set()
+    for entry in _ontology_labels("InvestmentRegion"):
+        for alias in entry["aliases"]:
+            if re.search(r"(?<![가-힣A-Za-z])" + re.escape(alias) + r"\s+(?:주식|채권)(?:형|에\s*투자|\s*투자)?", text):
+                regions.add(entry["label"])
+    if len(regions) != 1:
+        return intent, []
+    region = next(iter(regions))
+    conditions = list(intent.get("conditions") or [])
+    added = []
+    for domain in intent.get("product_domain") or []:
+        name = domain.get("domain")
+        if name not in rdb_schema.ETF_CLASSIFICATION_AXES:
+            continue
+        relevant = [c for c in conditions if c.get("domain") in {None, "", name} and
+                    catalog_sql.normalize(c.get("attribute", "")) == "투자지역"]
+        if not relevant:
+            conditions.append({"domain": name, "attribute": "투자지역", "operator": "eq", "value": region, "value_2": ""})
+            added.append(f"'{region} 주식/채권'의 명시적 투자지역 조건 보존: {name}. 상장시장과 구분합니다.")
+    return ({**intent, "conditions": conditions}, added) if added else (intent, [])
 
 
 def lookup_product_identities(names: list[str]) -> list[dict]:
@@ -249,6 +282,9 @@ def categorical_source_values(domain: str, column: str, value: str) -> list[str]
     Never translate free strategy prose or infer a sector from a product name.
     """
     axis = rdb_schema.ETF_CLASSIFICATION_AXES.get(domain, {}).get(column)
+    if column in {"curr_cd", "pd_curr_cd", "pd_trd_ccy"}:
+        axis = "Currency"
+        value = {"원화": "한국 원", "한국원화": "한국 원", "달러": "미국 달러"}.get(value, value)
     if not axis:
         return []
     try:
@@ -309,6 +345,30 @@ def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
             columns = view["inputs"]
             item = {"field": view["attribute"], "column": None, "value": None,
                     "status": "available", "source_columns": [f"{view.get('source_table', 'raw.prbd01n001')}.{c}" for c in columns]}
+            if view["kind"] == "unsupported":
+                item.update(status="derivation_unavailable", detail=view["reason"])
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "return_series":
+                parts = []
+                for column, period in zip(columns, view["periods"]):
+                    value = row.get(column)
+                    status = "미조회" if column not in row else "NULL·확인 불가" if value is None else str(value) + "%"
+                    parts.append(f"{period}: {status} ({column})")
+                item.update(value="; ".join(parts), detail="기간이 지정되지 않은 요청이므로 원천 기간별 수익률을 구분합니다. 임의로 1개월 수익률 하나로 대체하지 않습니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "listing":
+                try:
+                    start, basis = _source_date(row.get("pd_lstg_dt")), _source_date(row.get("cu_upt_dt"))
+                    end_raw = str(row.get("pd_lste_dt", "")).strip()
+                    end = None if end_raw == "99991231" else _source_date(end_raw)
+                    listed = start <= basis and (end is None or basis < end)
+                    item.update(value="상장기간 내" if listed else "상장기간 밖", detail=f"상장일 {start}, 상장종료일 {end_raw}, 원천 갱신일 {basis} 대조. 99991231은 종료일 미정 코드이며 현재 매매 가능 여부를 뜻하지 않습니다.")
+                except ValueError as exc:
+                    item.update(status="derivation_unavailable", detail=str(exc))
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
             if view["kind"] == "identity_keys":
                 item.update(value="; ".join(f"{c}={row[c] if row.get(c) is not None else '값 미확보'}" for c in columns),
                             detail="식별·상장 관련 원천키입니다. 서로 다른 레코드의 동일성은 키를 교차 대조한 결과만으로 판정합니다.")
@@ -422,6 +482,7 @@ def collect_needed_concepts(step: dict) -> list[str]:
 
     concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS
                     and not is_source_column_request(f)
+                    and not is_identity_field(f)
                     and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
     # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
@@ -478,6 +539,8 @@ def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[di
     notes: list[str] = []
     for value in subtype or []:
         mapped = rdb_schema.resolve_subtype_condition(domain, value)
+        if domain in {"채권", "펀드"} and value in {"원화", "원화채권", "원화표시"}:
+            mapped = {"column": "curr_cd", "operator": "eq", "value": "KRW"}
         if domain in {"국내ETF", "해외ETF"} and value.upper() in {"ETF", "ETN"}:
             mapped = {"column": "pd_grp_no", "operator": "eq", "value": value.upper()}
         if mapped is None:
@@ -864,6 +927,8 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             for name in view["inputs"]:
                 resolved_fields.append({"attribute": f if view["kind"] == "raw_rating" else f"분류근거({name})",
                                         "column": name, "spec": catalog_sql.spec_for_column(domain, name, {})})
+            continue
+        if is_identity_field(f):
             continue
         if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS or is_source_column_request(f):
             notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")

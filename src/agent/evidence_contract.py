@@ -5,6 +5,15 @@ from datetime import date
 import re
 
 
+def is_identity_field(label: str) -> bool:
+    text = re.sub(r"\s+", "", label)
+    return text in {"클래스동일성여부", "클래스동일성", "동일모펀드여부", "동일운용상품여부", "동일상품여부"}
+
+
+def _non_identity_topics(topics: list[str]) -> list[str]:
+    return [t for t in topics if not re.search(r"동일|같은.*펀드|상장\s*클래스|별도\s*상품|동시에\s*나타나는\s*이유", t)]
+
+
 def request_blockers(intent: dict, question: str, *, today: date | None = None) -> list[str]:
     blockers = []
     if intent.get("issuer_type_conflict"):
@@ -47,6 +56,7 @@ def restore_class_comparison(intent: dict, question: str) -> tuple[dict, list[st
     fields = list(output.get("fields") or [])
     fields.extend(f for f in ("운용사종목번호", "대표예탁원종목번호", "예탁원종목번호", "운용회사대외기관코드") if f not in fields)
     output["fields"] = fields
+    output["narrative_topics"] = _non_identity_topics(output.get("narrative_topics") or [])
     # A class code alone is not a global product search term. The base name is
     # the scope and suffixes are checked on returned source names, exactly.
     fixed = {**intent, "task": "comparison", "relations": [],
@@ -70,6 +80,7 @@ def restore_cross_market_identity(intent: dict, question: str) -> tuple[dict, li
     fields = list(output.get("fields") or [])
     fields.extend(f for f in ("상품동일성키", "상장일") if f not in fields)
     output["fields"] = fields
+    output["narrative_topics"] = _non_identity_topics(output.get("narrative_topics") or [])
     return {**intent, "output_requirements": output, "identity_comparison": {"mode": "cross_market"}}, [
         "동일 상품 비교에 원천 식별키를 조회합니다. 펀드 예탁원종목번호와 ETF 종목번호의 일치만 연결 근거로 사용합니다."]
 

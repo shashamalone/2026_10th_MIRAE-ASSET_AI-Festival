@@ -670,6 +670,10 @@ def get_output_views(domain: str) -> dict:
         return BOND_OUTPUT_VIEWS
     if domain == "펀드":
         return {"상품동일성키": {"kind": "identity_keys", "inputs": ("itm_no", "ksd_itm_no", "mtco_itm_no", "rptt_ksd_itm_no", "or_co_xtn_itt_cd"), "aliases": ()},
+                "상장여부": {"kind": "unsupported", "inputs": (), "aliases": ("상장 상태",),
+                           "reason": "펀드 마스터에는 상장 여부 컬럼이 없습니다. sale_yn은 판매 상태이며 상장 상태로 사용할 수 없습니다. ETF 식별키 연결 결과와 구분합니다."},
+                "수익률": {"kind": "return_series", "inputs": ("fd_mm1_ern_r", "fd_mm3_ern_r", "fd_mm6_ern_r", "fd_yr1_ern_r", "fd_yr2_ern_r", "fd_yr3_ern_r", "fd_yr5_ern_r"), "aliases": (),
+                         "periods": ("1개월", "3개월", "6개월", "1년", "2년", "3년", "5년")},
                 "클래스": {"kind": "share_class", "inputs": ("itm_nm",), "aliases": ("클래스 코드", "클래스 구분")}}
     axes = ETF_CLASSIFICATION_AXES.get(domain)
     if axes:
@@ -677,6 +681,10 @@ def get_output_views(domain: str) -> dict:
                             "aliases": ("분류 근거", "분류 경로", "온톨로지 분류 근거")}}
         if domain == "국내ETF":
             views["상품동일성키"] = {"kind": "identity_keys", "inputs": ("pd_itm_no", "pd_lstg_dt", "pd_lste_dt"), "aliases": ()}
+            views["상장여부"] = {"kind": "listing", "inputs": ("pd_lstg_dt", "pd_lste_dt", "cu_upt_dt"), "aliases": ("상장 상태",)}
+            views["수익률"] = {"kind": "return_series", "inputs": ("du_er_1d", "du_er_1m", "du_er_3m", "du_er_6m", "du_er_1y", "du_er_ytd"), "aliases": (), "periods": ("1일", "1개월", "3개월", "6개월", "1년", "연초 대비")}
+        else:
+            views["수익률"] = {"kind": "return_series", "inputs": ("du_er_1d",), "aliases": (), "periods": ("1일",)}
         return views
     return {}
 
@@ -1654,6 +1662,11 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
         "상각형조건부자본증권": {"column": "pd_nm", "operator": "contains", "value": "(조건상각)"},
     },
     "국내ETF": {
+        "일반": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "정방향": {"column": "cu_lev_fector", "operator": ">", "value": "0"},
+        "일반(정방향)": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "일반(1배)": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "1배": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
         "실물복제": {"column": "cu_strtegy", "operator": "eq", "value": "실물복제"},
         "합성복제": {"column": "cu_strtegy", "operator": "eq", "value": "합성복제"},
         "액티브": {"column": "cu_strtegy", "operator": "eq", "value": "액티브"},

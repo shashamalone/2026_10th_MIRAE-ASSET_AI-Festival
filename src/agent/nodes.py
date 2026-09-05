@@ -32,6 +32,7 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 from __future__ import annotations
 
 import json
+import re
 import math
 import os
 import time
@@ -125,6 +126,8 @@ def verify_intent_node(state: PipelineState) -> dict:
     guard_notes.extend(subtype_notes)
     final_intent, issuer_notes = utils.validate_issuer_subjects(final_intent, question)
     guard_notes.extend(issuer_notes)
+    final_intent, region_notes = utils.preserve_explicit_investment_region(final_intent, question)
+    guard_notes.extend(region_notes)
     final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
     guard_notes.extend(request_notes)
     trace = [trace_msg]
@@ -1077,6 +1080,7 @@ def graph_search_node(state: PipelineState) -> dict:
             "evidence": result.get("evidence", []),
             "entity": result.get("entity"),
             "sparql": result.get("sparql"),
+            "graph_plan": result.get("graph_plan") or result.get("plan"),
             "note": result.get("note"),
         }
         trace_msgs.append(
@@ -1200,6 +1204,7 @@ def _normalize_chunk(chunk: dict) -> dict:
         "document_title": chunk.get("document_title") or "",
         "publisher": chunk.get("publisher") or "",
         "source_type": chunk.get("source_type") or "",
+        "retrieval_method": chunk.get("retrieval_method") or "vector_similarity",
     }
 
 
@@ -1213,7 +1218,7 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     if step.get("document_scope") == "policy":
         documents = search_policy_documents(step.get("subject_terms") or [])
         chunks = [_normalize_chunk({**r, "chunk_id": r.get("chunk_id") or f"metadata:{r['document_id']}",
-                                   "score": 1.0, "citation_text": r.get("document_title") or ""}) for r in documents]
+                                   "retrieval_method": "subject_catalog", "citation_text": r.get("citation_text") or ""}) for r in documents]
         return {"engine": "vector", "status": "ok" if chunks else "no_official_document", "chunks": chunks,
                 "count": len(chunks), "queries": step.get("subject_terms") or [], "raw_top": [],
                 "product_scope": {"codes": [], "names": [], "product_ids": [], "coverage": _summarize_coverage([], {})},
@@ -1439,7 +1444,8 @@ def merge_results_node(state: PipelineState) -> dict:
                     "발행일": chunk.get("published_at", ""),
                     "페이지": chunk.get("page_number"),
                     "상품ID": ", ".join(chunk.get("product_ids") or []),
-                    "유사도": round(float(chunk.get("score") or 0.0), 3),
+                    "유사도": round(float(chunk.get("score") or 0.0), 3) if chunk.get("retrieval_method") != "subject_catalog" else None,
+                    "검색방식": chunk.get("retrieval_method") or "vector_similarity",
                     "_domain": "vector",
                     "_step_id": step_id,
                 })
@@ -1724,6 +1730,10 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                 if normalized in seen:
                     continue
                 seen.add(normalized)
+                if evidence_contract.is_identity_field(label) and (state.get("intent") or {}).get("identity_comparison"):
+                    # The cross-record verdict is rendered once, not guessed as
+                    # a per-product physical column with a contradictory NULL.
+                    continue
                 derived = (row or {}).get("_derived_fields", {}).get(normalized)
                 if derived and not failure:
                     items.append(dict(derived))
@@ -1890,6 +1900,11 @@ def _render_vector_sources(step_results: dict) -> str:
 def _render_execution_limits(state: PipelineState) -> str:
     """Expose actual failed prerequisites, never turn abstention rows into facts."""
     notes = list((state.get("route") or {}).get("blocking_reasons") or [])
+    question = state.get("question", "")
+    if re.search(r"최근\s*\d+\s*(?:개월|년)|연결된\s*이력", question):
+        notes.append("아래 관계는 적재된 스냅샷에서 조회한 결과입니다. 기간별 이력·사건일을 대조하는 조회가 구현되지 않아 요청 기간 전체의 이력 또는 현재 편입 여부를 확정할 수 없습니다. 뉴스 언급을 편입 사실로 간주하지 않습니다.")
+    if re.search(r"중복률|중복도", question):
+        notes.append("편입종목 중복도는 동일 기준일의 전체 보유내역과 종목 식별자·비중, 클래스 중복 제거가 확인되어야 계산할 수 있습니다. 현재 실행 경로에는 이 전수 대조·계산 단계가 없어 수치 중복률을 제공하지 않습니다. 일부 검색된 편입관계는 계산 결과가 아닙니다.")
     for sid, result in (state.get("step_results") or {}).items():
         reason = result.get("skipped_reason") or result.get("error")
         if reason:
@@ -1952,17 +1967,22 @@ def generate_answer_node(state: PipelineState) -> dict:
     execution_limits = _render_execution_limits(state)
     graph_answer = _render_graph_results(state.get("step_results") or {})
     narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
+    execution_summary = "\n".join(
+        f"{sid}: {r.get('engine')}; 상태={r.get('status') or ('실패' if r.get('error') else '차단' if r.get('skipped_reason') else '조회 완료')}; "
+        f"반환={len(r.get('rows') or r.get('chunks') or [])}건; "
+        f"{r.get('skipped_reason') or r.get('note') or ''}"
+        for sid, r in (state.get("step_results") or {}).items()) or "; ".join(blocking_reasons) or "실행 결과 미확보"
     # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
     # narrative questions still use the existing synthesis path plus the contract.
     structured_only = (bool(field_contract) and not narrative_topics
-                       and intent.get("task") in {"lookup", "filter_rank", "comparison"}
+                       and (intent.get("task") in {"lookup", "filter_rank", "comparison"} or identity_answer)
                        and not route.get("needs_graph") and not route.get("needs_vector")
                        and not any(r.get("engine") in {"graph", "vector"}
                                    for r in (state.get("step_results") or {}).values()))
     if structured_only:
         response = {"question_id": question_id, "question": question,
                     "retrieved_context": retrieved_context,
-                    "think_trace": "RDB 실행 결과와 요청 항목의 컬럼 대응을 대조하여 값과 확인 불가 사유를 구분해 표시했습니다.",
+                    "think_trace": execution_summary,
                     "answer": "\n\n".join(p for p in [field_answer, execution_limits] if p)}
         return {"answer": json.dumps(response, ensure_ascii=False),
                 "trace": ["답변 생성: 요청 항목별 결정론적 출력 (추가 LLM 호출 없음)"]}
@@ -1989,7 +2009,7 @@ def generate_answer_node(state: PipelineState) -> dict:
             "question_id": question_id,
             "question": question,
             "retrieved_context": retrieved_context,
-            "think_trace": "데이터 검색 불가 및 쿼리 플랜 실패로 인한 답변 불가 처리",
+            "think_trace": execution_summary,
             "answer": answer_text
         }
         # FastAPI 등에서 쉽게 리턴하도록 JSON string이나 dict 자체를 반환 구조에 맞춤
@@ -2049,7 +2069,7 @@ def generate_answer_node(state: PipelineState) -> dict:
         "question_id": question_id,
         "question": question,
         "retrieved_context": retrieved_context,
-        "think_trace": response.get("think_trace", "추론 과정 생성 누락"),
+        "think_trace": execution_summary,
         "answer": answer_text
     }
     

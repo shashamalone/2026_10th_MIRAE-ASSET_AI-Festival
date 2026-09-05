@@ -125,7 +125,9 @@ def numeric_value(value, column: str, domain: str = "") -> str:
     elif column in {"pd_net_tamt", "fd_nast_suma"} or (column == "du_last_aum" and domain == "국내ETF"):
         for unit, factor in (("조원", "1e12"), ("천억원", "1e11"), ("백억원", "1e10"), ("십억원", "1e9"), ("억원", "1e8"), ("만원", "1e4"), ("원", "1")):
             if text.endswith(unit):
-                text, multiplier = text[:-len(unit)].strip() or "1", Decimal(factor)
+                text, multiplier = text[:-len(unit)].strip(), Decimal(factor)
+                if not text and unit in {"천억원", "백억원", "십억원"}:
+                    text = "1"
                 break
     elif column == "du_last_aum" and domain == "해외ETF":
         for currency in ("달러", "USD", "usd"):
