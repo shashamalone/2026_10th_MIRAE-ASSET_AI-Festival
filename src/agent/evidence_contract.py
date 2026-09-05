@@ -76,33 +76,69 @@ def restore_relative_event_window(intent: dict, question: str, *, today: date | 
 GRAPH_FIELD_CONCEPTS = {"편입비중", "종목별비중", "편입기준일", "편입내역기준일"}
 
 
+def _graph_output_aliases(outputs: list[dict], *property_names: str) -> list[str]:
+    """Return declared aliases for exact ontology property local names."""
+    suffixes = tuple(
+        suffix
+        for name in property_names
+        for suffix in (f"#{name}", f":{name}")
+    )
+    return [
+        str(output.get("alias"))
+        for output in outputs
+        if output.get("alias") and str(output.get("property") or "").endswith(suffixes)
+    ]
+
+
 def graph_field_evidence(label: str, product_code: str, results: dict) -> dict | None:
     normalized = re.sub(r"\s+", "", label)
     if normalized not in GRAPH_FIELD_CONCEPTS or not product_code:
         return None
     entries = []
     sources = []
-    for sid, result in results.items():
+    matched_relation = False
+    for _sid, result in results.items():
         if result.get("engine") != "graph" or result.get("status") != "ok":
             continue
         plan = result.get("graph_plan") or {}
         outputs = plan.get("outputs") or []
-        codes = [o["alias"] for o in outputs if o.get("property", "").endswith(("#productCode", ":productCode"))]
-        weights = [o["alias"] for o in outputs if o.get("property", "").endswith(("#weight", ":weight"))]
-        holdings = [n["id"] for n in plan.get("nodes") or [] if n.get("class_uri", "").endswith(("#Holding", ":Holding"))]
+        codes = _graph_output_aliases(outputs, "productCode")
+        weights = _graph_output_aliases(outputs, "weight")
+        dates = _graph_output_aliases(outputs, "asOf")
+        source_ids = _graph_output_aliases(outputs, "sourceId")
+        requested_aliases = weights if "비중" in normalized else dates
+        # Theme/product classification queries can return the same productCode,
+        # but they are not holdings evidence.  Ignore them instead of appending
+        # an empty dict that is later rendered as ``[{}, {}]``.
+        if not codes or not requested_aliases:
+            continue
         for row in result.get("rows") or []:
             if not any(str(row.get(k, "")) == str(product_code) for k in codes):
                 continue
-            names = {o["alias"]: row.get(o["alias"]) for o in outputs if o.get("property", "").endswith(("#organizationName", ":organizationName", "#securityCode", ":securityCode"))}
-            dates = {f"{h}_as_of": row.get(f"{h}_as_of") or "미확보" for h in holdings}
-            detail = {**names, **dates}
-            if "비중" in normalized:
-                detail.update({w: row.get(w) if row.get(w) is not None else "NULL·확인 불가" for w in weights})
-                if not weights:
-                    detail["비중"] = "미조회·확인 불가"
+            matched_relation = True
+            detail = {
+                alias: row.get(alias)
+                for alias in requested_aliases
+                if row.get(alias) not in (None, "")
+            }
+            if not detail:
+                continue
             entries.append(detail)
-            sources.extend(f"{sid}:{h}_source={row.get(f'{h}_source', '미확보')}" for h in holdings)
+            sources.extend(
+                f"Graph 편입 원천={row.get(alias)}"
+                for alias in source_ids
+                if row.get(alias) not in (None, "")
+            )
     if not entries:
+        if matched_relation:
+            return {
+                "field": label,
+                "column": None,
+                "value": None,
+                "status": "null",
+                "source_columns": list(dict.fromkeys(sources)),
+                "detail": "편입 관계는 확인했지만 요청한 편입 수치가 비어 있어 임의 값으로 대체하지 않습니다.",
+            }
         return None
     return {"field": label, "column": None, "value": entries, "status": "available",
             "source_columns": list(dict.fromkeys(sources)),

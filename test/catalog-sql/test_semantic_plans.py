@@ -109,6 +109,57 @@ class SemanticPlanTests(unittest.TestCase):
         self.assertEqual(item["value"][0]["weight"], 8.1)
         self.assertIsNone(evidence_contract.graph_field_evidence("편입비중", "C", results))
 
+    def test_reviewed_holding_alias_plan_provides_weight_and_date_without_nodes(self):
+        plan = {"mode": "reviewed_holding_security_alias", "outputs": [
+            {"alias": "etf_code", "property": "fp:productCode"},
+            {"alias": "weight", "property": "fp:weight"},
+            {"alias": "holding_as_of", "property": "fp:asOf"},
+            {"alias": "holding_source", "property": "fp:sourceId"},
+        ]}
+        holding = {"engine": "graph", "status": "ok", "graph_plan": plan, "rows": [{
+            "etf_code": "KR70162L0003", "weight": "10.45",
+            "holding_as_of": "2026-07-10", "holding_source": "KODEX",
+        }]}
+        theme = {"engine": "graph", "status": "ok", "graph_plan": {"outputs": [
+            {"alias": "etf_code", "property": "fp:productCode"},
+            {"alias": "theme", "property": "rdfs:label"},
+        ]}, "rows": [{"etf_code": "KR70162L0003", "theme": "중국 반도체"}]}
+        results = {"holding": holding, "theme": theme}
+
+        weight = evidence_contract.graph_field_evidence("편입비중", "KR70162L0003", results)
+        as_of = evidence_contract.graph_field_evidence("편입기준일", "KR70162L0003", results)
+
+        self.assertEqual(weight["value"], [{"weight": "10.45"}])
+        self.assertEqual(as_of["value"], [{"holding_as_of": "2026-07-10"}])
+        self.assertEqual(self.nodes._display_contract_value(weight), "10.45%")
+        self.assertEqual(self.nodes._display_contract_value(as_of), "2026-07-10")
+        self.assertNotIn({}, weight["value"])
+        self.assertNotIn({}, as_of["value"])
+
+    def test_theme_only_graph_result_is_not_holding_field_evidence(self):
+        results = {"theme": {"engine": "graph", "status": "ok", "graph_plan": {"outputs": [
+            {"alias": "etf_code", "property": "fp:productCode"},
+            {"alias": "theme", "property": "rdfs:label"},
+        ]}, "rows": [{"etf_code": "KR70162L0003", "theme": "중국 반도체"}]}}
+        self.assertIsNone(
+            evidence_contract.graph_field_evidence("편입기준일", "KR70162L0003", results)
+        )
+
+    def test_domestic_etf_ticker_uses_enriched_identifier_not_isin(self):
+        ticker = rdb_schema.get_attribute_catalog("국내ETF")["티커"]
+        product_code = rdb_schema.get_attribute_catalog("국내ETF")["상품코드"]
+        self.assertEqual(ticker.column, "etf_ref.ticker")
+        self.assertEqual(ticker.join_table, "enriched.etf_kr")
+        self.assertNotEqual(ticker.column, product_code.column)
+        schema = utils.build_resolved_schema(
+            {"domain": "국내ETF", "role": "target", "fields": ["티커"], "conditions": []},
+            rdb_schema.get_attribute_catalog("국내ETF"),
+            [],
+        )
+        sql = catalog_sql.compile_select(schema, snapshot=snapshot(), metadata={})["sql"]
+        self.assertIn("LEFT JOIN enriched.etf_kr AS etf_ref", sql)
+        self.assertIn("etf_ref.ticker AS ticker", sql)
+
     def test_graph_source_records_do_not_require_nonexistent_documents(self):
         from types import SimpleNamespace
         compiled = SimpleNamespace(evidence_columns=("h_as_of", "h_source", "h_document", "h_document_title"), tbox_provenance=())

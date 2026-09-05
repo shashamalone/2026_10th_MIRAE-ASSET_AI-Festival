@@ -1116,6 +1116,17 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
         value_type="text",
         note="결측 없음. 반도체/2차전지 같은 테마 조건은 이 컬럼에 대한 LIKE 매칭으로만 처리할 수 있다.",
     ),
+    "티커": AttributeSpec(
+        column="etf_ref.ticker",
+        value_type="text",
+        join_table="enriched.etf_kr",
+        join_alias="etf_ref",
+        join_on="etf_ref.pd_itm_no = base.pd_itm_no",
+        note=(
+            "국내 거래 티커. enriched.etf_kr의 정규화 식별자이며 "
+            "원천 ISIN인 pd_itm_no(상품코드)와 서로 바꿔 쓰지 않는다."
+        ),
+    ),
     # §8(Graph->RDB 핸드오프)용: GraphDB의 fp:productCode가 이 컬럼과 같은
     # ISIN 값이다(실측 확인, 예: KR7491510004).
     "상품코드": AttributeSpec(column="pd_itm_no", value_type="text", note="ISIN. 1,780건 전부 유일값. 결측 없음."),
@@ -1744,6 +1755,13 @@ def resolve_subtype_condition(domain: str, subtype_value: str) -> dict | None:
 # 물리 테이블과 컬럼을 여기 적어 둔다. 문자열 파싱으로 추출하면 조용히
 # 틀리므로 손으로 선언하고, 아래 iter_* 가 이걸 같이 검사한다.
 DERIVED_JOIN_PHYSICAL_REFS: dict[str, dict[str, list]] = {
+    "티커": {
+        "tables": ["enriched.etf_kr"],
+        "columns": [
+            ("enriched.etf_kr", "pd_itm_no"),
+            ("enriched.etf_kr", "ticker"),
+        ],
+    },
     "총보수율": {
         "tables": ["enriched.etf_kr", "enriched.product_metric"],
         "columns": [
