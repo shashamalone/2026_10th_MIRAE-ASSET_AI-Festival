@@ -1,0 +1,126 @@
+[run] 9문항 x 1회차 -> test\pipline-test\latency\traces_rdb_check2_0905.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+[guard] remaining=51 tokens=27952 -> 36.5s 대기
+
+===== [Q1 r1] tokens=59993 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT table_schema || '.' || table_name AS t FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, pd_no, pd_std_info_update
+FROM raw.prbd01n001
+WHERE std_pd_mcls_nm = '회사채'
+  AND pd_no IN ('KR6000662D25')
+
+[done] Q1 r1 a1 status=ok e2e=14.1s llm=4 tok=12875 rem=51/27283 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+[guard] remaining=50 tokens=27276 -> 45.5s 대기
+
+===== [Q2 r1] tokens=59993 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update
+FROM raw.prbd01n001
+WHERE std_pd_mcls_nm = '국공채'
+  AND pd_no IN ('KR103502GB66')
+
+[done] Q2 r1 a1 status=ok e2e=12.2s llm=4 tok=12723 rem=51/27343 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754.0,"s
+[guard] remaining=50 tokens=27336 -> 47.5s 대기
+
+===== [Q8 r1] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt
+FROM raw.prfd01n001
+WHERE or_attr_desc = '주식형'
+  AND prvo_pbff_desc = '공모'
+  AND itm_no IN ('KR5153450780')
+
+[done] Q8 r1 a1 status=ok e2e=13.3s llm=4 tok=13171 rem=51/27101 | {'fund_type': '주식형', 'net_asset_value': '734810470588.0000', 'one_month_return': '3.32%', 'three_mon
+[guard] remaining=50 tokens=27094 -> 46.5s 대기
+
+===== [Q9 r1] tokens=59993 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no
+FROM raw.prfd01n001
+WHERE or_attr_desc = 'MMF'
+  AND itm_no IN ('KR5014410050')
+
+[done] Q9 r1 a1 status=ok e2e=13.3s llm=4 tok=13140 rem=51/26993 | {"벤치마크": "CALL", "통화": "KRW", "투자지역": "국내", "개인\u002f법인 구분": "법인", "위험등급": "매우 낮은 위험", "순자산": "21900
+[guard] remaining=50 tokens=26986 -> 46.5s 대기
+
+===== [Q11 r1] tokens=59993 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, mat_dt, buy_yield, sale_yield_base_dt
+FROM raw.prbd01n001
+WHERE curr_cd = 'KRW'
+  AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+
+[done] Q11 r1 a1 status=ok e2e=36.3s llm=4 tok=15758 rem=42/1983 | 조건에 맞는 원화채권 목록은 다음과 같습니다:
+
+1. 상품명: 퍼스트파이브지제팔십사차유동화전문1-14, 발행사: 퍼스트파이브지제팔십사차유동화전문, 원등급: AAA, 만기일: 202
+[guard] remaining=41 tokens=1976 -> 23.5s 대기
+
+===== [Q13 r1] tokens=59993 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield
+FROM raw.prbd01n001
+WHERE std_pd_mcls_nm = '회사채'
+  AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+  AND remaining_days <= 1095
+  AND buy_yield IS NOT NULL
+ORDER BY buy_yield DESC NULLS LAST
+LIMIT 10
+
+[done] Q13 r1 a1 status=ok e2e=19.4s llm=4 tok=13730 rem=48/15670 | [
+  {
+    "등급 서열 규칙": "AA-",
+    "잔존일수": 787,
+    "수익률": 5.29,
+    "매수가능수량": ""
+  },
+  {
+    "등급 서열 
+[guard] remaining=46 tokens=10225 -> 40.5s 대기
+
+===== [Q17 r1] tokens=59986 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd
+FROM raw.pref02n001
+WHERE wu_inv_ast_type = 'Equity'
+  AND cu_charge_rt <= 0.05
+  AND du_last_aum >= 1e+11
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+
+[done] Q17 r1 a1 status=ok e2e=11.6s llm=4 tok=13239 rem=49/22670 | []
+[guard] remaining=48 tokens=22663 -> 48.5s 대기
+
+===== [Q18 r1] tokens=59986 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d
+FROM raw.pref02n001
+WHERE wu_inv_ast_type = 'Bond'
+  AND cu_charge_rt <= 0.1
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+LIMIT 10
+
+[done] Q18 r1 a1 status=exception e2e=43.1s llm=4 tok=10320 rem=44/5064 | 
+[guard] remaining=43 tokens=5057 -> 16.5s 대기
+
+===== [Q25 r1] tokens=59993 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm
+FROM raw.prfd01n001
+WHERE itm_nm LIKE '%국민성장%'
+
+[done] Q25 r1 a1 status=ok e2e=15.6s llm=4 tok=13285 rem=46/14627 | 국민성장펀드에 대한 구조, 운용주체, 자금조달 방식 및 최근 투자전략 동향에 관한 정보는 현재 제공된 데이터로는 확인할 수 없습니다.
+[run] 완료 -> test\pipline-test\latency\traces_rdb_check2_0905.jsonl

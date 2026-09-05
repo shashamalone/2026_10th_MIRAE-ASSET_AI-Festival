@@ -343,6 +343,39 @@ T1·T3 완료. `nodes.py`는 건드리지 않았다.
 
 실행한 검증: `python script/graph_db/test_entity_index.py`(16 pass, 1 skip), `WSLENV=RUN_STORE_REGRESSION RUN_STORE_REGRESSION=1 python script/graph_db/test_entity_index.py RealStoreRegressionTest`(pass, 96s), `python script/graph_db/test_client_failover.py`(11 pass), `run_latency.py --rounds 1 --ids Q10,Q23,Q26,Q27`(trace `latency/traces_after_T1_graph.jsonl`).
 
+## 12-B. 구현 진행 (2026-09-05, Lane B `fix/rdb-sql-generation`, Graph 브랜치에서 분기)
+
+T4·T5(가드 일부)·T6·T12·T13 완료. 미커밋.
+
+- `src/agent/sql_builder.py`(신규): `utils.build_resolved_schema` 결과를 SQL로 결정론 컴파일. 조건별 규칙은 카탈로그 value_type을 따른다(numeric_flag→`true_condition`, Y/N categorical→플래그, known_values 정규화 일치, numeric은 한국어 단위 파서 `1천억 달러→1e11`·`3년→1095일`·통화 불일치 시 거부, date는 YYYYMMDD, ordinal은 `matched_values IN`, 조직명은 변형 LIKE, subtype 레코드는 확정값 그대로). 폐기 컬럼 `buyable_quantity`는 조건·정렬·출력 어디서든 제거하고 사유를 남긴다. 국내ETF에는 `pd_grp_no='ETF'`를 자동 추가한다. 하나라도 표현 불가면 `None`을 돌려 기존 LLM 초안→SQL 경로로 폴백한다(부분 컴파일 없음).
+- `utils.resolve_product_name_entities`(T12): 상품명을 Graph 엔티티 해소(exact·정규형)로 상품코드 `IN`으로 바꾼다. `fp:productCode`가 4개 도메인 RDB 코드 컬럼(ISIN·RIC)과 같음을 실측했다. 미해소 이름만 부분일치 폴백이며 말미 상품군 토큰(펀드·ETF)을 뗀다.
+- `rdb_schema`: 개념 별칭(판매상태·판매여부·AUM·총보수·거래정지여부·연금거래), `거래정지여부` spec(`pd_tr_yn`, '1'=정지), 자산군 subtype(국내ETF `wu_inv_ast_type` 한글, 해외ETF 영문), `원화채권→curr_cd='KRW'`, 도메인별 실질 기준일 `DOMAIN_AS_OF`(T13, 서브에이전트).
+- `utils.missing_join_tables`: 원격 DB `information_schema`를 프로세스당 1회 조회해 카탈로그가 참조하는 보강 테이블이 없으면 실행 전에 건너뛴다. 9-03 측정 DB 에러 97건 중 19건이 `enriched.etf_kr_enriched` 부재였다(로컬 빌드 전용 테이블). 나머지 78건은 LLM SQL 문제(별칭 공백 34·없는 컬럼 24·타입 14·날짜 6)였고 빌더 경로에서는 발생하지 않는다.
+- 테스트: `script/agent_test/test_sql_builder.py` 28개(단위 파서, 플래그, 통화 불일치, 기간→일, 폐기 컬럼, ordinal IN, 조직명 변형, IN, categorical 정규화, 날짜, 이스케이프, ETN 필터, NULLS LAST·LIMIT, ordinal CASE 정렬, JOIN 별칭, union_mode, subtype spec None, 자산군 매핑), `test_domain_as_of.py` 4개. 기존 5개 스위트 전부 통과.
+
+E2E 실측(1회, cold. 기준선은 9-03 warm p50):
+
+| ID | E2E 전→후 | rdb 노드 전→후 | RDB LLM 호출 | SQL 출처 | 결과 |
+|---|---:|---:|---:|---|---|
+| Q1 | 24.7→14.1s | 12.9→1.7s | 3→1 | 빌더 | 상품코드 exact, `buyable_quantity` 제거(Critical 해소) |
+| Q2 | 21.0→12.2s | 10.7→2.1s | 3→1 | 빌더 | 정답 유지 |
+| Q4 | 19.4→10.3s | 9.9→0.9s | 3→1 | 빌더 | 14행→1행, 골든 값 전부 일치 |
+| Q6 | 20.4→11.7s | 11.5→1.4s | 3→1 | 빌더 | 0행→1행, 골든 일치 |
+| Q8 | 26.7→13.3s | 11.7→1.3s | 3→1 | 빌더 | 정답 유지 |
+| Q9 | 19.8→13.3s | 10.1→1.5s | 3→1 | 빌더 | 정답 유지 |
+| Q11 | 29.8→36.3s | 10.0→1.7s | 3→1 | 빌더 | SQL 정확(KRW·AA- 이상·폐기 컬럼 제거). 100행 목록 답변 생성 20s+ |
+| Q12 | 24.5→23.2s | 10.7→1.7s | 3→1 | 빌더 | 0행→100행(골든 1,021종), 플래그 `'1'`/`NOT '1'`/`'Y'` 정확 |
+| Q13 | 36.1→19.4s | 15.0→2.1s | 4→1 | 빌더 | SQL 정확. 답변이 상품명 누락·5행만 |
+| Q17 | 22.3→11.6s | 13.0→1.0s | 4→1 | 빌더 | 0행→14행(Equity·1e11·0.05). 답변 `[]` 생성 실패 |
+| Q18 | 29.9→43.1s | 12.3→0.8s | 4→1 | 빌더 | SQL 정확(Bond). 답변 생성 예외 |
+| Q19 | 23.6→25.3s | 11.9→0.9s | 3→1 | 빌더 | 0행→100행, 상위 상품 골든과 순서까지 일치 |
+| Q25 | 19.5→15.6s | 10.1→2.9s | 3→1 | 빌더 | 0행→4행(골든 4건 일치). 답변은 "확인 불가" |
+| Q30 | 39.4→23.0s | 25.9→11.4s | 6→4 | 혼합 | 펀드 단계는 의도가 상품명을 안 내 LLM 경로 |
+
+- rdb 노드 p50 11.4s → 1~3s. 빌더 경로 문항의 RDB LLM 호출 3~4회 → 1회(개념 해소 폴백만 남음). 14문항 중 9문항이 E2E 15초 안(cold 1회).
+- 남은 실패는 전부 답변 생성이다: 행이 있는데 `[]`(Q17)·예외(Q18)·"확인 불가"(Q25)·필드 누락(Q13)·문자열 깨짐(Q11). Lane C(T8·T9) 대상.
+- 의도 분석이 조건을 안 내는 문항(Q30 펀드 상품명, Q17 "미국" 지역)은 빌더가 만들 수 없다. Lane C.
+
 ## 13. 완료 요약
 
 - Step 0 범위: 7개 유지 + 겨냥점·주인·순서 확정 (D2 = B)

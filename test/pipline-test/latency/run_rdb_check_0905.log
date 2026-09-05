@@ -1,0 +1,180 @@
+[run] 14문항 x 1회차 -> test\pipline-test\latency\traces_rdb_check_0905.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+[guard] remaining=46 tokens=11887 -> 22.5s 대기
+
+===== [Q1 r1] tokens=59986 | 최신 상품정보 갱신일 기준으로 에스케이하이닉스224-2의 발행사, 신용등급, 표면금리, 만기일, 매수수익률과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT table_schema || '.' || table_name AS t FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, srfc_irt, mat_dt, buy_yield, buyable_quantity, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND pd_no = 'KR6000662D25'
+
+[done] Q1 r1 a1 status=ok e2e=24.0s llm=6 tok=16328 rem=43/4781 | [{"pd_nm":"에스케이하이닉스224-2","pd_pbcm":"에스케이하이닉스(주)","crd_grd":"AA+","srfc_irt":4.266,"mat_dt":"2028021
+[guard] remaining=42 tokens=4774 -> 35.5s 대기
+
+===== [Q2 r1] tokens=59993 | 국고채권 02000-3106(21-5)의 발행일, 만기일, 잔존일수, 표면금리와 세후수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, isu_dt, mat_dt, remaining_days, srfc_irt, after_tax_yield, pd_no, pd_std_info_update FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '국공채' AND pd_no IN ('KR103502GB66')
+
+[done] Q2 r1 a1 status=ok e2e=20.2s llm=6 tok=15900 rem=46/10133 | [{"pd_nm":"국고채권 02000-3106(21-5)","isu_dt":"20210610","mat_dt":"20310610","remaining_days":1754.0,"s
+[guard] remaining=45 tokens=10126 -> 39.5s 대기
+
+===== [Q4 r1] tokens=59993 | KODEX 200의 운용사, 기초지수, 현재 AUM, NAV, 종가, 괴리율과 1년 수익률을 알려줘. 상품번
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_fund_mgmt_co, ref_base_index, pd_net_tamt, du_last_nav, du_clpr, du_diff_rt, du_er_1y
+FROM raw.pref01n001
+WHERE pd_itm_no IN ('KR7069500007')
+  AND pd_grp_no = 'ETF'
+
+[done] Q4 r1 a1 status=ok e2e=10.3s llm=4 tok=13369 rem=53/34001 | [{"pd_nm":"삼성 KODEX200 증권상장지수투자신탁[주식]","cu_fund_mgmt_co":"삼성","ref_base_index":"KOSPI 200 CR","pd_ne
+
+===== [Q6 r1] tokens=33994 | VOO의 정식 상품명, 기초지수, 운용사, 총보수, AUM, 현재가와 거래량을 알려줘. ISIN, 가격 기준
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, cu_fund_mgmt_co, cu_charge_rt, du_last_aum, ru_mkt_price, du_vol_1d
+FROM raw.pref02n001
+WHERE pd_itm_no IN ('VOO')
+
+[done] Q6 r1 a1 status=ok e2e=11.7s llm=4 tok=11969 rem=45/9688 | {"정식 상품명":"Vanguard 500 Index Fund;ETF","기초지수":"S&P 500 TR","운용사":"Vanguard Capital Management, LLC"
+[guard] remaining=43 tokens=9674 -> 37.5s 대기
+
+===== [Q8 r1] tokens=59993 | 미래에셋코어테크증권자투자신탁(주식) 종류A의 펀드 유형, 순자산, 1·3·6개월 및 1년 수익률, 위험등급과
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, or_attr_desc, fd_nast_suma, fd_mm1_ern_r, fd_mm3_ern_r, fd_mm6_ern_r, fd_yr1_ern_r, zrin_fd_ivst_risk_grd_nm, sale_yn, itm_no, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모' AND itm_no = 'KR5153450780'
+
+[done] Q8 r1 a1 status=ok e2e=24.0s llm=6 tok=16568 rem=46/8084 | {'fund_type': '주식형', 'net_asset': '734810470588', 'one_month_return': '3.32%', 'three_month_return':
+[guard] remaining=45 tokens=8077 -> 35.5s 대기
+
+===== [Q9 r1] tokens=59993 | 삼성 베스트 MMF 법인 제1호의 벤치마크, 통화, 투자지역, 개인·법인 구분, 위험등급과 순자산을 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, bmrk_nm, curr_cd, fd_ivst_rgn_desc, pers_corp_desc, zrin_fd_ivst_risk_grd_nm, fd_nast_suma, itm_no FROM raw.prfd01n001 WHERE or_attr_desc = 'MMF' AND itm_no = 'KR5014410050'
+
+[done] Q9 r1 a1 status=ok e2e=20.0s llm=6 tok=16167 rem=46/10113 | {"벤치마크": "CALL", "통화": "KRW", "투자지역": "국내", "개인\u002f법인 구분": "법인", "위험등급": "매우 낮은 위험", "순자산": "21900
+[guard] remaining=45 tokens=10106 -> 38.5s 대기
+
+===== [Q11 r1] tokens=59993 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, mat_dt, buy_yield, sale_yield_base_dt
+FROM raw.prbd01n001
+WHERE crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+
+[done] Q11 r1 a1 status=ok e2e=37.6s llm=4 tok=15783 rem=44/5283 | 조건에 맞는 원화채권 목록은 다음과 같습니다:
+
+1. 상품명: 퍼스트파이브지제팔십사차유동화전문1-14, 발행사: 퍼스트파이브지제팔십사차유동화전문, 원등급: AAA, 만기일: 202
+[guard] remaining=43 tokens=5276 -> 22.5s 대기
+
+===== [Q12 r1] tokens=59993 | 현재 판매 중이고 거래정지가 아니며 연금거래가 가능한 국내 ETF를 찾아줘. 상품명, 연금 위험구분, 상품 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pen_risk_nm, pd_risk_nm, pd_net_tamt, ref_base_dt
+FROM raw.pref01n001
+WHERE pd_sale_yn = '1'
+  AND NOT (pd_tr_yn = '1')
+  AND pd_pen_tr_yn = 'Y'
+  AND pd_grp_no = 'ETF'
+
+[done] Q12 r1 a1 status=ok e2e=23.2s llm=4 tok=16051 rem=48/7520 | [{"pd_nm": "KB RISE 바이오TOP10액티브증권상장지수투자신탁(주식)", "연금 위험 구분": "위험 자산", "상품 위험 등급": "높은 위험(2등급)", "순자산"
+[guard] remaining=47 tokens=7513 -> 36.5s 대기
+
+===== [Q13 r1] tokens=59993 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 3 AND buyable_quantity = '가능' AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: InvalidTextRepresentation: invalid input syntax for type double precision: "가능"
+LINE 1: ...') AND remaining_days <= 3 AND buyable_quantity = '가능' AND...
+                                                             ^
+
+[⚠️ SQL 수정 LLM 호출 실패] 시도 1: Error code: 429 - {'error': {'message': 'Too many requests: rate exceeded. Check response headers for current limits and retry information.', 'code': '42901'}}
+재시도를 중단합니다.
+
+[done] Q13 r1 a1 status=rate_limited e2e=25.3s llm=6 tok=15989 rem=42/207 | 제공된 데이터로는 이 질문에 답변할 수 없습니다.
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=40 tokens=200 -> 33.5s 대기
+
+===== [Q13 r1 retry] tokens=59993 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield, buyable_quantity FROM raw.prbd01n001 WHERE std_pd_mcls_nm = '회사채' AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA') AND remaining_days <= 1095 AND buy_yield IS NOT NULL ORDER BY buy_yield DESC LIMIT 10
+
+[done] Q13 r1 a2 status=ok e2e=21.7s llm=6 tok=17668 rem=46/8833 | []
+[guard] remaining=45 tokens=8826 -> 38.5s 대기
+
+===== [Q17 r1] tokens=59986 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd
+FROM raw.pref02n001
+WHERE cu_charge_rt <= 0.05
+  AND du_last_aum >= 1e+11
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+
+[done] Q17 r1 a1 status=ok e2e=12.4s llm=4 tok=13537 rem=50/22867 | [
+[guard] remaining=49 tokens=22860 -> 47.5s 대기
+
+===== [Q18 r1] tokens=59993 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d
+FROM raw.pref02n001
+WHERE cu_charge_rt <= 0.1
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+LIMIT 10
+
+[done] Q18 r1 a1 status=ok e2e=11.8s llm=4 tok=12755 rem=51/27203 | [
+[guard] remaining=50 tokens=27196 -> 48.5s 대기
+
+===== [Q19 r1] tokens=59993 | 판매 중인 공모펀드 가운데 1년 수익률이 양수이고 순자산이 1천억 원 이상인 상품을 수익률 순으로 알려줘. 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, exchdg_yn, fd_ivst_rgn_desc, zrin_fd_ivst_risk_grd_nm, fd_price_bas_dt
+FROM raw.prfd01n001
+WHERE sale_yn = '판매중'
+  AND fd_yr1_ern_r >= 0
+  AND fd_nast_suma >= 1e+11
+  AND fd_yr1_ern_r IS NOT NULL
+ORDER BY fd_yr1_ern_r DESC NULLS LAST
+
+[done] Q19 r1 a1 status=ok e2e=25.3s llm=4 tok=15622 rem=51/33075 | 조건에 맞는 상품 목록은 다음과 같습니다:
+
+1. 한화2.2배레버리지인덱스증권투자신탁(주식-파생재간접형) 종류Ce
+   - 환헤지 여부: N/A
+   - 투자지역: 국내
+   - 
+
+===== [Q25 r1] tokens=33068 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm
+FROM raw.prfd01n001
+WHERE itm_nm LIKE '%국민성장펀드%'
+
+[done] Q25 r1 a1 status=ok e2e=11.4s llm=3 tok=11327 rem=46/16148 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (문서 근거 no_product_match: 상품 후보 1건을 product_master에서 해소하지 못해 문서 검색 생략)
+[guard] remaining=45 tokens=16141 -> 20.5s 대기
+
+===== [Q30 r1] tokens=59986 | 우리반도체BIG2플러스 펀드와 국내 반도체 ETF의 실제 편입종목 중복도를 계산하고 중복 노출이 큰 기업의 
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm, fd_price_bas_dt FROM raw.prfd01n001 WHERE or_attr_desc = '주식형' AND prvo_pbff_desc = '공모'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_lstg_dt
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+
+[done] Q30 r1 a1 status=ok e2e=23.0s llm=7 tok=20596 rem=48/13810 | 죄송합니다. 현재 제공된 데이터로는 요청하신 정보를 제공할 수 없습니다.
+[run] 완료 -> test\pipline-test\latency\traces_rdb_check_0905.jsonl
