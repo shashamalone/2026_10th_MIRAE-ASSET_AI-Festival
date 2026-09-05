@@ -1576,7 +1576,8 @@ def _build_retrieved_context(state: PipelineState) -> str:
     """§10: route.domains + 고정 스냅샷 날짜 대신, state["step_results"]를
     순회해 각 엔진이 실제로 무엇을 근거로 썼는지 조립한다.
 
-    - RDB 단계: 도메인, 조회 건수, 기준일, 실행된 SQL. merged_into로
+    - RDB 단계: 공식 데이터셋명, 조회 건수, 기준일, 근거 컬럼. SQL 전문과
+      내부 단계 ID는 사용자에게 노출하지 않는다. merged_into로
       다른 단계에 흡수됐거나(§9 UNION 그룹의 비대표 멤버) skipped/error인
       단계는 실제로 근거를 낸 게 없으므로 뺀다.
     - Graph 단계: 어떤 relation(주체 -- 관계 --> 대상)을 탐색했는지(plan에서
@@ -1588,17 +1589,37 @@ def _build_retrieved_context(state: PipelineState) -> str:
     plan_by_id = {s["step_id"]: s for s in state.get("plan") or []}
     parts: list[str] = []
 
+    dataset_labels = {
+        "채권": "국내채권마스터",
+        "국내ETF": "국내ETF·ETN마스터",
+        "해외ETF": "해외ETF·ETN마스터",
+        "펀드": "공모펀드마스터",
+    }
+
     for step_id, result in step_results.items():
         engine = result.get("engine")
         if engine == "rdb":
             if result.get("merged_into") or result.get("skipped_reason") or result.get("error") or not result.get("sql"):
                 continue
-            parts.append(
-                f"[RDB:{result.get('domain', '')}] {result.get('count', 0)}건 조회, "
-                f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE}, SQL: {result['sql']}"
+            domain = str(result.get("domain") or "")
+            columns = list(dict.fromkeys(
+                binding.get("column") for binding in result.get("output_fields") or []
+                if binding.get("column")
+            ))
+            summary = (
+                f"{dataset_labels.get(domain, domain + ' 데이터')} · "
+                f"{rdb_schema.DATA_SNAPSHOT_DATE} · {result.get('count', 0)}건"
             )
+            if columns:
+                summary += " · 근거 컬럼: " + ", ".join(columns)
+            parts.append(summary)
             for detail in result.get("hydration_queries") or []:
-                parts.append(f"[상위 상품 상세조회:{detail['domain']}] {detail['count']}건; SQL: {detail.get('sql')}; 오류: {detail.get('error') or '없음'}")
+                if not detail.get("error"):
+                    detail_domain = str(detail.get("domain") or "")
+                    parts.append(
+                        f"{dataset_labels.get(detail_domain, detail_domain + ' 데이터')} 상위 상품 상세 · "
+                        f"{detail.get('count', 0)}건"
+                    )
             if result.get("output_views"):
                 labels = ", ".join(v["attribute"] for v in result["output_views"])
                 parts.append(f"[로컬 온톨로지 규칙 적용] {labels}: RDB 원천값 + 저장소 TBox 정의; 원격 GraphDB 조회 아님")
@@ -1618,17 +1639,20 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 evidence_note = f", 행 단위 근거 {len(evidence)}건 확보(원천 식별자·기준일; 문서 메타 확보 여부 별도)"
             else:
                 evidence_note = ""
+            status_text = "근거 확보" if result.get("status") == "ok" else "근거 미확보"
             parts.append(
-                f"[Graph] {rel_desc} - status={result.get('status')}, "
+                f"Graph 관계 근거 · {rel_desc} · {status_text} · "
                 f"{len(result.get('rows') or [])}건{evidence_note}"
             )
         elif engine == "vector":
             if result.get("status") == "chained":
                 continue
-            # abstain/no_document이면 note 대신 error를 붙인다 - 답변 LLM이
-            # "문서 미확보"를 사유로 말할 수 있어야 한다.
-            detail = result.get("note") or result.get("error") or ""
-            segments = [f"[Vector] status={result.get('status')}, {result.get('count', 0)}건, {detail}"]
+            # 내부 status와 검색 임계값은 숨기고 근거 확보 여부만 표시한다.
+            available = result.get("status") == "ok" and bool(result.get("chunks"))
+            segments = [
+                f"Vector 문서 근거 · {result.get('count', 0)}건"
+                if available else "Vector 문서 근거 · 확인할 수 없음"
+            ]
             segments.extend(
                 f"인용: {c.get('citation_text')}({c.get('effective_as_of')})"
                 for c in (result.get("chunks") or [])[:2]
@@ -1794,6 +1818,13 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                             metric_date = normalized in {"aum기준일", "수익률기준일", "수치기준일", "지표기준일"}
                             date_label = f"{label} 검토용 원천 갱신일({date_column})" if metric_date else f"{label}({date_column})"
                             item = _field_evidence(date_label, binding, row, failure)
+                            related = list(dict.fromkeys(
+                                b.get("attribute") for b in bindings
+                                if date_column in (b.get("as_of_columns") or []) and b.get("attribute")
+                                and b.get("key") != date_column
+                            ))
+                            suffix = f" ({'·'.join(related)} 관련)" if related else ""
+                            item["answer_field"] = f"{label}{suffix}"
                             if metric_date:
                                 item["detail"] = "카탈로그에 연결된 원천별 날짜입니다. 해당 수치 자체의 관측일로 하나를 확정하거나 모두 같은 기준일로 간주하지 않습니다."
                             items.append(item)
@@ -1809,8 +1840,15 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                 binding = matches[0] if len(columns) == 1 else None
                 item = _field_evidence(label, binding, row, failure)
                 if binding and row is not None and not failure:
-                    item["as_of"] = [_field_evidence(c, next((b for b in bindings if b["key"] == c), None), row)
-                                     for c in binding.get("as_of_columns", []) if c != binding["key"]]
+                    item["as_of"] = []
+                    for column in binding.get("as_of_columns", []):
+                        if column == binding["key"]:
+                            continue
+                        date_item = _field_evidence(
+                            column, next((b for b in bindings if b["key"] == column), None), row
+                        )
+                        date_item["answer_field"] = f"{label} 기준일"
+                        item["as_of"].append(date_item)
                 items.append(item)
             contract.append({"step_id": sid, "domain": domain, "row_number": index + 1 if visible else None,
                              "retrieved_rows": len(rows), "displayed_rows": len(visible),
@@ -1823,9 +1861,9 @@ _FIELD_UNAVAILABLE_TEXT = {
     "empty": "제공된 조회 결과가 빈 값이어서 확인할 수 없습니다.",
     "not_selected": "조회 결과에 해당 컬럼이 포함되지 않아 확인할 수 없습니다. NULL 여부도 확인되지 않았습니다.",
     "unmapped": "요청 항목과 조회 컬럼의 대응을 확정하지 못해 확인할 수 없습니다.",
-    "no_rows": "조회 결과가 0건이어서 확인할 수 없습니다. 상품 자체가 존재하지 않는다는 뜻은 아닙니다.",
-    "query_failed": "조회에 실패하여 확인할 수 없습니다. 값의 존재 여부는 확인되지 않았습니다.",
-    "blocked": "조회가 차단되어 확인할 수 없습니다. 값의 존재 여부는 확인되지 않았습니다.",
+    "no_rows": "조회 결과가 없어 확인할 수 없습니다.",
+    "query_failed": "제공 데이터로 확인할 수 없습니다.",
+    "blocked": "제공 데이터로 확인할 수 없습니다.",
     "invalid": "조회 값이 유효한 수치가 아니어서 확인할 수 없습니다.",
     "zero_unavailable": "유효한 측정값으로 확인할 수 없습니다. 카탈로그에서 원천 0을 결측·불가용으로 정의합니다.",
     "restricted": "카탈로그에서 판정·필터·정렬에 사용할 수 없는 값으로 정의합니다.",
@@ -1841,36 +1879,92 @@ def _display_field_value(value) -> str:
     return str(value).replace("\r", "\\r").replace("\n", "\\n")
 
 
+def _public_field_label(value: object) -> str:
+    """Remove a trailing physical-column annotation from an answer label."""
+    return re.sub(r"\([A-Za-z_][A-Za-z0-9_.]*\)$", "", str(value or "")).strip()
+
+
+def _display_contract_value(item: dict) -> str:
+    """Render graph-derived structured fields as user values, not JSON internals."""
+    value = item.get("value")
+    normalized = re.sub(r"\s+", "", str(item.get("field") or ""))
+    if isinstance(value, list) and all(isinstance(entry, dict) for entry in value):
+        if normalized in {"편입비중", "종목별비중"}:
+            weights = list(dict.fromkeys(
+                str(field_value)
+                for entry in value
+                for key, field_value in entry.items()
+                if (str(key).casefold().endswith("weight") or key == "비중")
+                and field_value not in (None, "", "미조회·확인 불가", "NULL·확인 불가")
+            ))
+            if weights:
+                return ", ".join(
+                    weight if weight.endswith("%") else f"{weight}%" for weight in weights
+                )
+        if normalized in {"편입기준일", "편입내역기준일"}:
+            dates = list(dict.fromkeys(
+                str(field_value)
+                for entry in value
+                for key, field_value in entry.items()
+                if str(key).casefold().endswith("_as_of") and field_value not in (None, "", "미확보")
+            ))
+            if dates:
+                return ", ".join(dates)
+    return _display_field_value(value)
+
+
 def _render_rdb_answer_contract(contract: list[dict]) -> str:
     """Values and absence notices are rendered by code; no LLM can omit them."""
     blocks = []
+    shown_notes: set[str] = set()
+    shown_unit_notice = False
     for record in contract:
-        heading = f"[{record['domain']} / {record['step_id']}]"
+        heading = f"[{record['domain']}]"
         if record["row_number"] is not None:
-            heading += (f" 조회 결과 {record['row_number']}번"
-                        f" (반환 {record['retrieved_rows']}건 중 {record['displayed_rows']}건 표시)")
+            heading += f" 조회 결과 {record['row_number']}번"
+            if record["row_number"] == 1:
+                heading += f" (반환 {record['retrieved_rows']}건 중 {record['displayed_rows']}건 표시)"
         lines = [heading]
         for available, title in [(True, "확인된 값"), (False, "확인 불가 항목")]:
             selected = [i for i in record["items"] if (i["status"] == "available") == available]
             if not selected:
                 continue
             lines.extend(["", title])
-            for item in selected:
-                value = _display_field_value(item["value"]) if available else _FIELD_UNAVAILABLE_TEXT[item["status"]]
-                if item["status"] in {"zero_unavailable", "restricted"}:
-                    value += f" 원천값: {_display_field_value(item['value'])}; 규칙: {item['zero_null_rule']}"
-                source = f" (근거 컬럼: {item['column']})" if item["column"] else ""
-                if item.get("source_columns"):
-                    source += f" (원천 컬럼: {', '.join(item['source_columns'])})"
-                unit = (f" [원천 단위: {item['unit']}]"
-                        if available and item.get("unit") not in (None, "", "공식 문서 미표기") else "")
-                dates = item.get("as_of") or []
-                date_refs = f" [카탈로그 기준일 컬럼: {', '.join(d['field'] for d in dates)}]" if dates else ""
-                lines.append(f"- {item['field']}: {value}{unit}{source}{date_refs}")
-                if item.get("detail"):
-                    lines.append(f"  - 산출 근거: {item['detail']}")
-                if available and item["value"] == 0 and item.get("zero_null_rule"):
-                    lines.append(f"  - 원천 값 해석 규칙: {item['zero_null_rule']}")
+            if available:
+                grouped_available: dict[tuple[str, str, str, str], list[dict]] = {}
+                for item in selected:
+                    field = _public_field_label(item.get("answer_field") or item["field"])
+                    unit = (
+                        f" (단위: {item['unit']})"
+                        if item.get("unit") not in (None, "", "공식 문서 미표기") else ""
+                    )
+                    key = (field, unit, str(item.get("detail") or ""), str(item.get("zero_null_rule") or ""))
+                    grouped_available.setdefault(key, []).append(item)
+                for (field, unit, detail, zero_rule), items in grouped_available.items():
+                    values = list(dict.fromkeys(_display_contract_value(item) for item in items))
+                    lines.append(f"- {field}: {', '.join(values)}{unit}")
+                    if detail:
+                        lines.append(f"  - 산출 근거: {detail}")
+                    if any(item["value"] == 0 for item in items) and zero_rule:
+                        lines.append(f"  - 원천 값 해석 규칙: {zero_rule}")
+            else:
+                grouped: dict[tuple[str, str], list[dict]] = {}
+                for item in selected:
+                    value = _FIELD_UNAVAILABLE_TEXT[item["status"]]
+                    if item["status"] in {"zero_unavailable", "restricted"}:
+                        value += (
+                            f" 원천값: {_display_field_value(item['value'])}; "
+                            f"규칙: {item['zero_null_rule']}"
+                        )
+                    key = (value, str(item.get("detail") or ""))
+                    grouped.setdefault(key, []).append(item)
+                for (value, detail), items in grouped.items():
+                    fields = ", ".join(dict.fromkeys(
+                        _public_field_label(item.get("answer_field") or item["field"]) for item in items
+                    ))
+                    lines.append(f"- {fields}: {value}")
+                    if detail:
+                        lines.append(f"  - 산출 근거: {detail}")
         # Dates already shown as requested/provenance fields need not be repeated
         # under every numeric item. Missing date bindings still get a clear reason.
         shown_columns = {i["column"] for i in record["items"] if i.get("column")}
@@ -1878,14 +1972,22 @@ def _render_rdb_answer_contract(contract: list[dict]) -> str:
                        if d.get("column") not in shown_columns}
         if extra_dates:
             lines.extend(["", "추가 기준일 상태"])
-            for label, date_item in extra_dates.items():
+            rendered_dates: set[tuple[str, str]] = set()
+            for _label, date_item in extra_dates.items():
                 value = (_display_field_value(date_item["value"]) if date_item["status"] == "available"
                          else _FIELD_UNAVAILABLE_TEXT[date_item["status"]])
-                lines.append(f"- 기준일({label}): {value}")
-        if any(i.get("unit") == "공식 문서 미표기" for i in record["items"]):
+                label = _public_field_label(date_item.get("answer_field") or "기준일")
+                if (label, value) not in rendered_dates:
+                    lines.append(f"- {label}: {value}")
+                    rendered_dates.add((label, value))
+        if (not shown_unit_notice
+                and any(i.get("unit") == "공식 문서 미표기" for i in record["items"])):
             lines.extend(["", "카탈로그에서 단위를 확인할 수 없는 값은 단위를 추정하지 않고 원문으로 표시했습니다."])
-        if record["notes"]:
-            lines.extend(["", "SQL 조회 단계 유의사항(최종 출력 여부와 별개)"] + [f"- {n}" for n in dict.fromkeys(record["notes"])])
+            shown_unit_notice = True
+        new_notes = [note for note in dict.fromkeys(record["notes"]) if note not in shown_notes]
+        if new_notes:
+            lines.extend(["", "조회 유의사항"] + [f"- {note}" for note in new_notes])
+            shown_notes.update(new_notes)
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -1909,13 +2011,12 @@ def _render_vector_sources(step_results: dict) -> str:
     a missing URL/title/publisher is not invented. Excerpts are bounded per doc.
     """
     lines, seen, quote_words = [], set(), {}
-    for sid, result in step_results.items():
+    for _sid, result in step_results.items():
         if result.get("engine") != "vector":
             continue
         chunks = result.get("chunks") or []
         if result.get("status") != "ok" or not chunks:
-            lines.append(f"- {sid}: 문서 근거 미확보 ({result.get('status') or 'no_hit'}). "
-                         f"{result.get('note') or result.get('error') or ''}")
+            lines.append("- 요청한 내용을 뒷받침할 문서 근거를 확보하지 못했습니다.")
             continue
         for chunk in chunks:
             key = (chunk.get("document_id"), chunk.get("chunk_id"))
@@ -1951,7 +2052,17 @@ def _render_vector_sources(step_results: dict) -> str:
 
 def _render_execution_limits(state: PipelineState) -> str:
     """Expose actual failed prerequisites, never turn abstention rows into facts."""
-    notes = list((state.get("route") or {}).get("blocking_reasons") or [])
+    step_ids = tuple((state.get("step_results") or {}).keys())
+
+    def public_reason(value: object) -> str:
+        text = str(value or "").strip()
+        for step_id in step_ids:
+            text = re.sub(rf"(?<![\w가-힣]){re.escape(step_id)}(?=\s*:|에서|\b)", "조회 단계", text)
+        text = text.replace("선행 Graph 단계 조회 단계에서", "선행 관계 조회에서")
+        text = text.replace("제한 없는 RDB 조회", "대상 제한이 없는 상품 조회")
+        return text
+
+    notes = [public_reason(reason) for reason in (state.get("route") or {}).get("blocking_reasons") or []]
     question = state.get("question", "")
     if re.search(r"최근\s*\d+\s*(?:개월|년)|연결된\s*이력", question):
         notes.append("아래 관계는 적재된 스냅샷에서 조회한 결과입니다. 기간별 이력·사건일을 대조하는 조회가 구현되지 않아 요청 기간 전체의 이력 또는 현재 편입 여부를 확정할 수 없습니다. 뉴스 언급을 편입 사실로 간주하지 않습니다.")
@@ -1962,33 +2073,60 @@ def _render_execution_limits(state: PipelineState) -> str:
             policy = rdb_schema.get_sale_policy(domain.get("domain", ""))
             if policy.get("mode") == "no_filter":
                 notes.append(f"{domain['domain']}: 카탈로그 정책상 판매·매수 가능 여부를 확정하지 않습니다. 수량 원천값 조회와 실제 주문 가능 판정은 다릅니다. {policy.get('reason', '')}")
-    for sid, result in (state.get("step_results") or {}).items():
+    for _sid, result in (state.get("step_results") or {}).items():
         reason = result.get("skipped_reason") or result.get("error")
         if reason:
-            notes.append(f"{sid}: {reason}")
+            if result.get("error"):
+                notes.append("조회 중 연결 또는 실행 문제가 발생했습니다.")
+            else:
+                notes.append(public_reason(reason))
         if result.get("engine") == "graph" and result.get("status") not in (None, "ok", "chained"):
-            notes.append(f"{sid}: 관계 근거 미확보 ({result.get('status')}); "
-                         "편입·발행·자회사·동일 상품 관계를 확인한 결과가 아닙니다.")
-        if result.get("engine") == "graph" and result.get("note"):
-            notes.append(f"{sid}: {result['note']}")
+            notes.append(
+                "요청한 관계 근거 미확보: 제공 데이터에서 확인하지 못했습니다. "
+                "편입·발행·자회사·동일 상품 관계를 확인한 결과가 아닙니다."
+            )
+        if result.get("engine") == "graph" and result.get("status") == "ok" and result.get("note"):
+            notes.append(public_reason(result["note"]))
         if result.get("coverage_truncated"):
-            notes.append(f"{sid}: 관계 조회 반환 상한에 도달했습니다. 목록 완전성·전체 순위는 확인되지 않았습니다.")
+            notes.append("관계 조회 반환 상한에 도달했습니다. 목록 완전성·전체 순위는 확인되지 않았습니다.")
     return "조회 한계\n\n" + "\n".join(f"- {n}" for n in dict.fromkeys(notes)) if notes else ""
 
 
-def _render_graph_results(step_results: dict) -> str:
-    """Keep verified relationship records visible even if synthesis is blank."""
+def _render_graph_results(step_results: dict, plan: list[dict] | None = None) -> str:
+    """Keep terminal relationship records visible without leaking intermediates.
+
+    Graph rows consumed as RDB filters are candidate sets, not the final answer.
+    Their verified field evidence is attached to the filtered RDB rows by the
+    answer contract, so rendering them again would expose supersets (for example
+    Q22's 14 constituent candidates before the three-product intersection).
+    """
+    public_labels = {
+        "etf_code": "상품코드", "code": "상품코드", "product_code": "상품코드",
+        "etf_name": "상품명", "name": "상품명", "product_name": "상품명",
+        "security_code": "편입종목코드", "security_name": "편입종목명",
+        "weight": "편입비중", "holding_as_of": "편입 기준일",
+        "holding_source": "편입내역 출처", "as_of": "기준일", "source": "출처",
+    }
+    consumed_by_rdb = {
+        dependency
+        for step in plan or []
+        if step.get("engine") == "rdb"
+        for dependency in step.get("depends_on") or []
+    }
     blocks = []
     for sid, result in step_results.items():
+        if sid in consumed_by_rdb:
+            continue
         if result.get("engine") != "graph" or result.get("status") != "ok" or result.get("error"):
             continue
         rows = result.get("rows") or []
         if not rows:
             continue
-        paths = (result.get("graph_plan") or {}).get("edges") or []
-        description = "; ".join(f"{e['subject']} → {e['predicate']} → {e['object']}" for e in paths)
-        lines = [f"Graph 관계 조회 근거 [{sid}]", f"실행 경로: {description or '경로 정보 미확보'}",
-                 f"반환 {len(rows)}건 중 {min(len(rows), 20)}건 표시. 분류 연결과 실제 편입 관계는 서로 대체하지 않습니다."]
+        lines = [
+            "Graph 관계 조회 결과",
+            f"확인된 관계 {len(rows)}건 중 {min(len(rows), 20)}건을 표시합니다. "
+            "분류 연결과 실제 편입 관계는 서로 대체하지 않습니다.",
+        ]
         if result.get("note"):
             lines.append(result["note"])
         for index, row in enumerate(rows[:20], 1):
@@ -2000,7 +2138,8 @@ def _render_graph_results(step_results: dict) -> str:
                     value = "값 미확보(확인 불가)"
                 if key.endswith("quote"):
                     value = " ".join(str(value).split()[:25])[:240]
-                values.append(f"{key}={_display_field_value(value)}")
+                label = public_labels.get(key, str(key).replace("_", " "))
+                values.append(f"{label}: {_display_field_value(value)}")
             lines.append(f"- {index}. " + "; ".join(values))
         if result.get("time_window_note"):
             lines.append(result["time_window_note"])
@@ -2028,7 +2167,9 @@ def generate_answer_node(state: PipelineState) -> dict:
         field_answer = "\n\n".join([identity_answer, field_answer])
     vector_sources = _render_vector_sources(state.get("step_results") or {})
     execution_limits = _render_execution_limits(state)
-    graph_answer = _render_graph_results(state.get("step_results") or {})
+    graph_answer = _render_graph_results(
+        state.get("step_results") or {}, state.get("plan") or []
+    )
     narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
     execution_summary = "\n".join(
         f"{sid}: {r.get('engine')}; 상태={r.get('status') or ('실패' if r.get('error') else '차단' if r.get('skipped_reason') else '조회 완료')}; "
@@ -2070,7 +2211,7 @@ def generate_answer_node(state: PipelineState) -> dict:
             if result.get("engine") == "vector" and result.get("status") not in (None, "ok"):
                 detail = result.get("note") or result.get("error") or ""
                 reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
-        reason = f" ({'; '.join(reasons)})" if reasons else ""
+        reason = f" ({'; '.join(reasons)})" if reasons and not execution_limits else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
         if field_answer:
             answer_text += "\n\n" + field_answer

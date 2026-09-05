@@ -54,10 +54,13 @@ class AnswerContractTests(unittest.TestCase):
         state.update(self.nodes.merge_results_node(state))
         return state
 
-    def answer(self, state):
+    def response(self, state):
         response = json.loads(self.nodes.generate_answer_node(state)["answer"])
         self.assertEqual(set(response), {"question_id", "question", "retrieved_context", "think_trace", "answer"})
-        return response["answer"]
+        return response
+
+    def answer(self, state):
+        return self.response(state)["answer"]
 
     def items(self, state):
         return {i["field"]: i for i in self.nodes._build_rdb_answer_contract(state)[0]["items"]}
@@ -66,10 +69,13 @@ class AnswerContractTests(unittest.TestCase):
         state = self.state()
         answer = self.answer(state)
         for label in state["intent"]["output_requirements"]["fields"]:
-            self.assertIn(label + ":", answer)
-        self.assertIn("매수가능수량: 제공된 조회 결과의 값이 NULL", answer)
-        self.assertIn("매수수익률: 제공된 조회 결과의 값이 NULL", answer)
-        self.assertIn("raw.prbd01n001.buyable_quantity", answer)
+            self.assertIn(label, answer)
+        self.assertIn("매수수익률, 매수가능수량: 제공된 조회 결과의 값이 NULL", answer)
+        self.assertNotIn("raw.prbd01n001.buyable_quantity", answer)
+        context = self.response(state)["retrieved_context"]
+        self.assertIn("국내채권마스터 · 2026-08-24 · 1건", context)
+        self.assertIn("raw.prbd01n001.buyable_quantity", context)
+        self.assertNotIn("SQL:", context)
         self.assertIn("4.266", answer)
         self.llm.with_structured_output.assert_not_called()
 
@@ -81,6 +87,9 @@ class AnswerContractTests(unittest.TestCase):
         state["step_results"]["g"] = {"engine": "graph", "status": "ok", "rows": [{"code": "TEST-ETF", "weight": 3.5, "h_as_of": "2026-07-10", "h_source": "source"}],
             "graph_plan": {"nodes": [{"id": "h", "class_uri": "fp:Holding"}], "outputs": [{"alias": "code", "property": "fp:productCode"}, {"alias": "weight", "property": "fp:weight"}]}}
         self.assertEqual(self.items(state)["편입비중"]["value"][0]["weight"], 3.5)
+        answer = self.answer(state)
+        self.assertIn("편입비중: 3.5%", answer)
+        self.assertNotIn('{"weight"', answer)
 
     def test_general_fund_grade_cannot_be_industry_risk_evidence(self):
         state = self.state()
@@ -138,11 +147,15 @@ class AnswerContractTests(unittest.TestCase):
             self.assertNotIn("4.266", answer)  # no stale rows after failure
             self.assertNotIn("상품이 없습니다", answer)
             self.assertNotIn("값이 NULL", answer)
+            self.assertEqual(answer.count("제공 데이터로 확인할 수 없습니다."), 1)
+            self.assertNotIn("r1", answer)
 
     def test_zero_rows_have_a_distinct_reason(self):
         state = self.state(rows=[])
         self.assertTrue(all(i["status"] == "no_rows" for i in self.items(state).values()))
-        self.assertIn("조회 결과가 0건", self.answer(state))
+        answer = self.answer(state)
+        self.assertIn("조회 결과가 없어 확인할 수 없습니다.", answer)
+        self.assertEqual(answer.count("조회 결과가 없어 확인할 수 없습니다."), 1)
 
     def test_all_null_rows_still_produce_an_answer(self):
         state = self.state()
@@ -185,9 +198,95 @@ class AnswerContractTests(unittest.TestCase):
             "buy_yield": {"as_of_column": "sale_yield_base_dt"}})
         state["step_results"]["r1"]["rows"][0]["sale_yield_base_dt"] = None
         answer = self.answer(state)
-        self.assertIn("기준일(info_base_dt): 20260821", answer)
-        self.assertIn("기준일(sale_yield_base_dt): 제공된 조회 결과의 값이 NULL", answer)
+        self.assertIn("기준일 (발행사 관련): 20260821", answer)
+        self.assertIn("기준일 (매수수익률 관련): 제공된 조회 결과의 값이 NULL", answer)
+        self.assertNotIn("info_base_dt", answer)
+        self.assertNotIn("sale_yield_base_dt", answer)
         self.assertNotIn("2026-08-24", answer)
+
+    def test_answer_surface_hides_internal_execution_identifiers(self):
+        state = self.state(fields=["상품명", "상품번호"])
+        state["step_results"]["graph_R1"] = {
+            "engine": "graph", "status": "ok",
+            "rows": [{"etf_code": "TEST-ETF", "etf_name": "예시 ETF", "weight": 3.5,
+                      "holding_as_of": "2026-07-10", "holding_source": "TEST"}],
+            "graph_plan": {"edges": [{"subject": "etf", "predicate": "fp:hasHolding", "object": "holding"}]},
+        }
+        response = self.response(state)
+        answer = response["answer"]
+        self.assertNotIn("r1", answer)
+        self.assertNotIn("graph_R1", answer)
+        self.assertNotIn("raw.", answer)
+        self.assertNotIn("실행 경로", answer)
+        self.assertNotIn("etf_code", answer)
+        self.assertIn("상품코드: TEST-ETF", answer)
+        self.assertIn("편입비중: 3.5", answer)
+        self.assertIn("r1", response["think_trace"])
+
+    def test_graph_candidates_consumed_by_rdb_are_not_rendered_as_final_rows(self):
+        state = self.state(fields=["상품명", "상품번호"])
+        state["step_results"]["graph_R1"] = {
+            "engine": "graph", "status": "ok",
+            "rows": [{"etf_code": f"CANDIDATE-{index}", "etf_name": f"후보 {index}"}
+                     for index in range(14)],
+        }
+        state["plan"] = [
+            {"step_id": "graph_R1", "engine": "graph", "depends_on": []},
+            {"step_id": "r1", "engine": "rdb", "depends_on": ["graph_R1"]},
+        ]
+        answer = self.answer(state)
+        self.assertNotIn("CANDIDATE-", answer)
+        self.assertNotIn("Graph 관계 조회 결과", answer)
+
+    def test_zero_row_labels_strip_physical_date_columns(self):
+        contract = [{
+            "step_id": "rdb_국내ETF", "domain": "국내ETF", "row_number": None,
+            "retrieved_rows": 0, "displayed_rows": 0, "notes": [],
+            "items": [
+                {"field": "상품명", "status": "no_rows", "value": None, "column": None},
+                {"field": "출처기준일(cu_upt_dt)", "status": "no_rows", "value": None, "column": None},
+                {"field": "출처기준일(du_upt_dt)", "status": "no_rows", "value": None, "column": None},
+            ],
+        }]
+        answer = self.nodes._render_rdb_answer_contract(contract)
+        self.assertIn("상품명, 출처기준일: 조회 결과가 없어", answer)
+        self.assertNotIn("cu_upt_dt", answer)
+        self.assertNotIn("du_upt_dt", answer)
+        self.assertEqual(answer.count("출처기준일"), 1)
+
+    def test_repeated_available_dates_and_notices_are_collapsed(self):
+        base_item = {"field": "기준일", "answer_field": "기준일 (상품명 관련)",
+                     "status": "available", "value": "20260821", "column": "raw.t.info_base_dt"}
+        contract = [
+            {"step_id": "r1", "domain": "채권", "row_number": index,
+             "retrieved_rows": 2, "displayed_rows": 2, "notes": ["같은 유의사항"],
+             "items": [dict(base_item), dict(base_item)]}
+            for index in (1, 2)
+        ]
+        answer = self.nodes._render_rdb_answer_contract(contract)
+        self.assertEqual(answer.count("기준일 (상품명 관련): 20260821"), 2)
+        self.assertEqual(answer.count("같은 유의사항"), 1)
+        self.assertEqual(answer.count("반환 2건 중 2건 표시"), 1)
+
+    def test_graph_exception_details_do_not_leak_into_answer(self):
+        state = self.state()
+        secret_path = r"C:\\private\\artifacts\\oxigraph"
+        state["step_results"]["graph_R1"] = {
+            "engine": "graph", "status": "abstain_exception", "rows": [],
+            "note": f"GraphDBUnavailable: store path missing: {secret_path}",
+        }
+        answer = self.answer(state)
+        self.assertIn("관계 근거 미확보", answer)
+        self.assertNotIn("GraphDBUnavailable", answer)
+        self.assertNotIn(secret_path, answer)
+
+    def test_blocking_reason_is_not_repeated_in_empty_answer(self):
+        reason = "Kimi와 상품을 연결하는 관계를 확정하지 못했습니다. 정확한 상품 식별자를 알려주세요."
+        state = {"question_id": "Q32", "question": "Kimi 관련 상품", "intent": {},
+                 "route": {"blocking_reasons": [reason]}, "step_results": {},
+                 "merged_rows": [], "plan": []}
+        answer = self.answer(state)
+        self.assertEqual(answer.count(reason), 1)
 
     def test_rows_remain_separate_not_cross_filled(self):
         state = self.state()
@@ -225,10 +324,12 @@ class AnswerContractTests(unittest.TestCase):
         state["intent"]["output_requirements"]["narrative_topics"] = ["위험"]
         state["step_results"]["v"] = {"engine": "vector", "status": "ok", "chunks": [{"document_id": "D", "chunk_id": "C", "chunk_text": "가상 문서의 위험 근거", "document_title": "가상 위험자료"}]}
         self.llm.with_structured_output.return_value.invoke.side_effect = RuntimeError("mock outage")
-        answer = self.answer(state)
+        response = self.response(state)
+        answer = response["answer"]
         self.assertIn("추가 설명 생성에 실패", answer)
         self.assertIn("4.266", answer)
-        self.assertIn("buyable_quantity", answer)
+        self.assertNotIn("buyable_quantity", answer)
+        self.assertIn("buyable_quantity", response["retrieved_context"])
 
     def test_no_document_body_cannot_generate_a_risk_claim(self):
         state = self.state()
