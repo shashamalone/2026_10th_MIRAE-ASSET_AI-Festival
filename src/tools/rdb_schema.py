@@ -1324,6 +1324,22 @@ ATTRIBUTE_CATALOG: dict[str, dict[str, AttributeSpec]] = {
     "펀드": FUND_ATTRIBUTES,
 }
 
+# Reviewed semantic aliases stay above the automatically imported DB descriptions.
+# Individual vs corporate after-tax yields must remain distinct.
+BOND_ATTRIBUTES["세후수익률"] = AttributeSpec(
+    column="after_tax_yield", value_type="numeric",
+    note="개인 세후 운용수익률(%). 법인 세후(corp_after_tax_yield)와 구분하며 결측은 보완하지 않는다.",
+)
+SEMANTIC_ALIASES = {
+    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리"},
+    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부"},
+    "해외ETF": {"AUM": "순자산", "총보수": "총보수율", "총보수요율": "총보수율"},
+    "펀드": {"판매상태": "판매가능여부", "AUM": "순자산"},
+}
+for _domain, _aliases in SEMANTIC_ALIASES.items():
+    for _alias, _canonical in _aliases.items():
+        ATTRIBUTE_CATALOG[_domain][_alias] = ATTRIBUTE_CATALOG[_domain][_canonical]
+
 
 # 도메인별 개념 카탈로그의 검증 수준. 넷 다 2026-08-24 배포본 data.xlsx로
 # 직접 프로파일링해서 검증했으므로 전부 verified다.

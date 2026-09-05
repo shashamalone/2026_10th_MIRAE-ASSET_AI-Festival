@@ -37,6 +37,7 @@ from typing import Any
 
 from agent.graph_logic import graph_ids
 from tools import rdb_schema
+from tools import catalog_sql
 from agent.prompts import COLUMN_RESOLUTION_SYSTEM_PROMPT
 from tools.rdb_schema import AttributeSpec
 from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
@@ -46,6 +47,8 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 # 0) 판매가능여부 조건 사전 처리 (rdb_schema.DOMAIN_SALE_POLICY 적용)
 # ---------------------------------------------------------------------------
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
+# A provenance request is a set of source-date columns, not one guessed column.
+PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일"}
 
 
 def apply_sale_policy(step: dict) -> tuple[dict, list[str]]:
@@ -100,7 +103,7 @@ def collect_needed_concepts(step: dict) -> list[str]:
     if sort.get("attribute"):
         concepts.append(sort["attribute"])
 
-    concepts.extend(step.get("fields", []))
+    concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS)
 
     # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
     # 쓰였든(product_name_entities) 아니든, 결과 행이 순자산 숫자나
@@ -131,7 +134,7 @@ def build_condition_list(step: dict) -> list[dict]:
     for e in step.get("product_name_entities") or []:
         # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
         # contains로 매칭한다.
-        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": ""})
+        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names"})
 
     return conditions
 
@@ -202,17 +205,26 @@ def resolve_concepts_for_domain(
         else:
             unresolved.append(concept)
 
+    metadata: dict = {}
+    if unresolved:
+        try:
+            metadata = catalog_sql.domain_metadata(domain)
+            aliases = catalog_sql.description_aliases(domain, metadata)
+            for concept in unresolved:
+                spec = aliases.get(catalog_sql.normalize(concept))
+                if spec is not None:
+                    concept_to_spec[concept] = spec
+            unresolved = [c for c in unresolved if c not in concept_to_spec]
+        except Exception as exc:
+            print(f"[카탈로그 의미 메타 사용 불가] {domain}: {exc}")
+
     if unresolved:
         try:
             fallback = _resolve_unknown_concepts_via_llm(domain, unresolved, question, llm)
         except Exception:
             fallback = {}
         for concept, column in fallback.items():
-            concept_to_spec[concept] = AttributeSpec(
-                column=column,
-                value_type="unknown",
-                note="카탈로그에 없어 LLM 폴백으로 매칭됨. value_type과 정렬 규칙은 사람이 검증해야 함.",
-            )
+            concept_to_spec[concept] = catalog_sql.spec_for_column(domain, column, metadata)
         unresolved = [c for c in unresolved if c not in fallback]
 
     return concept_to_spec, unresolved
@@ -226,7 +238,21 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
     if not concepts:
         return {}
     structured_llm = llm.with_structured_output(COLUMN_RESOLUTION_JSON_SCHEMA, method="json_schema")
-    real_columns = rdb_schema.get_full_column_list(domain)
+    # Live existence, unlike descriptions, is not optional in the LLM fallback.
+    from tools import schema_snapshot
+    snapshot = schema_snapshot.get_snapshot()
+    table = rdb_schema.get_domain_entry(domain)["table"]
+    allowed = set(schema_snapshot.get_columns(table, snapshot))
+    try:
+        metadata = catalog_sql.domain_metadata(domain, snapshot)
+    except Exception:
+        metadata = {}
+    import json
+    real_columns = [json.dumps({"column": col,
+                    "reviewed": rdb_schema.RDB_SCHEMA[domain]["properties"].get(col, {}),
+                    "metadata": {k: metadata.get(col, {}).get(k) for k in
+                                 ("description", "unit", "zero_null_rule", "as_of_column")}},
+                    ensure_ascii=False) for col in sorted(allowed)]
     result = structured_llm.invoke(
         [
             ("system", COLUMN_RESOLUTION_SYSTEM_PROMPT),
@@ -239,7 +265,18 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
             ),
         ]
     )
-    return {r["concept"]: r["column"] for r in result["resolutions"] if r["column"]}
+    # 구조화 출력도 신뢰 경계 밖이다. 요청하지 않은 개념, SQL 표현식,
+    # 다른 테이블의 컬럼 및 지어낸 식별자는 절대 카탈로그로 승격하지 않는다.
+    accepted: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for row in result.get("resolutions", []):
+        concept, column = row.get("concept"), row.get("column")
+        if concept not in concepts or column not in allowed:
+            continue
+        if concept in accepted and accepted[concept] != column:
+            conflicts.add(concept)
+        accepted[concept] = column
+    return {c: col for c, col in accepted.items() if c not in conflicts}
 
 
 def validate_ordinal_value(spec: AttributeSpec, value: str) -> tuple[bool, str | None, str]:
@@ -255,9 +292,9 @@ def validate_ordinal_value(spec: AttributeSpec, value: str) -> tuple[bool, str |
     if spec.value_type == "ordinal" and spec.value_order:
         if value in spec.value_order:
             return True, None, matched_value
-        for valid_val in spec.value_order:
-            if value in valid_val:
-                return True, None, valid_val
+        candidates = [v for v in spec.value_order if value and value in v]
+        if len(candidates) == 1:
+            return True, None, candidates[0]
         return False, f"'{value}'는 {spec.column}의 유효 값 범위에 없습니다 (유효 값: {spec.value_order})", matched_value
     return True, None, matched_value
 
@@ -294,8 +331,14 @@ def resolve_ordinal_matched_values(spec: AttributeSpec, operator: str, value: st
         return [value]
     if operator == "gte":
         return order[idx:]
+    if operator == "gt":
+        return order[idx + 1:]
     if operator == "lte":
         return order[: idx + 1]
+    if operator == "lt":
+        return order[:idx]
+    if operator in {"ne", "neq"}:
+        return [item for item in order if item != value]
     if operator == "between":
         if value_2 not in order:
             return None
@@ -336,31 +379,11 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         # 이 조건이 그대로 SQL 생성 LLM에 "attribute eq ''" 형태로
         # 넘어가고, 숫자 컬럼에 빈 문자열을 비교하는 SQL이 만들어져
         # Postgres 실행 단계에서야 알아보기 힘든 타입 오류로 터진다.
-        # if not (c.get("value") or "").strip():
-        #     record = {
-        #         "attribute": c["attribute"],
-        #         "operator": c.get("operator", ""),
-        #         "value": c.get("value", ""),
-        #         "value_2": c.get("value_2", ""),
-        #         "column": None,
-        #         "spec": None,
-        #         "valid": False,
-        #         "invalid_reason": (
-        #             "조건 값이 비어 있습니다. 질문 분석 단계가 최상급 표현(가장 큰/작은, 최고, "
-        #             "최대, 최소 등)을 정렬(sort)이 아니라 조건(conditions)으로 잘못 분류했을 "
-        #             "가능성이 높습니다."
-        #         ),
-        #     }
-        #     invalid_conditions.append(record)
-        #     resolved_conditions.append(record)
-        #     continue
-
-        if not (c.get("value") or "").strip():
-            # [수정된 부분] 
-            # 기존에는 invalid_conditions에 넣어서 전체 쿼리 실행을 중단시켰지만,
-            # LLM이 정렬 조건을 빈 조건으로 중복 생성하는 실수가 잦으므로
-            # 에러를 내지 않고 해당 조건만 조용히 무시(continue)하도록 변경합니다.
-            print(f"  [Warning] 값이 비어있는 조건 무시됨: {c['attribute']}")
+        if c.get("value") is None or not str(c.get("value", "")).strip():
+            record = {**c, "column": None, "spec": None, "valid": False,
+                      "invalid_reason": "조건 값이 비어 있어 필터를 확정할 수 없습니다."}
+            invalid_conditions.append(record)
+            resolved_conditions.append(record)
             continue
 
         spec = concept_to_spec.get(c["attribute"])
@@ -375,6 +398,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             "invalid_reason": None,
             "matched_values": None,
             "org_name_variants": None,
+            "any_group": c.get("any_group"),
         }
         if spec is not None:
             valid, reason, matched_val = validate_ordinal_value(spec, c["value"])
@@ -386,10 +410,14 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             elif spec.value_type == "ordinal":
                 # value_2도(between일 때) 같은 방식으로 정식 표기로 맞춘다.
                 value_2_raw = c.get("value_2", "")
-                matched_value_2 = matched_val
-                if value_2_raw:
-                    v2_valid, _, matched_value_2 = validate_ordinal_value(spec, value_2_raw)
-                    if v2_valid:
+                matched_value_2 = ""
+                if c["operator"] == "between":
+                    v2_valid, reason, matched_value_2 = validate_ordinal_value(spec, value_2_raw)
+                    if not v2_valid:
+                        record["valid"] = False
+                        record["invalid_reason"] = reason
+                        invalid_conditions.append(record)
+                    else:
                         record["value_2"] = matched_value_2
                 # "AA- 이상"이 실제로 어떤 문자열 전부를 가리키는지 여기서
                 # 미리 계산해서 못박는다. SQL 생성 LLM은 이 목록을 그대로
@@ -447,6 +475,9 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         blocking_concepts.add("상품명")
 
     for f in field_names:
+        if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS:
+            notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")
+            continue
         spec = concept_to_spec.get(f)
         if spec is None and f in unresolved and f not in blocking_concepts:
             notes.append(f"요청된 필드 '{f}'는 대응하는 컬럼을 찾지 못해 결과에서 제외했습니다.")
@@ -477,6 +508,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     return {
         "domain": domain,
         "table": table,
+        "subtype": list(step.get("subtype") or []),
         "conditions": resolved_conditions,
         "sort": resolved_sort,
         "fields": resolved_fields,

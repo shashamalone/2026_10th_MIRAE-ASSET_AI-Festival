@@ -45,6 +45,7 @@ from agent.state import ready_step_ids
 from agent.graph_logic import graph_orchestrator
 from tools import rdb_schema
 from tools import schema_snapshot
+from tools import catalog_sql
 from agent import utils
 from agent.get_clova import embed
 from tools.vector_search import get_coverage, resolve_product_ids, search_documents
@@ -140,6 +141,10 @@ def _write_sql(draft_text: str, schema_block: str) -> dict:
 def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max_retries: int) -> dict:
     """role="target"인 RDB 단계(최종 답의 일부가 되는 조회). intent가
     구조화한 conditions/sort/fields를 그대로 쓴다."""
+    if step.get("graph_handoff_blocked"):
+        return {"engine": "rdb", "role": "target", "domain": step["domain"],
+                "rows": [], "count": 0, "sql": None,
+                "skipped_reason": step["graph_handoff_blocked"]}
     step, policy_notes = utils.apply_sale_policy(step)
     domain = step["domain"]
     needed_concepts = utils.collect_needed_concepts(step)
@@ -166,12 +171,12 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
 
     schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=apply_limit)
     try:
-        draft = _draft_query_description(question, schema_block)
-        sql_result = _write_sql(draft, schema_block)
+        draft = "확정 카탈로그 기반 결정론적 SQL"
+        sql_result = catalog_sql.compile_select(resolved_schema, apply_limit=apply_limit)
     except Exception as e:
         return {
             "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-            "error": f"SQL 생성 LLM 호출 실패: {e}",
+            "error": f"SQL 컴파일/스키마 검증 실패: {e}",
         }
 
     run = _run_sql_with_retry(conn, domain, question, schema_block, sql_result, max_retries)
@@ -180,6 +185,7 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
         "rows": run["rows"], "count": len(run["rows"]),
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
+        "sql_compiler": sql_result["compiler"], "column_refs": sql_result["column_refs"],
     }
     if run["error"]:
         result["error"] = run["error"]
@@ -225,6 +231,11 @@ def _execute_merged_target_group(
     for step in steps:
         step_id = step["step_id"]
         domain = step["domain"]
+        if step.get("graph_handoff_blocked"):
+            results[step_id] = {"engine": "rdb", "role": "target", "domain": domain,
+                               "rows": [], "count": 0, "sql": None,
+                               "skipped_reason": step["graph_handoff_blocked"]}
+            continue
         step2, policy_notes = utils.apply_sale_policy(step)
         # UNION 서브쿼리는 4개 고정 별칭(상품코드/상품명/도메인/정렬값)만
         # 내보낸다 - 도메인마다 컬럼 구성이 달라도 UNION ALL은 컬럼
@@ -258,14 +269,13 @@ def _execute_merged_target_group(
 
         schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=False, union_mode=True)
         try:
-            draft = _draft_query_description(question, schema_block)
-            sql_result = _write_sql(draft, schema_block)
+            sql_result = catalog_sql.compile_select(resolved_schema, apply_limit=False, union_mode=True)
         except Exception as e:
             # 이 도메인 하나만 그룹에서 제외한다(질문 전체를 죽이지 않는다) -
             # 미해결 개념/무효 조건과 같은 skipped_reason 취급.
             results[step_id] = {
                 "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-                "skipped_reason": f"SQL 생성 LLM 호출 실패로 그룹에서 제외: {e}",
+                "skipped_reason": f"SQL 컴파일/스키마 검증 실패로 그룹에서 제외: {e}",
             }
             continue
 
@@ -274,6 +284,7 @@ def _execute_merged_target_group(
         subqueries.append(sql_result["sql"].strip().rstrip(";"))
         schema_blocks.append(f"[{domain} 서브쿼리]\n{schema_block}")
         all_notes.extend(policy_notes)
+        all_notes.extend(sql_result.get("assumptions", []))
 
     if not subqueries:
         # 그룹 전체가 제외됐다(전부 미해결/무효/정렬 불가) - 이미 각
@@ -288,7 +299,7 @@ def _execute_merged_target_group(
     )
     combined_schema_block = "\n\n".join(schema_blocks)
 
-    sql_result = {"sql": combined_sql, "assumptions": []}
+    sql_result = {"sql": combined_sql, "assumptions": [], "compiled": True}
     # domain 인자는 _run_sql_with_retry가 실패 시 rdb_schema.get_full_column_list(domain)
     # 로 "실제 컬럼 전체 목록"을 만드는 데만 쓰인다. 이 쿼리는 여러 테이블에
     # 걸쳐 있어 도메인 하나로는 완전한 목록이 안 되지만, 그 함수는 §9를 위해
@@ -513,7 +524,9 @@ def _run_sql_with_retry(
         }
 
     try:
-        real_columns_desc = _live_column_list(domain, schema_block)
+        # Compiler already verified every used physical reference. Never repair
+        # compiled SQL with an LLM, even if the database later rejects it.
+        real_columns_desc = "" if sql_result.get("compiled") else _live_column_list(domain, schema_block)
         repair_allowed = True
         ground_truth_error = ""
     except Exception as exc:
@@ -578,6 +591,14 @@ def _run_sql_with_retry(
                 print(f"[⏳ 429] 분당 한도. {_RATE_LIMIT_WAIT_SECONDS:.0f}초 대기 후 재시도합니다.\n")
                 time.sleep(_RATE_LIMIT_WAIT_SECONDS)
                 continue
+
+            if sql_result.get("compiled"):
+                attempts_log.append("  (결정론적 SQL: 컬럼/조건 보존을 위해 LLM 수리 금지)")
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": f"컴파일된 SQL 실행 실패(임의 재작성 안 함): {error_desc}",
+                }
 
             if _is_schema_contract_violation(error_desc):
                 # 카탈로그가 없는 것을 가리키고 있다. LLM 에게 고치라고 하면
@@ -731,7 +752,11 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
     for dep_id in step.get("depends_on") or []:
         dep_result = step_results.get(dep_id) or {}
         if dep_result.get("engine") == "graph":
-            entity_codes.extend(dep_result.get("entity_codes") or [])
+            codes = dep_result.get("entity_codes") or []
+            if dep_result.get("error") or not codes:
+                return {**step, "graph_handoff_blocked":
+                        f"선행 Graph 단계 {dep_id}에서 관계에 맞는 상품코드를 확보하지 못해 제한 없는 RDB 조회를 중단했습니다."}
+            entity_codes.extend(codes)
     if not entity_codes:
         return step
     entity_codes = list(dict.fromkeys(entity_codes))  # 중복 제거, 순서는 유지
@@ -780,6 +805,7 @@ def rdb_search_node(state: PipelineState) -> dict:
     # 처리한다(정렬은 못 하지만 조회 자체는 된다).
     merge_group_ids = set(route.get("merge_group_step_ids") or [])
     group_steps = [s for s in rdb_steps if s["step_id"] in merge_group_ids]
+    group_steps = [_apply_graph_handoff(s, all_step_results) for s in group_steps]
     solo_steps = [s for s in rdb_steps if s["step_id"] not in merge_group_ids]
 
     try:
@@ -820,7 +846,7 @@ def rdb_search_node(state: PipelineState) -> dict:
                 # 대부분의 질문은 depends_on이 비어 있거나 Graph를 안
                 # 기다리므로 이 함수는 아무것도 안 바꾸고 그대로 통과시킨다.
                 handoff_step = _apply_graph_handoff(step, all_step_results)
-                if handoff_step is not step:
+                if handoff_step is not step and not handoff_step.get("graph_handoff_blocked"):
                     injected = handoff_step["conditions"][-1]
                     trace_msgs.append(
                         f"RDB 검색 [{step_id}]: Graph 핸드오프 - 상품코드 {len(injected['value'].split(', '))}개 조건 주입"
