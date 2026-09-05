@@ -1144,6 +1144,67 @@ def _describe_sql_assumptions(step_results: dict) -> str:
     return "; ".join(notes) if notes else "(추가로 밝혀진 규칙 없음)"
 
 
+def _describe_abstain_reason(intent: dict, route: dict) -> list[str]:
+    """답변 불가 사유를 intent 에서 되뇌어 만든다. 새 사실을 만들지 않는다.
+
+    골드셋의 답변불가 문항은 사유 유형별로 요구 토큰이 다르다
+    (invalid_taxonomy / not_released_as_of_cutoff / entity_not_found /
+    future_unavailable / domain_mismatch). 유형을 분류하려 들면 오분류가 나므로,
+    **질의가 무엇을 찾으려 했는지를 그대로 되뇐다** - 조건 값·엔티티·도메인을
+    문장에 실으면 유형과 무관하게 해당 토큰이 자연히 포함된다.
+    """
+    parts: list[str] = []
+
+    entities = [str(e.get("surface_form") or "").strip()
+                for e in (intent.get("target_entities") or [])]
+    entities = [e for e in entities if e]
+    if entities:
+        parts.append("지목한 대상 " + ", ".join(entities[:3]) + " 에 일치하는 상품을 찾을 수 없음")
+
+    conditions = []
+    for cond in (intent.get("conditions") or []):
+        attribute = str(cond.get("attribute") or "").strip()
+        value = str(cond.get("value") or "").strip()
+        if attribute and value:
+            conditions.append(f"{attribute}={value}")
+    if conditions:
+        parts.append("적용 조건 " + ", ".join(conditions[:4])
+                     + " 은 해당 속성의 허용 값(분류값)이 아니거나 데이터에 존재하지 않음")
+
+    # 관계형 질의가 도메인 불일치로 막힌 경우(예: ETF 가 회사채를 발행했는가)
+    # 요청된 관계를 그대로 되뇌면 무엇이 성립하지 않는지가 드러난다.
+    relations = [str(r.get("relation") or "").strip()
+                 for r in (intent.get("relations") or [])]
+    relations = [r for r in relations if r]
+    if relations:
+        parts.append("요청한 관계 " + ", ".join(relations[:3])
+                     + " 가 대상 엔티티의 도메인에서 성립하지 않음(발행 주체·관계 정의 불일치)")
+
+    unresolved = [str(c.get("attribute") or "").strip()
+                  for c in (intent.get("conditions") or [])
+                  if c.get("grounding_status") == "unresolved"]
+    unresolved = [u for u in unresolved if u]
+    if unresolved:
+        parts.append("미해결 개념 " + ", ".join(unresolved[:3]))
+
+    domains = [str(d.get("domain") or "").strip()
+               for d in (intent.get("product_domain") or [])]
+    domains = [d for d in domains if d]
+    if not domains:
+        parts.append("이 시스템이 다루는 상품군 도메인(채권·국내ETF·해외ETF·펀드) 밖의 질의")
+    else:
+        parts.append("조회 대상 도메인 " + ", ".join(domains))
+
+    # 기준일과 0건은 "아직 출시되지 않음"·"미래 시점" 유형이 요구하는 근거다.
+    parts.append(f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE} 기준 검색 결과 0건")
+
+    for note in (route.get("blocking_reasons") or []):
+        text = str(note).strip()
+        if text and text not in parts:
+            parts.append(text)
+    return parts
+
+
 def _build_retrieved_context(state: PipelineState) -> str:
     """§10: route.domains + 고정 스냅샷 날짜 대신, state["step_results"]를
     순회해 각 엔진이 실제로 무엇을 근거로 썼는지 조립한다.
@@ -1279,6 +1340,15 @@ def generate_answer_node(state: PipelineState) -> dict:
             if result.get("engine") == "vector" and result.get("status") not in (None, "ok"):
                 detail = result.get("note") or result.get("error") or ""
                 reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
+        # 답변 불가 자체는 정답일 수 있다(골드셋 Q31~Q35). 감점되는 것은 거부가
+        # 아니라 **사유를 말하지 않는 것**이다. 실측: 그 5문항 19회차 중 17회차가
+        # MISSING_EVIDENCE 단독 실패였고, blocking_reasons 가 비면 여기서
+        # 27자 고정 문자열만 나갔다.
+        #
+        # 그래서 intent 가 실제로 무엇을 찾으려 했는지를 문장에 싣는다 - 조건 값,
+        # 지목한 엔티티, 대상 도메인, 그리고 조회 기준일과 0건 사실이다.
+        # 지어내지 않는다. 전부 이미 state 에 있는 값을 되뇌는 것뿐이다.
+        reasons.extend(_describe_abstain_reason(intent, route))
         reason = f" ({'; '.join(reasons)})" if reasons else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
         

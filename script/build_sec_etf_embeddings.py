@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -54,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-seq-length", type=int, default=1024,
                         help="기본 8192 는 낭비다. 실측 토큰 최대 392 라 1024 면 잘리지 않는다")
     parser.add_argument("--release-id", default="", help="선택. 번들 manifest 에 기록")
+    parser.add_argument("--reuse", action="append", type=Path, default=[],
+                        help="이미 만든 chunk_embeddings.jsonl. 같은 content_hash 는 건너뛴다")
     args = parser.parse_args(argv)
 
     from kb.local_embeddings import (  # noqa: PLC0415
@@ -70,9 +73,31 @@ def main(argv: list[str] | None = None) -> int:
     unique: dict[str, str] = {}
     for chunk in chunks:
         unique.setdefault(chunk["content_hash"], chunk["embedding_text"])
-    hashes = list(unique)
+
+    # 이미 만든 벡터는 다시 만들지 않는다. 장시간 무인 실행에서 중단되어도
+    # 출력 파일에 남은 만큼은 그대로 재사용된다(재개).
+    emb_path = args.src / "chunk_embeddings.jsonl"
+    reused: dict[str, dict] = {}
+    for source in list(args.reuse) + ([emb_path] if emb_path.exists() else []):
+        if not Path(source).exists():
+            continue
+        for line in io.open(source, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+                reused.setdefault(row["content_hash"], row)
+            except (json.JSONDecodeError, KeyError):
+                continue
+    # 이 번들에 실제로 필요한 것만 남긴다(과거 번들의 잉여 벡터는 버린다).
+    reused = {h: r for h, r in reused.items() if h in unique}
+    if reused:
+        print(f"기존 벡터 {len(reused):,}건 재사용")
+
+    hashes = [h for h in unique if h not in reused]
     texts = [unique[h] for h in hashes]
-    print(f"청크 {len(chunks):,} / 고유 본문 {len(texts):,}")
+    print(f"청크 {len(chunks):,} / 고유 본문 {len(unique):,} / 신규 {len(texts):,}")
     print(f"모델 {MODEL_ID}@{MODEL_REVISION[:8]} dim={DIMENSION}")
 
     embedder = BgeM3Embedder(batch_size=args.batch, show_progress=False)
@@ -80,29 +105,42 @@ def main(argv: list[str] | None = None) -> int:
     if args.max_seq_length:
         encoder.max_seq_length = args.max_seq_length
 
-    vectors: list[list[float]] = []
-    started = time.time()
-    for offset in range(0, len(texts), args.batch):
-        batch = texts[offset: offset + args.batch]
-        vectors.extend(embedder.encode(batch))
-        done = len(vectors)
-        elapsed = time.time() - started
-        rate = done / elapsed if elapsed else 0
-        remain = (len(texts) - done) / rate / 60 if rate else 0
-        print(f"  {done:>6,}/{len(texts):,}  {rate:5.2f}/s  남은 {remain:5.1f}분", flush=True)
-
+    # 배치마다 즉시 기록한다. 처음엔 전량을 메모리에 모았다가 마지막에 한 번
+    # 쓰는 구조였는데, 무인 실행이 중단되자 512건(약 7분)이 통째로 날아갔다.
+    # 지금은 끊겨도 다음 실행이 --reuse 로 이어받는다.
     out_dir = args.src
-    emb_path = out_dir / "chunk_embeddings.jsonl"
-    with io.open(emb_path, "w", encoding="utf-8") as fh:
-        for content_hash, text, vector in zip(hashes, texts, vectors):
-            fh.write(json.dumps({
-                "content_hash": content_hash,
-                "embedding_text": text,
-                "embedding_model": MODEL_LABEL,
-                "model_revision": MODEL_REVISION,
-                "embedding_dim": DIMENSION,
-                "embedding": vector,
-            }, ensure_ascii=False) + "\n")
+    tmp_path = emb_path.with_suffix(".jsonl.partial")
+    done = 0
+    started = time.time()
+    with io.open(tmp_path, "w", encoding="utf-8") as fh:
+        for row in reused.values():
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        fh.flush()
+
+        for offset in range(0, len(texts), args.batch):
+            batch_hashes = hashes[offset: offset + args.batch]
+            batch_texts = texts[offset: offset + args.batch]
+            for content_hash, text, vector in zip(batch_hashes, batch_texts,
+                                                  embedder.encode(batch_texts)):
+                fh.write(json.dumps({
+                    "content_hash": content_hash,
+                    "embedding_text": text,
+                    "embedding_model": MODEL_LABEL,
+                    "model_revision": MODEL_REVISION,
+                    "embedding_dim": DIMENSION,
+                    "embedding": vector,
+                }, ensure_ascii=False) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+            done += len(batch_texts)
+            elapsed = time.time() - started
+            rate = done / elapsed if elapsed else 0
+            remain = (len(texts) - done) / rate / 60 if rate else 0
+            print(f"  {done:>6,}/{len(texts):,}  {rate:5.2f}/s  남은 {remain:5.1f}분", flush=True)
+
+    # 완주했을 때만 정본으로 승격한다. 중간 파일은 --reuse 대상으로 남는다.
+    tmp_path.replace(emb_path)
+    vectors = [None] * len(texts)  # manifest 계산용 자리 표시
 
     names = ["source_documents.jsonl", "product_documents.jsonl",
              "document_chunks.jsonl", "chunk_embeddings.jsonl"]
