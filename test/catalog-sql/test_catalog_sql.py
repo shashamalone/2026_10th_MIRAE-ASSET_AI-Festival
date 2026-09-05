@@ -73,6 +73,33 @@ class CompilerTests(unittest.TestCase):
         with self.assertRaises(c.CompileError):
             self.compile(schema)
 
+    def test_named_lookup_retains_unverified_classification_caveat(self):
+        step = {"domain": "국내ETF", "subtype": ["인덱스"], "product_name_entities": [{"surface_form": "KODEX 200"}]}
+        schema = utils.build_resolved_schema(step, r.get_attribute_catalog("국내ETF"), [])
+        self.assertEqual(schema["unverified_subtypes"], ["인덱스"])
+        self.assertTrue(any("충족한다고 판단하면 안" in note for note in schema["notes"]))
+        self.assertIn("POSITION(E'kodex200'", self.compile(schema))
+
+    def test_named_ranking_does_not_drop_unverified_subtype(self):
+        step = {"domain": "국내ETF", "subtype": ["인덱스"], "product_name_entities": [{"surface_form": "KODEX"}], "sort": {"attribute": "순자산"}}
+        schema = utils.build_resolved_schema(step, r.get_attribute_catalog("국내ETF"), [])
+        with self.assertRaises(c.CompileError):
+            self.compile(schema)
+
+    def test_ticker_uses_reviewed_identifiers_as_alternatives(self):
+        for name in ["VOO", "BND", "VOO.P", "QQQ"]:
+            schema = resolved("해외ETF", entities=[name])
+            sql = self.compile(schema)
+            self.assertIn("UPPER(BTRIM(base.pd_abrv_nm::text)) = " + c.literal(name), sql)
+            self.assertIn("UPPER(BTRIM(base.pd_itm_no::text)) = " + c.literal(name), sql)
+            self.assertIn(" OR ", sql)
+
+    def test_current_aum_cannot_drift(self):
+        with patch.object(c, "domain_metadata", return_value={}):
+            mapping, missing = utils.resolve_concepts_for_domain("국내ETF", ["현재 AUM"], "", Mock())
+        self.assertEqual(missing, [])
+        self.assertEqual(mapping["현재 AUM"].column, "pd_net_tamt")
+
     def test_explicit_public_fund_subtype_preserved(self):
         schema = utils.build_resolved_schema({"domain": "펀드", "subtype": ["공모펀드"]}, r.get_attribute_catalog("펀드"), [])
         self.assertIn("base.prvo_pbff_desc::text = E'공모'", self.compile(schema))

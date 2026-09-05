@@ -289,6 +289,8 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
             if op not in {"eq", "ne", "neq"}:
                 raise CompileError("텍스트 컬럼의 수치/범위 비교는 허용하지 않습니다")
             lhs, convert = f"{col}::text", literal
+            if record.get("any_group") == "product_names":
+                lhs, convert = f"UPPER(BTRIM({col}::text))", lambda v: literal(str(v).strip().upper())
         if op == "between":
             return f"{lhs} BETWEEN {convert(value)} AND {convert(record.get('value_2', ''))}"
         return f"{lhs} {operators[op]} {convert(value)}"

@@ -33,6 +33,7 @@ plan_query_db.py가 만든 RDB 단계 하나(step)를 받아서:
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 from agent.graph_logic import graph_ids
@@ -97,7 +98,7 @@ def collect_needed_concepts(step: dict) -> list[str]:
     공모/사모는 다른 컬럼) 개념 이름 하나로 표현이 안 된다. 지금은
     resolve_subtype_conditions가 rdb_schema.resolve_subtype_condition으로
     값 단위로 직접 컬럼을 찾는다(build_resolved_schema에서 호출)."""
-    concepts: list[str] = [c["attribute"] for c in step.get("conditions", [])]
+    concepts: list[str] = [c["attribute"] for c in build_condition_list(step)]
 
     sort = step.get("sort") or {}
     if sort.get("attribute"):
@@ -135,6 +136,12 @@ def build_condition_list(step: dict) -> list[dict]:
         # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
         # contains로 매칭한다.
         conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names"})
+        if step.get("domain") == "해외ETF" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.^-]{0,19}", e["surface_form"]):
+            # Tickers and RICs are identifiers, not substrings of a fund's full
+            # legal name. Resolve both via reviewed catalogue concepts.
+            for attribute in ("티커", "상품코드"):
+                conditions.append({"attribute": attribute, "operator": "eq", "value": e["surface_form"],
+                                   "value_2": "", "any_group": "product_names"})
 
     return conditions
 
@@ -371,6 +378,16 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     # 아래 일반 조건 루프(카탈로그/LLM 폴백 대상)와 섞이지 않게 먼저
     # resolved_conditions에 바로 얹는다.
     subtype_records, subtype_notes = resolve_subtype_conditions(domain, step.get("subtype") or [])
+    unverified_subtypes = []
+    identity_lookup = bool(step.get("product_name_entities")) and not step.get("conditions") and not step.get("sort")
+    if identity_lookup:
+        # The planner sometimes invents a classification of a named product.
+        # We can still return identity-matched source rows, but cannot claim that
+        # an unsupported classification/filter has been verified.
+        unverified_subtypes = [r["value"] for r in subtype_records if not r["valid"]]
+        subtype_records = [r for r in subtype_records if r["valid"]]
+        if unverified_subtypes:
+            notes.append(f"상품식별에 의한 참고 조회입니다. 하위유형 {unverified_subtypes}은 검증되지 않았으며 해당 분류 조건을 충족한다고 판단하면 안 됩니다.")
     resolved_conditions.extend(subtype_records)
     invalid_conditions.extend(record for record in subtype_records if not record["valid"])
     notes.extend(subtype_notes)
@@ -513,6 +530,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         "domain": domain,
         "table": table,
         "subtype": list(step.get("subtype") or []),
+        "unverified_subtypes": unverified_subtypes,
         "conditions": resolved_conditions,
         "sort": resolved_sort,
         "fields": resolved_fields,

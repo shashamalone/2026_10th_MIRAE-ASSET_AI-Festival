@@ -186,6 +186,7 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
         "sql_compiler": sql_result["compiler"], "column_refs": sql_result["column_refs"],
+        "unverified_subtypes": resolved_schema.get("unverified_subtypes", []),
     }
     if run["error"]:
         result["error"] = run["error"]
