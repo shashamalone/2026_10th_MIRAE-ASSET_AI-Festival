@@ -1,6 +1,7 @@
 """Read-only integration checks; all generated output stays in the run directory."""
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,7 +22,12 @@ def main():
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--ids", default="Q2,Q4")
     parser.add_argument("--rounds", type=int, default=1)
+    parser.add_argument("--single-attempt", action="store_true",
+                        help="One question, once; no full-question retry or paid quota probes")
     args = parser.parse_args()
+    if args.single_attempt and (args.mode != "pipeline" or args.rounds != 1
+                               or len([v for v in args.ids.split(",") if v.strip()]) != 1):
+        parser.error("--single-attempt requires pipeline, one --ids value and --rounds 1")
     out = args.out.resolve()
     run_root = (ROOT / "artifacts" / "runs").resolve()
     if run_root not in out.parents or "codex-t139-sql-0905" not in out.parts:
@@ -41,7 +47,10 @@ def main():
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True)),
         "python": sys.version, "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "ids": args.ids, "rounds": args.rounds}
+        "ids": args.ids, "rounds": args.rounds, "single_attempt": args.single_attempt,
+        "source_sha256": {str(p.relative_to(ROOT)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
+                          for folder in ("src", "ontology", "test/catalog-sql")
+                          for p in sorted((ROOT / folder).rglob("*")) if p.suffix in {".py", ".ttl"}}}
     (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     snap = schema_snapshot.get_snapshot()
     rdb_schema.assert_schema_contract(snap)
@@ -49,7 +58,19 @@ def main():
         sys.argv = ["run_latency.py", "--rounds", str(args.rounds), "--ids", args.ids,
                     "--out", str(out / "traces.jsonl")]
         with (out / "pipeline.log").open("w", encoding="utf-8") as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-            runpy.run_path(str(ROOT / "test/pipline-test/latency/run_latency.py"), run_name="__main__")
+            runner_path = str(ROOT / "test/pipline-test/latency/run_latency.py")
+            if args.single_attempt:
+                runner = runpy.run_path(runner_path, run_name="single_attempt_harness")
+                cases = runner["load_golden"]({args.ids.strip()})
+                if len(cases) != 1:
+                    raise ValueError("Requested question ID was not found uniquely")
+                qid, question = cases[0]
+                trace = runner["run_once"](qid, question, 1)
+                trace.update(attempt=1, superseded=False)
+                (out / "traces.jsonl").write_text(json.dumps(trace, ensure_ascii=False, default=str) + "\n", encoding="utf-8")
+                print(f"Single attempt: {qid}, status={trace['status']}, e2e_ms={trace['e2e_ms']}", flush=True)
+            else:
+                runpy.run_path(runner_path, run_name="__main__")
         print(f"Pipeline complete: {out}", flush=True)
         return
     report = {"release_id": schema_snapshot.snapshot_release_id(snap), "tables": len(snap["tables"]),

@@ -640,6 +640,29 @@ RDB_SCHEMA["펀드"] = {
 # 큐레이션된 개념 카탈로그: "개념명 -> 실제 컬럼" + 실 데이터 검증 결과.
 # ---------------------------------------------------------------------------
 
+# Output-only semantic views. These are not physical columns or filter aliases.
+# Dependencies are official raw columns; class membership/labels come from TBox.
+BOND_OUTPUT_VIEWS = {
+    "원본등급값": {"kind": "raw_rating", "inputs": ("crd_grd",),
+                 "aliases": ("원본 등급값", "원본 신용등급", "원등급", "원시 등급값")},
+    "온톨로지분류값": {"kind": "rating", "inputs": ("crd_grd",),
+                   "aliases": ("온톨로지 분류값", "신용등급 온톨로지 분류값", "정규화 신용등급", "정규화 등급값")},
+    "만기구분": {"kind": "maturity", "inputs": ("mat_dt", "info_base_dt"),
+              "aliases": ("만기 구분", "잔존만기 구분", "만기 분류")},
+}
+
+
+def get_output_view(domain: str, concept: str) -> dict | None:
+    """Output presentation only; callers must never use it to silently filter."""
+    if domain != "채권":
+        return None
+    normalized = "".join(concept.split()).casefold()
+    for name, view in BOND_OUTPUT_VIEWS.items():
+        if normalized in {"".join(a.split()).casefold() for a in (name, *view["aliases"])}:
+            return {**view, "name": name}
+    return None
+
+
 BOND_ATTRIBUTES: dict[str, AttributeSpec] = {
     "신용등급": AttributeSpec(
         column="crd_grd",

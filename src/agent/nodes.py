@@ -75,6 +75,8 @@ def analyze_intent_node(state: PipelineState) -> dict:
         ]
     )
     intent, guard_notes = guard_intent(intent)
+    intent, request_notes = utils.preserve_explicit_output_requests(intent, state["question"])
+    guard_notes.extend(request_notes)
     domains = [d.get("domain") for d in (intent.get("product_domain") or [])]
     trace = [f"질의 분석 완료. product_domain={domains}"]
     trace.extend(f"질의 분석 보정: {note}" for note in guard_notes)
@@ -112,6 +114,8 @@ def verify_intent_node(state: PipelineState) -> dict:
         trace_msg = "의도 분석 검수 완료: 수정 사항 없음 (원본 유지)"
 
     final_intent, guard_notes = guard_intent(final_intent)
+    final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
+    guard_notes.extend(request_notes)
     trace = [trace_msg]
     trace.extend(f"의도 검수 보정: {note}" for note in guard_notes)
 
@@ -189,9 +193,11 @@ def _execute_target_step_query(step: dict, question: str, conn, apply_limit: boo
         }
 
     run = _run_sql_with_retry(conn, domain, question, schema_block, sql_result, max_retries)
+    output_views = resolved_schema.get("output_views") or []
+    rows = utils.derive_output_views(run["rows"], output_views)
     result = {
         "engine": "rdb", "role": "target", "domain": domain,
-        "rows": run["rows"], "count": len(run["rows"]),
+        "rows": rows, "count": len(rows), "output_views": output_views,
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
         "sql_compiler": sql_result["compiler"], "column_refs": sql_result["column_refs"],
@@ -1463,6 +1469,9 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 f"[RDB:{result.get('domain', '')}] {result.get('count', 0)}건 조회, "
                 f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE}, SQL: {result['sql']}"
             )
+            if result.get("output_views"):
+                labels = ", ".join(v["attribute"] for v in result["output_views"])
+                parts.append(f"[로컬 온톨로지 규칙 적용] {labels}: RDB 원천값 + 저장소 TBox 정의; 원격 GraphDB 조회 아님")
         elif engine == "graph":
             if result.get("status") == "chained":
                 continue
@@ -1630,6 +1639,10 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                 if normalized in seen:
                     continue
                 seen.add(normalized)
+                derived = (row or {}).get("_derived_fields", {}).get(normalized)
+                if derived and not failure:
+                    items.append(dict(derived))
+                    continue
                 matches = by_label.get(normalized, [])
                 if normalized in utils.PROVENANCE_CONCEPTS:
                     dates = list(dict.fromkeys(c for b in bindings for c in b.get("as_of_columns", [])))
@@ -1669,6 +1682,7 @@ _FIELD_UNAVAILABLE_TEXT = {
     "invalid": "조회 값이 유효한 수치가 아니어서 확인할 수 없습니다.",
     "zero_unavailable": "유효한 측정값으로 확인할 수 없습니다. 카탈로그에서 원천 0을 결측·불가용으로 정의합니다.",
     "restricted": "카탈로그에서 판정·필터·정렬에 사용할 수 없는 값으로 정의합니다.",
+    "derivation_unavailable": "원천값에 분류 규칙을 적용하지 못해 확인할 수 없습니다.",
 }
 
 
@@ -1699,11 +1713,15 @@ def _render_rdb_answer_contract(contract: list[dict]) -> str:
                 if item["status"] in {"zero_unavailable", "restricted"}:
                     value += f" 원천값: {_display_field_value(item['value'])}; 규칙: {item['zero_null_rule']}"
                 source = f" (근거 컬럼: {item['column']})" if item["column"] else ""
+                if item.get("source_columns"):
+                    source += f" (원천 컬럼: {', '.join(item['source_columns'])})"
                 unit = (f" [원천 단위: {item['unit']}]"
                         if available and item.get("unit") not in (None, "", "공식 문서 미표기") else "")
                 dates = item.get("as_of") or []
                 date_refs = f" [카탈로그 기준일 컬럼: {', '.join(d['field'] for d in dates)}]" if dates else ""
                 lines.append(f"- {item['field']}: {value}{unit}{source}{date_refs}")
+                if item.get("detail"):
+                    lines.append(f"  - 산출 근거: {item['detail']}")
                 if available and item["value"] == 0 and item.get("zero_null_rule"):
                     lines.append(f"  - 원천 값 해석 규칙: {item['zero_null_rule']}")
         # Dates already shown as requested/provenance fields need not be repeated

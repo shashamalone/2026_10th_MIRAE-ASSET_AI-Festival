@@ -40,6 +40,11 @@ both the attempted denominator and the scoreable denominator. Do not execute
 the legacy analyzer's `main` without redirecting its module-level `HERE`, since
 it overwrites tracked historical output files.
 
+For a single diagnostic question without a full-question retry or paid quota
+probes, use `--ids Q3 --rounds 1 --single-attempt`. This calls the same instrumented
+pipeline once, even on failure; the legacy harness also disables SDK retries.
+Run manifests record Python/ontology SHA-256 hashes, including when HEAD is dirty.
+
 ## Requested-field answer contract
 
 - The compiler exports serializable projection bindings (request label, result
@@ -66,6 +71,33 @@ it overwrites tracked historical output files.
 `test_answer_contract.py` covers NULLs, zeros/false, blanks, missing projections,
 failures, field completeness, exact values, provenance, multirow separation,
 truncation, narrative omissions/outages, joins, and UNION ordinal-rank safety.
+
+## Bond raw values and local ontology output views
+
+- Analysis and verification retain raw-rating, normalized-rating and maturity
+  requests separately. A conservative code guard restores known catalog/view
+  terms in positive noun-list display clauses, masking named entities first.
+  It does not infer filters or recover arbitrary natural-language paraphrases.
+- Output-only views live next to the bond catalog but are not physical columns.
+  The compiler selects actual `crd_grd`, `mat_dt`, `info_base_dt` inputs; unknown
+  view names are never emitted as SQL column names. Raw rating remains unchanged.
+- CreditRating labels/aliases come from the existing `ontology/common.ttl` TBox;
+  maturity buckets come from `ontology/bond_kr.ttl`. No product/question lookup
+  table and no new ontology definitions are introduced.
+- Maturity uses `mat_dt - info_base_dt` calendar days, 365 days/year, with an
+  inclusive lower and exclusive upper bound. It never substitutes duration,
+  stale `remaining_days`, the current clock, or a guess from the product name.
+  This is a source repayment-date classification, not a claim about legal/call
+  terms. Sentinel/invalid/missing dates, unknown grades, unavailable TBox rules
+  and ambiguous classification axes yield an explicit per-field reason.
+- Derived evidence travels with each row into the requested-field renderer.
+  The answer distinguishes **local TBox rule application** from a remote
+  GraphDB/ABox lookup. Output-view filters/sorts are explicitly unsupported;
+  UNION supplementary-field limitations remain unchanged.
+
+`test_bond_output_views.py` covers request restoration, model omissions, source
+date boundaries, all existing rating aliases, unavailable/ambiguous rules,
+nonmutation and plan-to-SQL-to-answer execution without an answer-model call.
 
 ## Review / outstanding limitations
 

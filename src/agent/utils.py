@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from agent.graph_logic import graph_ids
@@ -50,6 +52,157 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
 # A provenance request is a set of source-date columns, not one guessed column.
 PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일"}
+
+
+def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Recover catalogued noun-list requests, not values inferred from a product.
+
+    Only positive display/request clauses and noun-list boundaries are accepted.
+    Filter mentions ('등급 AA 이상') and product-name substrings are not fields.
+    This supplements the two intent prompts without adding a paid model call.
+    """
+    text = catalog_sql.normalize(question.replace("\n", ";"))
+    for entity in intent.get("target_entities") or []:
+        name = catalog_sql.normalize(entity.get("surface_form") or "")
+        if name:
+            text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
+    names = set(PROVENANCE_CONCEPTS)
+    for domain in intent.get("product_domain") or []:
+        name = domain.get("domain", "")
+        if name not in rdb_schema.RDB_SCHEMA:
+            continue
+        names.update(rdb_schema.get_attribute_catalog(name))
+        if name == "채권":
+            for key, view in rdb_schema.BOND_OUTPUT_VIEWS.items():
+                names.update((key, *view["aliases"]))
+    # Keep the longest known phrase; '원본 신용등급' must not collapse to '신용등급'.
+    normalized_names = {catalog_sql.normalize(name) for name in names}
+    recovered = []
+    for clause in re.split(r"[.!?;\n]", text):
+        normalized = catalog_sql.normalize(clause)
+        if re.search(r"(?:제외|빼고|빼줘|생략|말고|말아|필요없)", normalized):
+            continue
+        request = re.search(r"(?:알려|보여|제시|표시|출력|포함|붙여)", normalized)
+        if not request:
+            continue
+        body = normalized[:request.start()]
+        body = re.sub(r"(?:함께|같이|모두|전부|각각)+$", "", body)
+        for name in sorted(normalized_names, key=lambda n: (-len(n), n)):
+            pattern = re.escape(name) + r"(?=,|，|/|과|와|및|을|를|도|$)"
+            if re.search(pattern, body):
+                recovered.append(name)
+                body = re.sub(pattern, " ", body)
+    output = dict(intent.get("output_requirements") or {})
+    fields = list(output.get("fields") or [])
+    known = {catalog_sql.normalize(f) for f in fields}
+    added = []
+    for name in recovered:
+        if name not in known:
+            fields.append(name)
+            added.append(name)
+            known.add(name)
+    if not added:
+        return intent, []
+    output["fields"] = fields
+    return {**intent, "output_requirements": output}, [f"원문 요청 항목 복구: {', '.join(added)}"]
+
+
+def _ontology_labels(class_name: str):
+    from rdflib import RDF, RDFS, SKOS, URIRef
+    from tools.graph_schema import FP, catalog
+    graph = catalog().graph
+    for node in graph.subjects(RDF.type, URIRef(FP + class_name)):
+        labels = list(graph.objects(node, RDFS.label))
+        preferred = next((str(v) for v in labels if v.language == "ko"), str(node))
+        aliases = {str(v) for v in labels + list(graph.objects(node, SKOS.altLabel))}
+        yield {"uri": str(node), "label": preferred, "aliases": aliases}
+
+
+def _ontology_match(class_name: str, value: str) -> dict:
+    matches = [entry for entry in _ontology_labels(class_name)
+               if value.strip().casefold() in {a.strip().casefold() for a in entry["aliases"]}]
+    if len(matches) != 1:
+        raise ValueError("온톨로지 분류값이 없거나 여러 개여서 유일하게 확정할 수 없습니다")
+    return matches[0]
+
+
+def _source_date(value):
+    text = str(value).strip()
+    if re.fullmatch(r"\d{8}\.0+", text):
+        text = text.split(".")[0]
+    text = text.replace("-", "")
+    if text in {"0", "99991231"}:
+        raise ValueError("미상/영구채 sentinel 날짜로 잔존만기를 계산할 수 없습니다")
+    if not re.fullmatch(r"\d{8}", text):
+        raise ValueError("원천 날짜 형식을 확인할 수 없습니다")
+    return datetime.strptime(text, "%Y%m%d").date()
+
+
+def _maturity_class(days: int) -> tuple[dict, str]:
+    """TBox altLabels supply intervals; the existing days/year contract is 365.
+
+    Lower-inclusive/upper-exclusive intervals; negative days mean matured.
+    Never use duration, product name ('콜/후'), or today's clock as substitutes.
+    """
+    if days < 0:
+        return _ontology_match("MaturityClass", "만기경과"), "만기경과"
+    matches = []
+    years = Decimal(days) / Decimal(365)
+    for entry in _ontology_labels("MaturityClass"):
+        for alias in entry["aliases"]:
+            match = re.fullmatch(r"(\d+)-(\d+)년", alias)
+            less = re.fullmatch(r"(\d+)년미만", alias)
+            more = re.fullmatch(r"(\d+)년이상", alias)
+            accepted = (match and Decimal(match[1]) <= years < Decimal(match[2])) or (
+                less and years < Decimal(less[1])) or (more and years >= Decimal(more[1]))
+            if accepted:
+                matches.append((entry, alias))
+    if len(matches) != 1:
+        raise ValueError("온톨로지 만기 구간이 없거나 중복되어 확정할 수 없습니다")
+    return matches[0]
+
+
+def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
+    """Apply local TBox vocabulary to fetched raw values, not remote ABox claims."""
+    if not views:
+        return rows
+    output = []
+    for source in rows:
+        row, items = dict(source), {}
+        for view in views:
+            columns = view["inputs"]
+            item = {"field": view["attribute"], "column": None, "value": None,
+                    "status": "available", "source_columns": [f"raw.prbd01n001.{c}" for c in columns]}
+            missing = [c for c in columns if c not in row]
+            nulls = [c for c in columns if c in row and row[c] is None]
+            empty = [c for c in columns if c in row and isinstance(row[c], str) and not row[c].strip()]
+            if missing or nulls or empty:
+                item["status"] = "not_selected" if missing else "null" if nulls else "empty"
+                item["detail"] = "분류 입력 미확보: " + ", ".join(missing or nulls or empty)
+            else:
+                try:
+                    if view.get("ambiguous"):
+                        raise ValueError("어떤 속성의 온톨로지 분류인지 명확하지 않아 확정할 수 없습니다")
+                    if view["kind"] == "rating":
+                        entry = _ontology_match("CreditRating", str(row["crd_grd"]))
+                        item["value"] = f"{entry['label']} ({entry['uri']})"
+                        item["detail"] = (f"신용등급 분류: 원본 crd_grd={row['crd_grd']}; "
+                                          "ontology/common.ttl의 CreditRating label/altLabel 일치")
+                    else:
+                        maturity, basis = _source_date(row["mat_dt"]), _source_date(row["info_base_dt"])
+                        days = (maturity - basis).days
+                        entry, bucket = _maturity_class(days)
+                        item["value"] = f"{entry['label']} ({bucket}; {entry['uri']})"
+                        item["detail"] = (f"mat_dt={row['mat_dt']} - info_base_dt={row['info_base_dt']} = {days}일; "
+                                          "1년=365일, 하한 포함·상한 미포함; ontology/bond_kr.ttl의 MaturityClass 구간. "
+                                          "상환일자 기준 구분이며 콜 행사·법적 만기 조건을 별도로 확정한 것이 아닙니다.")
+                    item["detail"] += " 로컬 온톨로지 규칙 적용 결과이며 원격 GraphDB 조회값이 아닙니다."
+                except Exception as exc:
+                    item.update(status="derivation_unavailable", detail=str(exc))
+            items[catalog_sql.normalize(view["attribute"])] = item
+        row["_derived_fields"] = items
+        output.append(row)
+    return output
 
 
 def apply_sale_policy(step: dict) -> tuple[dict, list[str]]:
@@ -104,7 +257,8 @@ def collect_needed_concepts(step: dict) -> list[str]:
     if sort.get("attribute"):
         concepts.append(sort["attribute"])
 
-    concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS)
+    concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS
+                    and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
     # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
     # 쓰였든(product_name_entities) 아니든, 결과 행이 순자산 숫자나
@@ -396,6 +550,12 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     notes.extend(subtype_notes)
 
     for c in build_condition_list(step):
+        if rdb_schema.get_output_view(domain, c["attribute"]):
+            record = {**c, "column": None, "spec": None, "valid": False,
+                      "invalid_reason": "출력 전용 분류 항목의 필터는 지원하지 않습니다."}
+            invalid_conditions.append(record)
+            resolved_conditions.append(record)
+            continue
         # 방어적 검증: value가 비어 있으면 절대 SQL까지 내려가면 안 된다.
         # 가장 흔한 원인은 질문 분석 단계가 "가장 큰/최고/최소" 같은
         # 최상급 표현을 conditions로 잘못 분류한 경우다(정상적으로는
@@ -472,8 +632,12 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             "limit": sort_in.get("limit", ""),
             "spec": spec,
         }
+        if rdb_schema.get_output_view(domain, sort_in["attribute"]):
+            invalid_conditions.append({"attribute": sort_in["attribute"], "value": "정렬",
+                                       "invalid_reason": "출력 전용 분류 항목의 정렬은 지원하지 않습니다."})
 
     resolved_fields = []
+    output_views = []
     # "상품명"을 fields 목록 맨 앞에 항상 포함한다(role=target일 때).
     # 질문이 fields에 명시적으로 상품명을 요청하지 않아도(대부분 안 한다
     # - "순자산이 가장 큰 상품"이라고 하지 "상품명과 순자산을"이라고
@@ -500,6 +664,26 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         blocking_concepts.add("상품명")
 
     for f in field_names:
+        view = rdb_schema.get_output_view(domain, f)
+        if view:
+            if catalog_sql.normalize(f) == "온톨로지분류값":
+                # Do not make a generic classification request silently mean a
+                # credit rating when its subject is a different/unknown axis.
+                anchors = [rdb_schema.get_output_view(domain, n) for n in field_names if n != f]
+                raw_rating = any(v and v["kind"] == "raw_rating" for v in anchors)
+                rating = any(catalog_sql.normalize(n) == "신용등급" for n in field_names)
+                maturity = any(v and v["kind"] == "maturity" for v in anchors)
+                if maturity and not raw_rating and not rating:
+                    view = {**view, "kind": "maturity", "inputs": ("mat_dt", "info_base_dt")}
+                elif not raw_rating and (not rating or maturity):
+                    view = {**view, "ambiguous": True, "inputs": ()}
+            if view["kind"] != "raw_rating":
+                output_views.append({"attribute": f, **view})
+                notes.append(f"'{f}'는 원천 입력 조회 후 로컬 온톨로지 규칙을 적용해 산출합니다.")
+            for name in view["inputs"]:
+                resolved_fields.append({"attribute": f if view["kind"] == "raw_rating" else f"분류근거({name})",
+                                        "column": name, "spec": catalog_sql.spec_for_column(domain, name, {})})
+            continue
         if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS:
             notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")
             continue
@@ -538,6 +722,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         "conditions": resolved_conditions,
         "sort": resolved_sort,
         "fields": resolved_fields,
+        "output_views": output_views,
         "unresolved_concepts": blocking_unresolved,
         "invalid_conditions": invalid_conditions,
         "notes": notes,
