@@ -880,18 +880,14 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
     "순자산": AttributeSpec(
         column="pd_net_tamt",
         value_type="numeric",
-        note="순자산총액(원). 10.2% 결측. du_last_aum도 유사 계열이지만 이 컬럼을 기본으로 쓴다.",
+        note="순자산총액(원). 10.2% 결측. 최종 AUM(du_last_aum)과 별도 원천 항목이며 서로 대체하지 않는다.",
     ),
-    # "AUM"/"NAV"는 질문에 자주 그대로 나오는데 카탈로그에 없어서 매번 LLM
-    # 폴백으로 샜다(2026-09-05 Q4 실측: concept_fallback concepts=['AUM','NAV',
-    # '각 수치의 기준일']). 폴백은 이름이 비슷한 컬럼을 고르는 경향이 있어
-    # AUM -> du_last_aum 을 집어 golden 이 요구한 pd_net_tamt 와 어긋났다.
-    # 결정론적으로 잡히도록 별칭 항목을 등록한다.
+    # AUM은 원천의 최종 AUM을 사용한다(2026-09-05 사용자 확정).
+    # 자체 golden의 기대값에 맞춰 순자산총액으로 치환하지 않는다.
     "AUM": AttributeSpec(
-        column="pd_net_tamt",
+        column="du_last_aum",
         value_type="numeric",
-        note="'순자산'의 동의어. du_last_aum 이 이름은 더 비슷해 보이지만 값이 다르다 - "
-             "순자산총액은 pd_net_tamt 를 쓴다.",
+        note="최종 AUM(원). 일간 갱신일은 du_upt_dt. 순자산총액(pd_net_tamt)으로 대체하지 않는다.",
     ),
     "NAV": AttributeSpec(
         column="du_last_nav",
@@ -1355,7 +1351,7 @@ BOND_ATTRIBUTES["세후수익률"] = AttributeSpec(
 )
 SEMANTIC_ALIASES = {
     "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리"},
-    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "현재AUM": "AUM", "순자산(AUM)": "순자산"},
+    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},
     "해외ETF": {"AUM": "순자산", "현재AUM": "순자산", "순자산(AUM)": "순자산", "총보수": "총보수율", "총보수요율": "총보수율"},
     "펀드": {"판매상태": "판매가능여부", "AUM": "순자산"},
 }
@@ -1418,9 +1414,8 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
         "다만 총보수 값 자체가 1,235건 중 67건(5.4%)에만 있으므로, 총보수 기준 "
         "정렬·최저가 질의는 표본이 67건이라는 사실을 답변에 함께 밝힌다. "
         "조건을 만족하는 종목이 없으면 없다고 답하고 다른 컬럼으로 대체하지 않는다.",
-        "순자산은 pd_net_tamt를 쓴다. du_last_aum도 있지만 값이 미세하게 다르다. "
-        "질문이 'AUM'이라고 해도 마찬가지로 pd_net_tamt다(이름이 비슷하다고 du_last_aum을 "
-        "고르면 golden과 값이 어긋난다 - 실측).",
+        "AUM·현재 AUM·최종 AUM은 du_last_aum을 쓴다. 순자산총액은 pd_net_tamt를 쓴다. "
+        "두 원천 항목은 값이 다르므로 서로 대체하거나 같은 값으로 설명하지 않는다.",
         "기초지수는 ref_base_index를 쓴다. cu_base_index는 이름이 비슷하지만 nunique가 "
         "20뿐이고 대부분 공백이라 SELECT에 넣으면 빈 값이 나온다(2026-09-05 Q4 실측). "
         "[해석된 스키마]가 지정한 컬럼을 비슷해 보이는 다른 컬럼으로 바꾸지 말 것.",

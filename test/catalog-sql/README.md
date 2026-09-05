@@ -45,6 +45,13 @@ probes, use `--ids Q3 --rounds 1 --single-attempt`. This calls the same instrume
 pipeline once, even on failure; the legacy harness also disables SDK retries.
 Run manifests record Python/ontology SHA-256 hashes, including when HEAD is dirty.
 
+Domestic ETF `AUM`, `현재 AUM`, `최종 AUM`, `순자산(AUM)` use `du_last_aum`
+(user-confirmed on 2026-09-05). Unqualified net assets remain `pd_net_tamt`.
+Projections, filters and sorting share this distinction; no fallback substitutes
+one column for the other. Historical goldens/traces are preserved, not rewritten
+to match this change. `inspect_etf_outputs.py` compares source columns and fee
+availability with read-only SELECTs and no model calls, using supplied product codes.
+
 ## Requested-field answer contract
 
 - The compiler exports serializable projection bindings (request label, result

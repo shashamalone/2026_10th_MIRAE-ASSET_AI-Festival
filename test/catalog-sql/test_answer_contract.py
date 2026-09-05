@@ -80,6 +80,18 @@ class AnswerContractTests(unittest.TestCase):
                 self.assertEqual(item["status"], "available")
                 self.assertEqual(item["value"], value)
 
+    def test_null_fee_is_a_valid_explicit_unavailable_answer(self):
+        state = self.state(domain="국내ETF", fields=["총보수", "투자지역"], rows=[{
+            "pd_nm": "가상 ETF", "pd_itm_no": "TEST-ETF", "expense_ratio": None,
+            "wu_inv_rgn": "미국"}])
+        answer = self.answer(state)
+        self.assertEqual(self.items(state)["총보수"]["status"], "null")
+        self.assertIn("총보수: 제공된 조회 결과의 값이 NULL", answer)
+        self.assertIn("투자지역: 미국", answer)
+        self.assertNotIn("총보수: 0", answer)
+        self.assertNotIn("상품이 없습니다", answer)
+        self.llm.with_structured_output.assert_not_called()
+
     def test_missing_column_is_not_sql_null(self):
         state = self.state()
         del state["step_results"]["r1"]["rows"][0]["buyable_quantity"]
@@ -126,7 +138,7 @@ class AnswerContractTests(unittest.TestCase):
     def test_exact_name_large_number_decimal_and_date_are_preserved(self):
         name = "가상 KODEX200 증권상장지수투자신탁[주식]"
         state = self.state(domain="국내ETF", fields=["상품명", "AUM", "NAV"], rows=[{
-            "pd_nm": name, "pd_net_tamt": 25474813891225, "du_last_nav": Decimal("110190.8100"),
+            "pd_nm": name, "du_last_aum": 25474813891225, "du_last_nav": Decimal("110190.8100"),
             "pd_itm_no": "TEST-ETF"}])
         answer = self.answer(state)
         for value in [name, "25474813891225", "110190.8100"]:

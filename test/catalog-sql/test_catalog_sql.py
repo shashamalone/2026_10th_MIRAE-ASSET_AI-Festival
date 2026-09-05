@@ -40,15 +40,15 @@ class CompilerTests(unittest.TestCase):
 
     def test_curated_columns_cannot_drift(self):
         sql = self.compile(resolved(fields=["AUM", "기초지수", "NAV"]))
-        self.assertIn("base.pd_net_tamt AS pd_net_tamt", sql)
+        self.assertIn("base.du_last_aum AS du_last_aum", sql)
         self.assertIn("base.ref_base_index AS ref_base_index", sql)
-        self.assertNotIn("du_last_aum", sql)
+        self.assertNotIn("pd_net_tamt", sql)
         self.assertNotIn("cu_base_index", sql)
 
     def test_identity_and_provenance_are_not_optional(self):
         schema = resolved(fields=["AUM"])
         sql = c.compile_select(schema, snapshot=self.snap, metadata={
-            "pd_net_tamt": {"as_of_column": "du_upt_dt,ref_base_dt"}})["sql"]
+            "du_last_aum": {"as_of_column": "du_upt_dt,ref_base_dt"}})["sql"]
         for column in ["pd_itm_no", "du_upt_dt", "ref_base_dt"]:
             self.assertIn(f"base.{column} AS {column}", sql)
 
@@ -98,7 +98,37 @@ class CompilerTests(unittest.TestCase):
         with patch.object(c, "domain_metadata", return_value={}):
             mapping, missing = utils.resolve_concepts_for_domain("국내ETF", ["현재 AUM"], "", Mock())
         self.assertEqual(missing, [])
-        self.assertEqual(mapping["현재 AUM"].column, "pd_net_tamt")
+        self.assertEqual(mapping["현재 AUM"].column, "du_last_aum")
+
+    def test_domestic_aum_aliases_remain_distinct_from_net_assets(self):
+        llm = Mock()
+        concepts = ["AUM", "현재 AUM", "최종 AUM", "순자산(AUM)", "순자산"]
+        with patch.object(c, "domain_metadata", return_value={"pd_net_tamt": {"description": "AUM"}}):
+            mapping, missing = utils.resolve_concepts_for_domain("국내ETF", concepts, "", llm)
+        self.assertEqual(missing, [])
+        for name in concepts[:-1]:
+            self.assertEqual(mapping[name].column, "du_last_aum")
+        self.assertEqual(mapping["순자산"].column, "pd_net_tamt")
+        llm.with_structured_output.assert_not_called()
+        sql = self.compile(resolved(fields=["AUM", "순자산"]))
+        for col in ["du_last_aum", "pd_net_tamt"]:
+            self.assertIn(f"base.{col} AS {col}", sql)
+
+    def test_domestic_aum_filters_and_sort_use_same_column(self):
+        sql = self.compile(resolved(fields=["AUM"],
+            conditions=[{"attribute": "AUM", "operator": "gte", "value": "1조원"}],
+            sort={"attribute": "AUM", "order": "desc", "limit": "3"}))
+        self.assertNotIn("pd_net_tamt", sql)
+        self.assertIn("base.du_last_aum", sql)
+        self.assertIn(">= 1000000000000", sql)
+        self.assertIn("ORDER BY", sql)
+        self.assertIn("DESC NULLS LAST", sql)
+
+    def test_aum_change_does_not_change_foreign_or_fund_units(self):
+        self.assertEqual(r.get_attribute_catalog("해외ETF")["AUM"].column, "du_last_aum")
+        self.assertEqual(r.get_attribute_catalog("펀드")["AUM"].column, "fd_nast_suma")
+        with self.assertRaises(c.CompileError):
+            c.numeric_value("1조원", "du_last_aum", "해외ETF")
 
     def test_explicit_public_fund_subtype_preserved(self):
         schema = utils.build_resolved_schema({"domain": "펀드", "subtype": ["공모펀드"]}, r.get_attribute_catalog("펀드"), [])
@@ -113,7 +143,7 @@ class CompilerTests(unittest.TestCase):
 
     def test_db_zero_missing_policy(self):
         schema = resolved(sort={"attribute": "AUM"})
-        sql = c.compile_select(schema, snapshot=self.snap, metadata={"pd_net_tamt": {
+        sql = c.compile_select(schema, snapshot=self.snap, metadata={"du_last_aum": {
             "zero_null_rule": "0은 원본 보존; 측정값 비교·랭킹에서는 값 없음"}})["sql"]
         self.assertIn("NULLIF", sql)
 
