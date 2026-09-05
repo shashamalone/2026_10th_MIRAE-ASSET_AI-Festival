@@ -100,6 +100,11 @@ def _strip_blank_strings(values: list) -> list:
 
 _DOMAIN_LABEL_WORDS = {"채권", "국내ETF", "해외ETF", "펀드", "ETF", "ETN", "공모펀드"}
 
+_OUTPUT_FIELD_ALIASES = {
+    "ETF명": "상품명",
+    "ETN명": "상품명",
+}
+
 
 def _fix_output_requirements(output_req: dict, domain_names: set[str]) -> tuple[dict, list[str]]:
     """output_requirements.fields/narrative_topics에서 빈 문자열과
@@ -121,6 +126,12 @@ def _fix_output_requirements(output_req: dict, domain_names: set[str]) -> tuple[
         cleaned = _strip_blank_strings(original)
         dropped = [v for v in cleaned if v in blocked]
         cleaned = [v for v in cleaned if v not in blocked]
+        normalized = [_OUTPUT_FIELD_ALIASES.get(v, v) for v in cleaned]
+        if normalized != cleaned:
+            notes.append(
+                f"output_requirements.{key}: 사용자 별칭 정규화 {cleaned!r} -> {normalized!r}"
+            )
+        cleaned = list(dict.fromkeys(normalized))
         if cleaned != original:
             output_req[key] = cleaned
             notes.append(f"output_requirements.{key}: 무효 원소 제거 {original!r} -> {cleaned!r}"
@@ -249,6 +260,70 @@ def _extract_theme_relations(intent: dict) -> tuple[list[dict], list[str]]:
             "time_window_relative": "", "entity_role": "theme", "path": [],
         })
         notes.append(f"'{keyword} 테마/섹터' 표현 -> relations로 재분류 (entity_role=theme, relation=tagged_with)")
+    return new_relations, notes
+
+
+_ETF_SCOPE_WORDS = {"국내", "해외", "상장", "주식", "실제", "관련", "편입된", "보유한"}
+
+
+def _extract_compound_etf_theme_relations(intent: dict) -> tuple[list[dict], list[str]]:
+    """Recover an explicit two-token ETF descriptor omitted as a theme relation.
+
+    A holdings question such as ``중국 반도체 ETF`` can be returned by the
+    intent model with ``subtype=["반도체"]`` and no theme relation.  ``반도체``
+    is not an RDB product subtype, while the complete phrase is two independent
+    Graph taxonomy facets.  Only recover the phrase when all of these facts are
+    explicit in the model output and question: a holdings relation, a domestic
+    ETF domain, the reported subtype, and exactly one adjacent descriptor token
+    before that subtype and ``ETF``/``ETN``.  The Graph resolver still has to
+    verify both facets; this guard never invents a product list or answer value.
+    """
+    relations = list(intent.get("relations") or [])
+    if any(relation.get("entity_role") == "theme" for relation in relations):
+        return [], []
+    if not any(relation.get("relation") in {"holds", "holding", "held_by", "편입", "보유"}
+               for relation in relations):
+        return [], []
+
+    raw_question = str(intent.get("raw_question") or "")
+    new_relations, notes = [], []
+    existing_ids = {relation.get("id") for relation in relations}
+    counter = 0
+    seen_themes: set[str] = set()
+    for domain_item in intent.get("product_domain") or []:
+        domain = str(domain_item.get("domain") or "")
+        if domain != "국내ETF":
+            continue
+        for subtype in _strip_blank_strings(domain_item.get("subtype") or []):
+            subtype_text = str(subtype).strip()
+            pattern = re.compile(
+                rf"(?<![가-힣A-Za-z0-9])([가-힣A-Za-z0-9]+)\s+"
+                rf"{re.escape(subtype_text)}\s*(?:ETF|ETN|상장지수(?:펀드|상품)?)",
+                re.IGNORECASE,
+            )
+            for match in pattern.finditer(raw_question):
+                descriptor = match.group(1).strip()
+                if descriptor.casefold() in {word.casefold() for word in _ETF_SCOPE_WORDS}:
+                    continue
+                theme = f"{descriptor} {subtype_text}"
+                normalized = re.sub(r"\s+", "", theme).casefold()
+                if normalized in seen_themes:
+                    continue
+                seen_themes.add(normalized)
+                counter += 1
+                relation_id = f"RT{counter}"
+                while relation_id in existing_ids:
+                    counter += 1
+                    relation_id = f"RT{counter}"
+                existing_ids.add(relation_id)
+                new_relations.append({
+                    "id": relation_id, "subject_domain": domain,
+                    "relation": "tagged_with", "object_entity": theme, "object_ref": "",
+                    "time_window_relative": "", "entity_role": "theme", "path": [],
+                })
+                notes.append(
+                    f"질문에 명시된 '{theme} ETF/ETN' 표현을 Graph 테마 관계로 복원했습니다."
+                )
     return new_relations, notes
 
 
@@ -432,6 +507,12 @@ def guard_intent(intent: dict) -> tuple[dict, list[str]]:
 
     theme_relations, theme_notes = _extract_theme_relations(intent)
     notes.extend(theme_notes)
+    compound_theme_relations, compound_theme_notes = _extract_compound_etf_theme_relations({
+        **intent,
+        "relations": list(intent.get("relations") or []) + theme_relations,
+    })
+    theme_relations.extend(compound_theme_relations)
+    notes.extend(compound_theme_notes)
 
     fixed_relations = []
     for r in list(intent.get("relations") or []) + extracted_relations + theme_relations:

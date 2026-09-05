@@ -404,6 +404,60 @@ class SemanticPlanTests(unittest.TestCase):
         explicit, _ = guard_intent({**base, "raw_question": "중국 거래소에 상장된 ETF 중 캠브리콘 편입 상품"})
         self.assertEqual(explicit["product_domain"][0]["domain"], "해외ETF")
 
+    def test_explicit_compound_etf_descriptor_restores_omitted_theme_relation(self):
+        from agent.intent_guard import guard_intent
+
+        intent = {
+            "raw_question": "캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘.",
+            "task": "relation",
+            "product_domain": [{"domain": "국내ETF", "subtype": ["반도체"]}],
+            "target_entities": [{"surface_form": "캠브리콘", "entity_type": "company"}],
+            "conditions": [],
+            "relations": [{
+                "id": "R1", "subject_domain": "국내ETF", "relation": "holds",
+                "object_entity": "캠브리콘", "object_ref": "", "entity_role": "company",
+            }],
+            "output_requirements": {"fields": ["ETF명", "티커", "편입비중", "편입기준일"]},
+        }
+        fixed, notes = guard_intent(intent)
+        themes = [relation for relation in fixed["relations"] if relation.get("entity_role") == "theme"]
+        self.assertEqual([relation["object_entity"] for relation in themes], ["중국 반도체"])
+        self.assertEqual(fixed["product_domain"][0]["subtype"], [])
+        self.assertEqual(
+            fixed["output_requirements"]["fields"],
+            ["상품명", "티커", "편입비중", "편입기준일"],
+        )
+        self.assertTrue(any("Graph 테마 관계로 복원" in note for note in notes))
+
+        planned = self.planner.plan_query_node({"intent": fixed, "question": intent["raw_question"]})
+        rdb_step = next(step for step in planned["plan"] if step["engine"] == "rdb")
+        self.assertEqual(set(rdb_step["depends_on"]), {"graph_R1", "graph_RT1"})
+
+    def test_compound_etf_descriptor_guard_requires_explicit_safe_context(self):
+        from agent.intent_guard import guard_intent
+
+        base = {
+            "task": "relation", "conditions": [], "target_entities": [],
+            "output_requirements": {"fields": ["상품명"]},
+            "relations": [{"id": "R1", "subject_domain": "국내ETF", "relation": "holds",
+                           "object_entity": "가상기업", "entity_role": "company"}],
+        }
+        absent_phrase, _ = guard_intent({
+            **base, "raw_question": "가상기업이 편입된 ETF를 찾아줘",
+            "product_domain": [{"domain": "국내ETF", "subtype": ["반도체"]}],
+        })
+        self.assertFalse(any(r.get("entity_role") == "theme" for r in absent_phrase["relations"]))
+        self.assertEqual(absent_phrase["product_domain"][0]["subtype"], ["반도체"])
+
+        overseas, _ = guard_intent({
+            **base, "raw_question": "중국 거래소 상장 반도체 ETF 중 가상기업 편입 상품",
+            "product_domain": [{"domain": "해외ETF", "subtype": ["반도체"]}],
+            "relations": [{"id": "R1", "subject_domain": "해외ETF", "relation": "holds",
+                           "object_entity": "가상기업", "entity_role": "company"}],
+        })
+        self.assertFalse(any(r.get("entity_role") == "theme" for r in overseas["relations"]))
+        self.assertEqual(overseas["product_domain"][0]["subtype"], ["반도체"])
+
     def test_company_and_security_codes_do_not_leak_into_product_handoff(self):
         plan = {"outputs": [{"property": "fp:productCode", "alias": "product"},
                             {"property": "fp:corpCode", "alias": "company_code"},
