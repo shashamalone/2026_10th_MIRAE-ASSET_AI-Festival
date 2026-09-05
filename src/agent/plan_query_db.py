@@ -102,6 +102,7 @@ langchain_naver가 설치되어 있지 않거나 애매한 relation이 아예 �
 """
 from __future__ import annotations
 from typing import Any
+import re
 from agent.prompts import RELATION_ORIGIN_SYSTEM_PROMPT
 from agent.get_clova import _llm_plan
 
@@ -603,6 +604,30 @@ def plan_query_node(state: PipelineState) -> PipelineState:
         "llm_fallback_unavailable": llm_fallback_attempted_but_unavailable,
         "blocking_reasons": blocking_reasons,
     }
+
+    # Explicit parent-and-subsidiary enumeration is a union of alternative
+    # issuers/holdings, not the intersection used for independent constraints.
+    question = state.get("question", "")
+    by_id = {r["id"]: r for r in relations}
+    for target_step in plan:
+        if target_step.get("engine") != "rdb":
+            continue
+        alternatives = {}
+        for sid in target_step.get("depends_on") or []:
+            relation = by_id.get(sid.removeprefix("graph_"), {})
+            if relation.get("relation") not in {"holds", "holding", "held_by"}:
+                continue
+            chain, seen, root = [], set(), relation
+            while root and root.get("id") not in seen:
+                seen.add(root.get("id")); chain.append(root)
+                if not root.get("object_ref"):
+                    break
+                root = by_id.get(root["object_ref"], {})
+            name = root.get("object_entity", "")
+            if name and re.search(re.escape(name) + r"\s*(?:및|와|과)\s*(?:확인된\s*)?자회사", question):
+                alternatives.setdefault(name, []).append((sid, len(chain) > 1))
+        target_step["graph_any_groups"] = [[sid for sid, _ in group] for group in alternatives.values()
+                                            if {is_child for _, is_child in group} == {True, False}]
 
     # task 기반 안전망: intent.task가 "relation"인데 plan에 Graph 단계가
     # 하나도 없으면 relations 추출 자체가 누락됐을 가능성이 있다. task도

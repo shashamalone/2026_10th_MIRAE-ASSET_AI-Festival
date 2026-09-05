@@ -73,6 +73,24 @@ class AnswerContractTests(unittest.TestCase):
         self.assertIn("4.266", answer)
         self.llm.with_structured_output.assert_not_called()
 
+    def test_condition_code_binding_can_attach_graph_weight(self):
+        state = self.state(rows=[{"pd_itm_no": "TEST-ETF", "pd_nm": "예시 ETF"}], fields=["상품코드", "편입비중"], domain="국내ETF")
+        for binding in state["step_results"]["r1"]["output_fields"]:
+            if binding["attribute"] == "상품코드":
+                binding["attribute"] = "조건근거(상품코드)"
+        state["step_results"]["g"] = {"engine": "graph", "status": "ok", "rows": [{"code": "TEST-ETF", "weight": 3.5, "h_as_of": "2026-07-10", "h_source": "source"}],
+            "graph_plan": {"nodes": [{"id": "h", "class_uri": "fp:Holding"}], "outputs": [{"alias": "code", "property": "fp:productCode"}, {"alias": "weight", "property": "fp:weight"}]}}
+        self.assertEqual(self.items(state)["편입비중"]["value"][0]["weight"], 3.5)
+
+    def test_general_fund_grade_cannot_be_industry_risk_evidence(self):
+        state = self.state()
+        state["question"] = "로봇산업 위험요인을 설명해줘"
+        state["intent"]["output_requirements"]["narrative_topics"] = ["로봇산업 위험요인"]
+        state["step_results"]["v"] = {"engine": "vector", "status": "ok", "chunks": [{"chunk_id": "x", "chunk_text": "이 상품은 위험등급 2등급입니다."}]}
+        answer = self.answer(state)
+        self.assertIn("산업별 위험 근거 미확보", answer)
+        self.llm.with_structured_output.assert_not_called()
+
     def test_zero_and_false_are_values_without_missing_policy(self):
         for value in [0, 0.0, "0", "0.00", False, Decimal("0.00")]:
             with self.subTest(value=value):

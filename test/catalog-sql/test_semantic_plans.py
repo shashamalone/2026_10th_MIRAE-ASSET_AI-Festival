@@ -11,6 +11,41 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_explicit_parent_children_union_keeps_other_constraints(self):
+        intent = {"product_domain": [{"domain": "국내ETF"}], "output_requirements": {"fields": ["상품명", "편입비중"]}, "relations": [
+            {"id": "P", "subject_domain": "Company", "relation": "subsidiary_of", "object_entity": "예시전자"},
+            {"id": "A", "subject_domain": "ETF", "relation": "holds", "object_entity": "예시전자"},
+            {"id": "B", "subject_domain": "ETF", "relation": "holds", "object_ref": "P"}]}
+        planned = self.planner.plan_query_node({"intent": intent, "question": "예시전자 및 확인된 자회사를 편입한 ETF"})
+        step = next(p for p in planned["plan"] if p["engine"] == "rdb")
+        self.assertEqual(step["graph_any_groups"], [["graph_A", "graph_B"]])
+        results = {"graph_A": {"engine": "graph", "status": "ok", "entity_codes": ["A"]},
+                   "graph_B": {"engine": "graph", "status": "ok", "entity_codes": ["B"]}}
+        changed = self.nodes._apply_graph_handoff(step, results)
+        self.assertEqual(changed["conditions"][-1]["value"], "A, B")
+        step["depends_on"].append("other")
+        results["other"] = {"engine": "graph", "status": "ok", "entity_codes": ["B"]}
+        self.assertEqual(self.nodes._apply_graph_handoff(step, results)["conditions"][-1]["value"], "B")
+
+    def test_issuer_handoff_uses_names_not_company_codes_as_isins(self):
+        step = self.nodes._apply_graph_handoff({"domain": "채권", "depends_on": ["g"]}, {
+            "g": {"engine": "graph", "status": "ok", "handoff_kind": "issuer_names", "issuer_names": ["예시전자", "예시소재"]}})
+        conditions = utils.build_condition_list(step)
+        self.assertEqual({c["attribute"] for c in conditions}, {"발행사"})
+        self.assertEqual({c["any_group"] for c in conditions}, {"graph_issuer_names"})
+
+    def test_organization_equality_normalizes_legal_designator_only(self):
+        schema = resolved("채권", conditions=[{"attribute": "발행사", "operator": "eq", "value": "예시회사", "value_2": ""}])
+        sql = catalog_sql.compile_select(schema, snapshot=snapshot(), metadata={})["sql"]
+        self.assertIn("(주)", sql)
+        self.assertIn("주식회사", sql)
+        self.assertNotIn("POSITION", sql)
+
+    def test_compound_output_fields_are_split_only_if_catalogued(self):
+        fixed, _ = utils.preserve_explicit_output_requests({"product_domain": [{"domain": "채권"}, {"domain": "국내ETF"}],
+            "output_requirements": {"fields": ["채권 신용등급·만기", "ETF 편입비중", "위험 문서 근거"]}}, "신용등급·만기와 ETF 편입비중을 제시")
+        self.assertTrue({"신용등급", "만기", "편입비중", "위험 문서 근거"} <= set(fixed["output_requirements"]["fields"]))
+
     def test_blank_subtype_is_not_a_filter(self):
         from agent.intent_guard import guard_intent
         fixed, _ = guard_intent({"product_domain": [{"domain": "국내ETF", "subtype": ["", " "]}]})

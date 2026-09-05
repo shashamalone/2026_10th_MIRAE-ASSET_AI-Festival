@@ -283,7 +283,7 @@ def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict
         name = catalog_sql.normalize(entity.get("surface_form") or "")
         if name:
             text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
-    names = set(PROVENANCE_CONCEPTS)
+    names = set(PROVENANCE_CONCEPTS) | GRAPH_FIELD_CONCEPTS
     for domain in intent.get("product_domain") or []:
         name = domain.get("domain", "")
         if name not in rdb_schema.RDB_SCHEMA:
@@ -304,12 +304,19 @@ def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict
         body = normalized[:request.start()]
         body = re.sub(r"(?:함께|같이|모두|전부|각각)+$", "", body)
         for name in sorted(normalized_names, key=lambda n: (-len(n), n)):
-            pattern = re.escape(name) + r"(?=,|，|/|과|와|및|을|를|도|$)"
+            pattern = re.escape(name) + r"(?=,|，|·|/|과|와|및|을|를|도|$)"
             if re.search(pattern, body):
                 recovered.append(name)
                 body = re.sub(pattern, " ", body)
     output = dict(intent.get("output_requirements") or {})
-    fields = list(output.get("fields") or [])
+    fields = []
+    for field in output.get("fields") or []:
+        stripped = re.sub(r"^(?:국내ETF|해외ETF|ETF|채권|펀드)\s+", "", field)
+        parts = [part.strip() for part in re.split(r"[·/]", stripped)]
+        if parts and all(catalog_sql.normalize(part) in normalized_names for part in parts):
+            fields.extend(parts)
+        else:
+            fields.append(field)
     known = {catalog_sql.normalize(f) for f in fields}
     added = []
     for name in recovered:
@@ -317,7 +324,7 @@ def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict
             fields.append(name)
             added.append(name)
             known.add(name)
-    if not added:
+    if not added and fields == list(output.get("fields") or []):
         return intent, []
     output["fields"] = fields
     return {**intent, "output_requirements": output}, [f"원문 요청 항목 복구: {', '.join(added)}"]
@@ -596,6 +603,10 @@ def build_condition_list(step: dict) -> list[dict]:
             for attribute in ("티커", "상품코드"):
                 conditions.append({"attribute": attribute, "operator": "eq", "value": e["surface_form"],
                                    "value_2": "", "any_group": "product_names"})
+
+    for name in step.get("issuer_name_entities") or []:
+        conditions.append({"attribute": "발행사", "operator": "eq", "value": name,
+                           "value_2": "", "any_group": "graph_issuer_names"})
 
     return conditions
 

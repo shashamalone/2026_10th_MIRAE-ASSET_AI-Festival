@@ -1394,7 +1394,7 @@ for _catalog in (DOMESTIC_ETF_ATTRIBUTES, OVERSEAS_ETF_ATTRIBUTES):
 OVERSEAS_ETF_ATTRIBUTES["복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
 OVERSEAS_ETF_ATTRIBUTES["지수복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
 SEMANTIC_ALIASES = {
-    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리", "원신용등급": "신용등급"},
+    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리", "원신용등급": "신용등급", "만기": "만기일"},
     "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "판매여부": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},
     "해외ETF": {"AUM": "순자산", "현재AUM": "순자산", "순자산(AUM)": "순자산", "총보수": "총보수율", "총보수요율": "총보수율"},
     "펀드": {"판매상태": "판매가능여부", "판매여부": "판매가능여부", "AUM": "순자산"},

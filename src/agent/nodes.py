@@ -826,28 +826,39 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
     컬럼으로 매핑하므로, 이후는 기존 자연어 초안 -> SQL 생성 파이프라인이
     그대로 처리한다."""
     entity_codes = None
-    for dep_id in step.get("depends_on") or []:
-        dep_result = step_results.get(dep_id) or {}
-        if dep_result.get("engine") == "graph":
+    issuer_names = []
+    any_groups = step.get("graph_any_groups") or []
+    grouped = {sid for group in any_groups for sid in group}
+    dependency_groups = any_groups + [[sid] for sid in step.get("depends_on") or [] if sid not in grouped]
+    for group in dependency_groups:
+        group_codes = []
+        has_product_graph = False
+        for dep_id in group:
+            dep_result = step_results.get(dep_id) or {}
+            if dep_result.get("engine") != "graph":
+                continue
+            if dep_result.get("handoff_kind") == "issuer_names" and step.get("domain") == "채권":
+                if dep_result.get("status") != "ok" or not dep_result.get("issuer_names"):
+                    return {**step, "graph_handoff_blocked": "발행사 후보의 기업관계 근거를 확보하지 못했습니다."}
+                issuer_names.extend(dep_result["issuer_names"])
+                continue
+            has_product_graph = True
             if dep_result.get("coverage_truncated") and (step.get("sort") or {}).get("attribute"):
                 return {**step, "graph_handoff_blocked": "선행 관계 조회가 반환 상한에 도달하여 전체 후보를 확보하지 못했습니다. 일부 후보로 전체 최고·순위를 확정하지 않습니다."}
             codes = dep_result.get("entity_codes") or []
-            if dep_result.get("error") or dep_result.get("status") not in (None, "ok") or not codes:
-                return {**step, "graph_handoff_blocked":
-                        f"선행 Graph 단계 {dep_id}에서 관계에 맞는 상품코드를 확보하지 못해 제한 없는 RDB 조회를 중단했습니다."}
-            if entity_codes is None:
-                entity_codes = list(dict.fromkeys(codes))
-            else:
-                entity_codes = [code for code in entity_codes if code in set(codes)]
+            if dep_result.get("error") or dep_result.get("status") not in (None, "ok"):
+                return {**step, "graph_handoff_blocked": f"선행 Graph 단계 {dep_id}에서 관계에 맞는 상품코드를 확보하지 못해 제한 없는 RDB 조회를 중단했습니다."}
+            group_codes.extend(codes)
+        if has_product_graph:
+            entity_codes = list(dict.fromkeys(group_codes)) if entity_codes is None else [c for c in entity_codes if c in set(group_codes)]
+    if issuer_names:
+        step = {**step, "issuer_name_entities": list(dict.fromkeys(issuer_names))}
     if entity_codes is None:
         return step
     if not entity_codes:
         return {**step, "graph_handoff_blocked": "선행 관계 조건을 모두 만족하는 상품코드의 교집합이 0건입니다. 관계별 후보의 합집합으로 대신하지 않습니다."}
-    new_step = dict(step)
-    new_step["conditions"] = list(step.get("conditions") or []) + [
-        {"attribute": "상품코드", "operator": "in", "value": ", ".join(entity_codes), "value_2": ""}
-    ]
-    return new_step
+    return {**step, "conditions": list(step.get("conditions") or []) + [
+        {"attribute": "상품코드", "operator": "in", "value": ", ".join(entity_codes), "value_2": ""}]}
 
 
 def rdb_search_node(state: PipelineState) -> dict:
@@ -1052,6 +1063,12 @@ def graph_search_node(state: PipelineState) -> dict:
             continue
 
         frame = _build_graph_frame(relation, relations_by_id)
+        issuer_handoff = (relation.get("relation") in {"issued_by", "issuedBy", "발행", "issues"}
+                          and relation.get("subject_domain", "").casefold() in {"채권", "bond"}
+                          and len(frame["relations"]) == 2
+                          and frame["relations"][0].get("relation") in {"subsidiary_of", "has_subsidiary"})
+        if issuer_handoff:
+            frame["relations"] = [{**frame["relations"][0], "subject_domain": "Company"}]
         if not frame["entities"]:
             step_results[step_id] = {
                 "engine": "graph", "status": "abstain_no_seed_text", "rows": [],
@@ -1093,6 +1110,16 @@ def graph_search_node(state: PipelineState) -> dict:
             "coverage_truncated": result.get("coverage_truncated", False),
             "note": result.get("note"),
         }
+        if issuer_handoff:
+            graph_plan = step_results[step_id].get("graph_plan") or {}
+            aliases = [o["alias"] for o in graph_plan.get("outputs") or []
+                       if o.get("property") in {"fp:organizationName", "http://mafest.ai/ontology#organizationName"}]
+            names = [row[a] for row in result.get("rows") or [] for a in aliases if row.get(a)]
+            root_name = frame["entities"][0]["text"] if frame["entities"] else ""
+            if root_name and re.search(re.escape(root_name) + r"\s*(?:및|와|과)\s*(?:확인된\s*)?자회사", question):
+                names.append(root_name)
+            step_results[step_id].update(handoff_kind="issuer_names", issuer_names=list(dict.fromkeys(names)))
+            step_results[step_id]["note"] = (result.get("note") or "") + " 확인한 기업관계를 발행사 후보로 전달하며, 채권 발행 사실은 RDB 발행사 컬럼에서 별도 검증합니다."
         trace_msgs.append(
             f"GraphDB 검색 [{step_id}]: status={result.get('status')}, "
             f"{len(result.get('rows', []))}건 조회, entity_codes={len(result.get('entity_codes', []))}건"
@@ -1585,7 +1612,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 ev = evidence[0]
                 evidence_note = f", 근거: {ev.get('source_table')}.{ev.get('source_column')}({ev.get('as_of_rule')})"
             elif evidence:
-                evidence_note = f", 행 단위 근거 {len(evidence)}건 확보(출처 문서·기준일 포함)"
+                evidence_note = f", 행 단위 근거 {len(evidence)}건 확보(원천 식별자·기준일; 문서 메타 확보 여부 별도)"
             else:
                 evidence_note = ""
             parts.append(
@@ -1746,7 +1773,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                     # a per-product physical column with a contradictory NULL.
                     continue
                 derived = (row or {}).get("_derived_fields", {}).get(normalized)
-                code_binding = next((b for b in bindings if b["attribute"] == "상품코드"), None)
+                code_binding = next((b for b in bindings if b["attribute"] in {"상품코드", "조건근거(상품코드)"}), None)
                 code = (row or {}).get(code_binding["key"], "") if code_binding else ""
                 graph_item = evidence_contract.graph_field_evidence(label, code, state.get("step_results") or {})
                 if graph_item and not failure:
@@ -2006,6 +2033,13 @@ def generate_answer_node(state: PipelineState) -> dict:
                         for r in (state.get("step_results") or {}).values()
                         if r.get("engine") == "vector" and r.get("status") == "ok"
                         for c in r.get("chunks") or [])
+    industry_topics = re.findall(r"([가-힣A-Za-z0-9]+)\s*산업\s*위험", " ".join([question] + narrative_topics))
+    document_text = " ".join(str(c.get("chunk_text") or "") for r in (state.get("step_results") or {}).values()
+                             if r.get("engine") == "vector" for c in r.get("chunks") or [])
+    uncovered_industries = [topic for topic in dict.fromkeys(industry_topics) if topic not in document_text]
+    if uncovered_industries:
+        document_body = False
+        execution_limits += "\n\n산업별 위험 근거 미확보: " + ", ".join(uncovered_industries) + ". 일반 상품의 위험등급은 해당 산업 위험의 근거로 대체하지 않습니다."
     structured_only = bool(field_contract or graph_answer or vector_sources) and not document_body
     if structured_only:
         response = {"question_id": question_id, "question": question,

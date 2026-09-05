@@ -307,15 +307,22 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
             if values is None:
                 raise CompileError("순서형 조건의 값 집합이 확정되지 않았습니다")
             return f"{col} IN ({', '.join(literal(v) for v in values)})" if values else "FALSE"
-        if op == "contains" or record.get("org_name_variants"):
-            if record.get("org_name_variants") and op not in {"eq", "contains"}:
+        if op == "contains" or record.get("org_name_variants") or (spec and spec.is_organization_name):
+            if (record.get("org_name_variants") or (spec and spec.is_organization_name)) and op not in {"eq", "contains"}:
                 raise CompileError("운용사/발행사 별칭에 지원되지 않는 연산자")
             variants = record.get("org_name_variants") or [value]
             parts = []
             for variant in variants:
                 # POSITION uses literal substring semantics: %, _ are not wildcards.
                 lhs = f"LOWER(REPLACE({col}::text, ' ', ''))"
-                rhs = literal(str(variant).replace(" ", "").lower())
+                name = str(variant).replace(" ", "").lower()
+                if record.get("org_name_variants") or (spec and spec.is_organization_name):
+                    # Legal designators are not part of the distinguishing
+                    # organization name. Keep equality, not fuzzy substrings.
+                    for marker in ("주식회사", "(주)", "㈜"):
+                        lhs = f"REPLACE({lhs}, {literal(marker)}, '')"
+                        name = name.replace(marker, "")
+                rhs = literal(name)
                 parts.append(f"POSITION({rhs} IN {lhs}) > 0" if op == "contains" else f"{lhs} = {rhs}")
             return "(" + " OR ".join(parts) + ")"
         operators = {"eq": "=", "ne": "<>", "neq": "<>", "gte": ">=", "lte": "<=", "gt": ">", "lt": "<", ">": ">", "<": "<"}
