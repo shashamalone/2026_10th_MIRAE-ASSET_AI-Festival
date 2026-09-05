@@ -1,23 +1,26 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""현재 TTL 10개를 persistent pyoxigraph Store로 구축·검증한다."""
+"""
+ontology/*.ttl 10개를 persistent pyoxigraph Store로 구축·검증한다.
+
+원본: gragh/src/kb/build_graph.py. 이 사본은 sql_gen_test/ 최상위에 두고
+config.py(같은 위치)를 그대로 import하도록 sys.path 조작 없이 상대 import한다.
+gragh/ 쪽 원본은 더 이상 참조하지 않는다 — 이 파일과 sql_gen_test/ontology/가
+정본이다.
+"""
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import ARTIFACTS, ROOT  # noqa: E402
+from kb.config import ARTIFACTS, ONTOLOGY_DIR
 
 try:
     from pyoxigraph import RdfFormat, Store
 except ImportError as exc:  # pragma: no cover - 설치 안내 경로
-    raise SystemExit("pyoxigraph 미설치 — python3 -m pip install -r requirements.txt") from exc
+    raise SystemExit("pyoxigraph 미설치 — python3 -m pip install pyoxigraph") from exc
 
-CUTOFF = "2026-07-11"
+CUTOFF = "2026-08-24"
 OUT = ARTIFACTS / "oxigraph"
 MANIFEST = OUT / "manifest.json"
 TBOX = ("common.ttl", "bond_kr.ttl", "etf_kr.ttl", "etf_gl.ttl", "fund_pub.ttl")
@@ -54,8 +57,8 @@ DELETE {{ ?node ?predicate ?object . ?subject ?incoming ?node }} WHERE {{
 
 
 def inputs() -> list[Path]:
-    paths = [ROOT / "ontology" / name for name in FILES]
-    missing = [str(path.relative_to(ROOT)) for path in paths if not path.is_file()]
+    paths = [ONTOLOGY_DIR / name for name in FILES]
+    missing = [str(path) for path in paths if not path.is_file()]
     if missing:
         raise ValueError("TTL 입력 누락: " + ", ".join(missing))
     return paths
@@ -89,7 +92,7 @@ def build() -> dict:
         store = Store(str(candidate))
         for path in paths:
             store.bulk_load(path=str(path), format=RdfFormat.TURTLE)
-            print(f"load {path.relative_to(ROOT)}")
+            print(f"load {path.name}")
         excluded = _scalar(store, FUTURE_COUNT, "count")
         if excluded:
             store.update(DROP_FUTURE)
