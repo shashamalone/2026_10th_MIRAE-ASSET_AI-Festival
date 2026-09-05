@@ -28,6 +28,9 @@ _ORDER_ALIASES = {"asc": "asc", "오름차순": "asc", "desc": "desc", "내림�
 def _fix_condition(c: dict) -> tuple[dict, list[str]]:
     notes: list[str] = []
     c = dict(c)
+    if re.sub(r"\s+", "", c.get("attribute", "")) in {"매수가능여부", "구매가능여부"}:
+        c["attribute"] = "판매가능여부"
+        notes.append("매수/구매 가능 여부를 판매가능여부 정책 개념으로 정규화 (수량의 true 비교 금지)")
     operator = (c.get("operator") or "").strip()
 
     if operator and operator not in _ALLOWED_OPERATORS:
@@ -275,12 +278,79 @@ def _drop_redundant_theme_conditions(conditions: list[dict], relations: list[dic
     return kept, notes
 
 
+def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
+    """Use explicit path endpoints, never unrelated question clauses, as scope.
+
+    A Company -> Holding -> Product path returns products, not companies.
+    A named company issuing bonds is already a catalogue-backed issuer filter.
+    Only redundant positive holding flags with a bound relation are removed.
+    """
+    domains = [d.get("domain") for d in intent.get("product_domain") or []]
+    conditions = list(intent.get("conditions") or [])
+    relations, notes = [], []
+    referenced = {r.get("object_ref") for r in intent.get("relations") or []}
+    companies = {e.get("surface_form") for e in intent.get("target_entities") or []
+                 if e.get("entity_type", "").casefold() in {"company", "organization", "issuer"}}
+    used_ids = {r.get("id") for r in intent.get("relations") or []}
+    for original in intent.get("relations") or []:
+        relation = dict(original)
+        predicate = relation.get("relation", "").casefold()
+        path = " ".join(str(p) for p in relation.get("path") or []).casefold()
+        name = relation.get("object_entity")
+        if (predicate in {"발행", "issued_by", "issuedby", "issues"} and name in companies
+                and "채권" in domains and ("채권" in path or "bond" in path)
+                and not relation.get("object_ref") and relation.get("id") not in referenced):
+            condition = {"domain": "채권", "attribute": "발행사", "operator": "eq", "value": name,
+                         "value_2": "", "kind": "categorical", "applies_to": "target", "grounding_status": "resolved"}
+            if not any(c.get("domain") == "채권" and c.get("attribute") in {"발행사", "발행기관"} and c.get("value") == name for c in conditions):
+                conditions.append(condition)
+            notes.append("명시된 회사→채권 발행 경로를 원본 발행사 컬럼 조건으로 연결했습니다.")
+            continue
+        if predicate in {"편입", "보유", "holding", "held_by", "holds"}:
+            relation["relation"] = "holds"
+            if name in companies:
+                relation["entity_role"] = "company"
+            if (relation.get("subject_domain", "").casefold() in {"company", "기업", "회사"}
+                    and re.search(r"상품|product|etf|펀드", path)):
+                targets = [d for d in domains if d in {"국내ETF", "해외ETF", "펀드"}]
+                # Do not split an intermediate referenced node: its successors
+                # need a single explicit result identity.
+                if targets and relation.get("id") not in referenced:
+                    for index, domain in enumerate(targets):
+                        rid = relation.get("id") if index == 0 else f"{relation.get('id')}_scope{index}"
+                        while index and rid in used_ids:
+                            rid += "x"
+                        used_ids.add(rid)
+                        relations.append({**relation, "id": rid, "subject_domain": domain})
+                    notes.append(f"회사→편입→상품 경로의 반환 범위를 {targets}로 정정했습니다.")
+                    continue
+        relations.append(relation)
+    held_domains = {r.get("subject_domain") for r in relations if r.get("relation") == "holds"
+                    and (r.get("object_entity") or r.get("object_ref"))}
+    kept = []
+    for c in conditions:
+        if (re.sub(r"\s+", "", c.get("attribute", "")) in {"편입여부", "보유여부"}
+                and str(c.get("value", "")).lower() in {"true", "1", "y"}
+                and c.get("operator") == "eq" and c.get("domain") in held_domains):
+            notes.append(f"{c.get('domain')} 편입 여부는 명시된 Graph 관계로 검증하므로 중복 가상 컬럼을 제거했습니다.")
+        else:
+            kept.append(c)
+    fixed = {**intent, "relations": relations, "conditions": kept}
+    if not relations and intent.get("relations") and intent.get("task") == "relation":
+        fixed["task"] = "filter_rank"
+    return fixed, notes
+
+
 def guard_intent(intent: dict) -> tuple[dict, list[str]]:
     """analyze_intent_node의 구조화 출력을 결정론적으로 교정한다.
     (교정된 intent, 변경 로그) 튜플을 돌려준다. 변경이 없으면 로그는 빈
     리스트다."""
     notes: list[str] = []
+    intent, relation_notes = _normalize_product_relations(intent)
+    notes.extend(relation_notes)
     fixed = dict(intent)
+    fixed["product_domain"] = [{**d, "subtype": _strip_blank_strings(d.get("subtype") or [])}
+                               for d in intent.get("product_domain") or []]
 
     # 조건으로 잘못 들어온 관계 표현을 relations로 먼저 옮긴 뒤, 남은
     # conditions와 relations(새로 옮겨진 것 포함) 각각을 마저 교정한다.

@@ -130,12 +130,14 @@ def _fast_plan(question: str, frame: dict, seed_class: str = "Company") -> tuple
         has_holding = bool(predicates & {"holds", "holding", "held_by", "편입", "보유"})
         target = str((relations[-1] if relations else {}).get("subject_domain", "")).casefold()
         etf_target = "etf" in target or (has_holding and not target)
+        fund_target = target in {"펀드", "fund", "publicfund"}
         relation_text = ""
     else:
         relation_text = " ".join([question] + [x.get("raw", "") for x in relations]).casefold()
         has_subsidiary = "자회사" in relation_text or "출자" in relation_text
         has_holding = "편입" in relation_text or "보유" in relation_text or "포함" in relation_text
         etf_target = "etf" in relation_text or "상장지수" in relation_text
+        fund_target = False
     limit = frame.get("limit") or 100
     if not has_subsidiary and not has_holding:
         return None, []
@@ -148,8 +150,10 @@ def _fast_plan(question: str, frame: dict, seed_class: str = "Company") -> tuple
         return subsidiary_relation_plan(limit=limit), [
             "fp:Company", "fp:SubsidiaryRelation", "fp:Document",
         ]
-    if etf_target:
+    if etf_target or fund_target:
         plan = company_holding_etf_plan(limit=max(limit, 100))
+        if fund_target:
+            plan["nodes"] = [{**n, "class_uri": "fp:PublicFund"} if n["id"] == "etf" else n for n in plan["nodes"]]
         if seed_class == "Security":
             plan["nodes"] = [{**n, "id": "seed"} if n["id"] == "security" else n
                              for n in plan["nodes"] if n["id"] != "seed"]
@@ -158,7 +162,7 @@ def _fast_plan(question: str, frame: dict, seed_class: str = "Company") -> tuple
         elif seed_class != "Company":
             return None, []
         return plan, [
-            "fp:Company", "fp:Security", "fp:Holding", "fp:ETF", "fp:Document",
+            "fp:Company", "fp:Security", "fp:Holding", "fp:PublicFund" if fund_target else "fp:ETF", "fp:Document",
         ]
     return None, []
 

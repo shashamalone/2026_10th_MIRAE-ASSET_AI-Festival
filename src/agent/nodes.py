@@ -2011,7 +2011,9 @@ def generate_answer_node(state: PipelineState) -> dict:
         response = {"question_id": question_id, "question": question,
                     "retrieved_context": retrieved_context,
                     "think_trace": execution_summary,
-                    "answer": "\n\n".join(p for p in [field_answer, graph_answer,
+                    "answer": "\n\n".join(p for p in [
+                        "제공된 데이터로는 이 질문에 답변할 수 없습니다." if not field_answer and not graph_answer else "",
+                        field_answer, graph_answer,
                         ("문서 기반 설명 확인 불가: " + ", ".join(narrative_topics) + ". 대응하는 문서 본문을 확보하지 못했습니다.") if narrative_topics else "",
                         vector_sources, execution_limits] if p)}
         return {"answer": json.dumps(response, ensure_ascii=False),

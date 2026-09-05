@@ -75,6 +75,16 @@ def main():
         lines += ["", "실제 실행 로그:", "", "```text", "\n".join(trace.get("trace_messages") or []), "```"]
         if trace.get("exception"):
             lines += ["", "예외:", "", "```text", str(trace["exception"]), "```"]
+        for replay_path in sorted(run.glob(f"*replay*/{qid}.json")):
+            replay = json.loads(replay_path.read_text(encoding="utf-8"))
+            lines += ["", f"### 수정 후 무료 조회 검증 ({replay_path.parent.name})", "",
+                      "이전 의도 기록을 사용한 SQL/결정론적 Graph 검증입니다. 의도 분석·임베딩·설명 LLM을 다시 실행하지 않았으며 단회 정답률로 집계하지 않습니다.",
+                      "", "```json", json.dumps(replay.get("verification"), ensure_ascii=False, indent=2), "```",
+                      "", (replay.get("answer") or {}).get("answer", "(답변 없음)")]
+            for result in (replay.get("step_results") or {}).values():
+                for field, language in (("sql", "sql"), ("sparql", "sparql")):
+                    if result.get(field):
+                        lines += ["", "```" + language, result[field], "```"]
     path = run / "문항별_수정검토_Q5_Q7-Q35.md"
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     print(json.dumps({"report": str(path), "executed": len(traces), "requested": len(ids),

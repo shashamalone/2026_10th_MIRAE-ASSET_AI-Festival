@@ -53,7 +53,7 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
 # A provenance request is a set of source-date columns, not one guessed column.
 PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일", "수치갱신일",
-                       "수치기준일", "지표기준일", "수익률기준일", "데이터기준일", "수치의갱신일"}
+                       "수치기준일", "지표기준일", "수익률기준일", "데이터기준일", "수치의갱신일", "aum기준일"}
 
 
 def is_source_column_request(label: str) -> bool:
@@ -610,6 +610,8 @@ def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[di
     records: list[dict] = []
     notes: list[str] = []
     for value in subtype or []:
+        if not str(value or "").strip():
+            continue
         mapped = rdb_schema.resolve_subtype_condition(domain, value)
         if domain in {"국내ETF", "해외ETF"} and value.upper() not in {"ETF", "ETN"}:
             stripped = re.sub(r"\s*(?:ETF|ETN)$", "", value, flags=re.IGNORECASE).strip()

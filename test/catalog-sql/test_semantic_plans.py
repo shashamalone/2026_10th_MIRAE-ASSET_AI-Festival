@@ -11,6 +11,41 @@ from tools import catalog_sql, rdb_schema, schema_snapshot
 
 
 class SemanticPlanTests(unittest.TestCase):
+    def test_blank_subtype_is_not_a_filter(self):
+        from agent.intent_guard import guard_intent
+        fixed, _ = guard_intent({"product_domain": [{"domain": "국내ETF", "subtype": ["", " "]}]})
+        self.assertEqual(fixed["product_domain"][0]["subtype"], [])
+        self.assertEqual(utils.resolve_subtype_conditions("국내ETF", [""])[0], [])
+
+    def test_company_issuer_and_holding_paths_keep_separate_scopes(self):
+        from agent.intent_guard import guard_intent
+        intent = {"product_domain": [{"domain": d} for d in ("채권", "국내ETF", "펀드")],
+                  "target_entities": [{"entity_type": "company", "surface_form": "예시전자"}],
+                  "conditions": [{"domain": "국내ETF", "attribute": "편입 여부", "operator": "eq", "value": "true"},
+                                 {"domain": "채권", "attribute": "매수 가능 여부", "operator": "eq", "value": "true"}],
+                  "relations": [{"id": "R1", "relation": "발행", "subject_domain": "Company", "object_entity": "예시전자", "path": ["발행사", "채권"]},
+                                {"id": "R2", "relation": "편입", "subject_domain": "Company", "object_entity": "예시전자", "path": ["기업", "편입증권", "상품"], "entity_role": "product"}]}
+        fixed, _ = guard_intent(intent)
+        self.assertEqual({r["subject_domain"] for r in fixed["relations"]}, {"국내ETF", "펀드"})
+        self.assertTrue(all(r["relation"] == "holds" and r["entity_role"] == "company" for r in fixed["relations"]))
+        self.assertEqual({c["attribute"] for c in fixed["conditions"]}, {"발행사", "판매가능여부"})
+        plan = self.planner.plan_query_node({"intent": fixed, "question": "회사 발행 채권과 편입 상품"})
+        for step in plan["plan"]:
+            if step["engine"] == "rdb":
+                self.assertEqual(bool(step["depends_on"]), step["domain"] != "채권")
+        self.assertEqual(guard_intent(fixed)[0], fixed)
+
+    def test_unbound_or_negative_holding_flag_is_not_dropped(self):
+        from agent.intent_guard import guard_intent
+        for value in ("true", "false"):
+            condition = {"domain": "펀드", "attribute": "편입여부", "value": value, "operator": "eq"}
+            self.assertEqual(guard_intent({"conditions": [condition]})[0]["conditions"], [condition])
+
+    def test_fund_holdings_use_publicfund_not_etf(self):
+        plan, _ = self.graph._fast_plan("회사 편입 펀드", {"relation_scope": True, "relations": [{"relation": "holds", "subject_domain": "펀드"}]})
+        self.assertTrue(any(n["class_uri"] == "fp:PublicFund" for n in plan["nodes"]))
+        self.assertFalse(any(n["class_uri"] == "fp:ETF" for n in plan["nodes"]))
+
     def test_shared_topic_cannot_leave_fund_branch_unfiltered(self):
         intent = {"product_domain": [{"domain": "국내ETF", "subtype": ["바이오"]}, {"domain": "펀드", "subtype": ["공모펀드"]}]}
         with patch.object(utils, "_ontology_labels", side_effect=lambda axis: [{"label": "국내", "aliases": {"국내"}}] if axis == "InvestmentRegion" else [{"label": "글로벌바이오", "aliases": {"글로벌바이오"}}]):
