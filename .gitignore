@@ -16,3 +16,6 @@ ontology.zip
 
 artifacts/
 
+
+# git worktree 컨테이너 (nested worktree 가 저장소에 섞이지 않게)
+worktrees/
