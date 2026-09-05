@@ -1,0 +1,87 @@
+{
+  "schema_version": 2,
+  "description": "국내 ETF 4개 운용사 편입관계의 수집·Graph 생성 provenance 요약. 상품 정본일과 관계 실제 기준일을 구분한다.",
+  "organizer_cutoff": "2026-08-24",
+  "snapshot_as_of": "2026-08-21",
+  "organizer_source": {
+    "path": "data/data/csv/pref01n001_data.xlsx",
+    "sha256": "18c4329d8fc8768d030316816f3e6e48226a3c217db3354245b766a2c6f6c592",
+    "rows": 1780,
+    "note": "운영 /db/version의 PREF01N001 data_sha256과 일치"
+  },
+  "normalized_master": {
+    "path": "data/snapshots/legacy-build-2026-08-24/data/csv/PREF01N001_etf_kr_master_20260824.csv",
+    "sha256": "89359782d5b021e5bf87809147405b1d228f41dd83929936504bf4a7718d1509",
+    "rows": 1780,
+    "etf_products": 1235,
+    "etn_products": 545
+  },
+  "collection": {
+    "run_id": "20260906T146-full/codex-t146-holdings-0906",
+    "started_at": "2026-09-05T17:45:05+00:00",
+    "completed_at": "2026-09-05T17:45:37+00:00",
+    "artifact_root": "artifacts/runs/20260906T146-full/codex-t146-holdings-0906",
+    "raw_provenance_sha256": "a4d0c8eef1178e75b0cba99ec7c834cd94d355ab05beff25c0ddd0305db3fb56",
+    "collection_manifest_sha256": "9dde726aae22f109cebc00f0d4321b5c06e43f2daf0497dab1cab05e67014d16",
+    "relation_path": "artifacts/runs/20260906T146-full/codex-t146-holdings-0906/etf_holding.csv",
+    "relation_sha256": "91c0604899cea2eb3ecb3adae86e03cf13c3df302429f45b270ba8430c9c93a8",
+    "eligible_products": 725,
+    "validated_products": 723,
+    "unavailable_products": 2,
+    "excluded_inactive_products": 25,
+    "holding_rows": 47244,
+    "weight_sum_anomalies": 0,
+    "by_brand": {
+      "KODEX": {"eligible_products": 240, "validated_products": 240, "holding_rows": 18024},
+      "TIGER": {"eligible_products": 231, "validated_products": 231, "holding_rows": 14521},
+      "RISE": {"eligible_products": 142, "validated_products": 142, "holding_rows": 8394},
+      "ACE": {"eligible_products": 112, "validated_products": 110, "holding_rows": 6305}
+    },
+    "date_evidence": {
+      "KODEX": "response field pdf.gijunYMD",
+      "ACE": "response field pdfList[].std_DT",
+      "TIGER": "publisher endpoint parameter fixDate plus non-empty response and raw hash",
+      "RISE": "publisher endpoint parameter searchDate plus non-empty response and raw hash"
+    },
+    "unavailable": [
+      {
+        "ticker": "0233A0",
+        "isin": "KR70233A0001",
+        "name": "ACE 삼성전자SK하이닉스플러스채권혼합50",
+        "reason": "publisher returned pdfList=[] for 2026-08-21"
+      },
+      {
+        "ticker": "265690",
+        "isin": "KR7265690008",
+        "name": "ACE 러시아MSCI(합성)",
+        "reason": "publisher returned pdfList=[] for 2026-08-21"
+      }
+    ]
+  },
+  "graph_bundle": {
+    "bundle_id": "ontology-holdings-20260821-de30afc2bcd4",
+    "artifact_path": "artifacts/runs/20260906T146-graph/codex-t146-holdings-0906/ontology-bundle",
+    "manifest_sha256": "e76e9f5eafae3d55241e4f975d76396fbaadc4b538c5b9596a476827c1ea18c6",
+    "files_sha256_manifest": "73adc2f067c2df6d228857876cefd8d28ffb1f92f079b70b3b33c97c967d3b75",
+    "archive_sha256": "890500cc19f4d83203cee4a23130f6896eb1284643c1180cb844cdd66dfda395",
+    "archive_bytes": 6253184,
+    "named_graphs": 10,
+    "default_graph_triples": 0,
+    "abox_triples": 1224155,
+    "tbox_triples": 2543,
+    "union_unique_triples": 1226698,
+    "holding_documents": 723,
+    "holding_supported_by_edges": 47244,
+    "removed_baseline_holdings": 47016,
+    "new_holdings": 47244,
+    "new_security_nodes": 831
+  },
+  "deployment": {
+    "status": "local_verified_remote_pending",
+    "previous_remote_holding_as_of": "2026-07-10",
+    "previous_remote_holding_rows": 47016,
+    "previous_remote_graph_triples": 1169374,
+    "target_volume": "financial-agent-prep_oxigraph-holdings-20260821-de30afc2bcd4",
+    "rollback_policy": "retain the previously active versioned Docker volume and restore its API expected triple count"
+  }
+}
