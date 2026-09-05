@@ -3,6 +3,41 @@
 Base: `2ed94ba` (T-138's final prompt/name-normalization handoff).
 Task's original base: `4a7cb37`. No DB writes or new dependencies.
 
+## 직접 질문하는 노트북
+
+[manual_query_debug.ipynb](manual_query_debug.ipynb)을 VS Code에서 열고
+`C:\Users\admin\.venvs\mirae-agent\Scripts\python.exe` (Python 3.13) 커널을 선택한다.
+환경 확인 셀을 실행한 뒤 `QUESTION`을 적고 `RUN_LIVE=True`로 바꿔 질문 입력 셀과
+실제 실행 셀을 차례로 실행한다. 초기 상태는 `RUN_LIVE=False`이므로 유료 호출이 없다.
+이 worktree의 `agent.graph.app.stream`을 직접 실행하며 18080 HTTP 서버를 사용하지 않는다.
+
+의도 분석 원본/검수본, 계획·의존관계, 노드 입출력·시간, RDB SQL 및 상세 조회,
+Graph SPARQL, Vector 출처·청크, 실제 하위 호출·파라미터·전체 반환 데이터, 모델 사용량과
+최종 답변을 별도 셀에서 본다. API 헤더·키·모델 프롬프트나 비공개 추론은 수집하지 않는다.
+화면 `ROW_LIMIT=None`은 반환된 행을 모두 표시하지만 DB 쿼리 LIMIT를 늘리지는 않는다.
+
+질문 전체 실행은 한 번이며 SDK 채팅 재시도와 SQL 429 대기 반복을 임시로 끈다.
+SQL 시도 예산은 1로 제한한다. 여러 계획 단계와 모델 호출은 여전히 있을 수 있다.
+같은 커널의 같은 질문은 실패한 경우에도 중복 실행을 차단하며 의도적인 재시도만
+`ALLOW_REPEAT=True`로 허용한다. 소스나 환경을 바꾸면 커널을 재시작한다.
+
+결과는 `artifacts/runs/manual-<timestamp>-<uuid>/codex-t139-sql-0905/`에 저장한다.
+결과 확인 셀은 API를 호출하지 않는다. `LOAD_RUN`으로 이 폴더/trace.json 또는 이전
+테스트의 traces.jsonl을 열 수 있다. 과거 기록에 없는 노드 입력·호출은 복구하지 않는다.
+민감한 질문/DB/문서 내용은 저장되므로 공유 전 검토하고 노트북 출력을 지운다.
+
+오프라인 검증 (패키지 설치 없음):
+
+```powershell
+$env:PYTHONPATH='src'
+& C:\Users\admin\.venvs\mirae-agent\Scripts\python.exe -m unittest discover -s test/catalog-sql -v
+& C:\Users\admin\anaconda3\python.exe test/catalog-sql/validate_manual_notebook.py --python C:\Users\admin\.venvs\mirae-agent\Scripts\python.exe --out artifacts/runs/<new-qa-run-id>/codex-t139-sql-0905
+```
+
+마지막 명령의 Anaconda는 기존 nbformat/nbclient를 쓰는 검증 실행기일 뿐이며,
+실제 노트북 커널은 `--python`의 Python 3.13이다. 검증은 외부 네트워크를 차단하고
+임시 커널 설정을 사용한 뒤 정리한다. 전달 노트북에 실행 출력을 덮어쓰지 않는다.
+
 ## Contract
 
 - `schema_snapshot` remains the only physical-schema authority.
