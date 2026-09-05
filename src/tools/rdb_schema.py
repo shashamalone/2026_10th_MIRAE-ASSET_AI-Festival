@@ -153,6 +153,24 @@ DOMAIN_TABLE_INFO: dict[str, dict[str, str]] = {
     "펀드": {"table": "raw.prfd01n001"},
 }
 
+# 도메인별 실질 기준일. 배포일(DATA_SNAPSHOT_DATE)이 아니라 각 테이블의
+# 기준일 컬럼 실측값(위 참고 주석)을 따른다. 답변 근거의 "기준일" 표기에 쓴다.
+DOMAIN_AS_OF: dict[str, str] = {
+    "채권": "2026-08-21",    # info_base_dt
+    "국내ETF": "2026-08-22",  # ref_base_dt (수치 기준)
+    "해외ETF": "2026-08-22",  # cu_upt_dt·du_nav_base_dt
+    "펀드": "2026-08-21",    # fd_price_bas_dt 최신
+}
+
+
+def get_domain_as_of(domain: str) -> str:
+    """도메인(또는 "채권+국내ETF" 형태의 UNION 그룹)의 실질 기준일 문자열.
+    모르는 도메인은 배포 기준일(DATA_SNAPSHOT_DATE)로 폴백한다."""
+    names = [d.strip() for d in (domain or "").split("+") if d.strip()]
+    if len(names) > 1:
+        return "·".join(f"{d} {DOMAIN_AS_OF.get(d, DATA_SNAPSHOT_DATE)}" for d in names)
+    return DOMAIN_AS_OF.get(names[0] if names else "", DATA_SNAPSHOT_DATE)
+
 
 # ---------------------------------------------------------------------------
 # 보강(enriched) 테이블 참조 정보. AttributeSpec.join_table에 실제로 쓰이는
@@ -1245,6 +1263,40 @@ ATTRIBUTE_CATALOG: dict[str, dict[str, AttributeSpec]] = {
     "펀드": FUND_ATTRIBUTES,
 }
 
+# 국내ETF 거래정지 플래그. 2026-09-05 실측: pd_tr_yn '1' 82건(전부 pd_sale_yn '0'), '0' 1,695건, 결측 3건.
+# 의도 분석이 "거래정지가 아니며"를 조건으로 자주 내는데 카탈로그에 없어 LLM 폴백이
+# pd_tr_yn = '거래정지 아님' 같은 리터럴을 써 0행이 났다(Q12).
+DOMESTIC_ETF_ATTRIBUTES["거래정지여부"] = AttributeSpec(
+    column="pd_tr_yn",
+    value_type="numeric_flag",
+    true_condition="= '1'",
+    note="'1'=거래정지, '0'=정상 거래. text 컬럼이라 따옴표가 필요하다. '거래정지 아님'은 NOT (pd_tr_yn = '1').",
+)
+
+# 개념명 별칭. 의도 분석이 만드는 표현(판매상태·AUM·총보수 등)을 기존 spec 객체에 그대로 연결한다.
+# 새 규칙이 아니라 같은 컬럼·같은 value_type을 가리키는 이름을 늘리는 것이며, 별칭이 없으면
+# LLM 폴백이 컬럼만 맞추고 값 인코딩을 모른 채 리터럴을 지어낸다(2026-09-03 Q12·Q19 실측).
+# resolve_concepts_for_domain이 공백 제거·소문자로 비교하므로 "판매 상태"·"aum"도 여기에 걸린다.
+_CONCEPT_ALIASES: dict[str, dict[str, str]] = {
+    "국내ETF": {
+        "판매상태": "판매가능여부", "판매여부": "판매가능여부", "판매중": "판매가능여부", "판매가능": "판매가능여부",
+        "거래정지": "거래정지여부", "거래정지상태": "거래정지여부",
+        "연금거래가능": "연금거래가능여부", "연금거래여부": "연금거래가능여부", "연금거래": "연금거래가능여부",
+        "AUM": "순자산", "순자산총액": "순자산", "총보수": "총보수율", "보수": "총보수율",
+    },
+    "해외ETF": {
+        "AUM": "순자산", "순자산총액": "순자산", "총보수": "총보수율", "보수": "총보수율", "복제방식": "복제방법",
+    },
+    "펀드": {
+        "판매상태": "판매가능여부", "판매여부": "판매가능여부", "판매중": "판매가능여부", "판매가능": "판매가능여부",
+        "AUM": "순자산", "순자산총액": "순자산",
+    },
+    "채권": {"발행기관명": "발행기관", "발행사명": "발행사", "발행회사": "발행사"},
+}
+for _domain, _aliases in _CONCEPT_ALIASES.items():
+    for _alias, _key in _aliases.items():
+        ATTRIBUTE_CATALOG[_domain].setdefault(_alias, ATTRIBUTE_CATALOG[_domain][_key])
+
 
 # 도메인별 개념 카탈로그의 검증 수준. 넷 다 2026-08-24 배포본 data.xlsx로
 # 직접 프로파일링해서 검증했으므로 전부 verified다.
@@ -1430,6 +1482,11 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
         "장외거래": {"column": "pd_exg_mkt", "operator": "eq", "value": "장외"},
         "장외채권": {"column": "pd_exg_mkt", "operator": "eq", "value": "장외"},
 
+        # 6b. 통화 (curr_cd). "원화채권"은 subtype으로 자주 오는데 매핑이 없으면 조건이 조용히 빠진다(Q11 실측).
+        "원화채권": {"column": "curr_cd", "operator": "eq", "value": "KRW"},
+        "원화": {"column": "curr_cd", "operator": "eq", "value": "KRW"},
+        "KRW채권": {"column": "curr_cd", "operator": "eq", "value": "KRW"},
+
         # 7. 모집구분 (bd_ofr_tcd) - 유사어 확장
         "공모": {"column": "bd_ofr_tcd", "operator": "eq", "value": "공모"},
         "공모발행": {"column": "bd_ofr_tcd", "operator": "eq", "value": "공모"},
@@ -1465,12 +1522,34 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
         "액티브": {"column": "cu_strtegy", "operator": "eq", "value": "액티브"},
         "레버리지": {"column": "cu_lev_fector", "operator": ">", "value": "1"},
         "인버스": {"column": "cu_lev_fector", "operator": "<", "value": "0"},
+        # 자산군(wu_inv_ast_type, 결측 없음). "주식형 ETF"·"채권 ETF"처럼 subtype으로 자주 온다.
+        # 매핑이 없으면 조건이 조용히 빠져 주식 ETF가 채권 ETF 질문 상위에 오른다(2026-09-03 Q18 실측).
+        "주식형": {"column": "wu_inv_ast_type", "operator": "eq", "value": "주식"},
+        "주식 ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "주식"},
+        "주식ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "주식"},
+        "채권형": {"column": "wu_inv_ast_type", "operator": "eq", "value": "채권"},
+        "채권 ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "채권"},
+        "채권ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "채권"},
+        "원자재": {"column": "wu_inv_ast_type", "operator": "eq", "value": "원자재"},
+        "혼합자산": {"column": "wu_inv_ast_type", "operator": "eq", "value": "혼합자산"},
+        "단기자금": {"column": "wu_inv_ast_type", "operator": "eq", "value": "단기자금"},
         # "테마형"은 대응 컬럼이 없다(모듈 docstring의 섹터/테마 설명 참고).
         # 이 값은 매핑을 안 넣어서 조건 없이 넘어가게 한다.
     },
     "해외ETF": {
         "레버리지": {"column": "cu_lev_fector", "operator": ">", "value": "1"},
         "인버스": {"column": "cu_lev_fector", "operator": "<", "value": "0"},
+        # 자산군(wu_inv_ast_type, 영문 값·0.2% 결측)
+        "주식형": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Equity"},
+        "주식 ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Equity"},
+        "주식ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Equity"},
+        "채권형": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Bond"},
+        "채권 ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Bond"},
+        "채권ETF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Bond"},
+        "원자재": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Commodity"},
+        "혼합자산": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Mixed Assets"},
+        "단기자금": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Money Market"},
+        "MMF": {"column": "wu_inv_ast_type", "operator": "eq", "value": "Money Market"},
     },
     "펀드": {
         "주식형": {"column": "or_attr_desc", "operator": "eq", "value": "주식형"},

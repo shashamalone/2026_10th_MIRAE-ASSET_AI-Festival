@@ -42,7 +42,7 @@ from agent.state import ready_step_ids
 
 from agent.graph_logic import graph_orchestrator
 from tools import rdb_schema
-from agent import utils
+from agent import sql_builder, utils
 from agent.get_clova import embed
 from tools.vector_search import get_coverage, resolve_product_ids, search_documents
 
@@ -138,6 +138,9 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
     """role="target"인 RDB 단계(최종 답의 일부가 되는 조회). intent가
     구조화한 conditions/sort/fields를 그대로 쓴다."""
     step, policy_notes = utils.apply_sale_policy(step)
+    # 상품명은 완전일치 우선(AGENTS.md): Graph 엔티티 해소로 상품코드를 얻으면 LIKE 대신 코드 조건을 쓴다.
+    step, name_notes = utils.resolve_product_name_entities(step)
+    policy_notes = policy_notes + name_notes
     domain = step["domain"]
     needed_concepts = utils.collect_needed_concepts(step)
     concept_to_spec, unresolved = utils.resolve_concepts_for_domain(domain, needed_concepts, question, _llm_plan)
@@ -160,16 +163,30 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
             "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
             "skipped_reason": f"유효하지 않은 조건: {details}",
         }
-
-    schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=apply_limit)
-    try:
-        draft = _draft_query_description(question, schema_block)
-        sql_result = _write_sql(draft, schema_block)
-    except Exception as e:
+    missing_tables = utils.missing_join_tables(conn, resolved_schema)
+    if missing_tables:
         return {
             "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-            "error": f"SQL 생성 LLM 호출 실패: {e}",
+            "skipped_reason": f"보강 테이블이 DB에 없어 이 조건·필드를 조회할 수 없음: {missing_tables}",
         }
+
+    schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=apply_limit)
+    # 카탈로그가 확정한 조건·정렬·필드만으로 표현되는 질의는 LLM 없이 컴파일한다(2026-09-03 측정에서
+    # RDB 오답 52회차의 원인이던 플래그 리터럴·폐기 컬럼·단위 오환산이 이 경로에서는 생기지 않는다).
+    # 표현 불가(None)면 기존 LLM 초안→SQL 경로로 그대로 폴백한다.
+    compiled = sql_builder.compile_sql(resolved_schema, apply_limit=apply_limit)
+    if compiled is not None:
+        draft = "(결정론 컴파일 - LLM 초안 생략)"
+        sql_result = compiled
+    else:
+        try:
+            draft = _draft_query_description(question, schema_block)
+            sql_result = _write_sql(draft, schema_block)
+        except Exception as e:
+            return {
+                "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
+                "error": f"SQL 생성 LLM 호출 실패: {e}",
+            }
 
     run = _run_sql_with_retry(conn, domain, question, schema_block, sql_result, max_retries)
     result = {
@@ -177,6 +194,7 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
         "rows": run["rows"], "count": len(run["rows"]),
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
+        "sql_source": "deterministic" if compiled is not None else "llm",
     }
     if run["error"]:
         result["error"] = run["error"]
@@ -223,6 +241,8 @@ def _execute_merged_target_group(
         step_id = step["step_id"]
         domain = step["domain"]
         step2, policy_notes = utils.apply_sale_policy(step)
+        step2, name_notes = utils.resolve_product_name_entities(step2)
+        policy_notes = policy_notes + name_notes
         # UNION 서브쿼리는 4개 고정 별칭(상품코드/상품명/도메인/정렬값)만
         # 내보낸다 - 도메인마다 컬럼 구성이 달라도 UNION ALL은 컬럼
         # 개수·순서가 똑같아야 하므로, 이 그룹에서는 다른 요청 필드를
@@ -245,6 +265,8 @@ def _execute_merged_target_group(
             skipped_reason = f"유효하지 않은 조건: {details}"
         elif not resolved_schema["sort"]:
             skipped_reason = "정렬 기준을 이 도메인 컬럼으로 해석하지 못해 그룹 정렬에 참여할 수 없음"
+        elif utils.missing_join_tables(conn, resolved_schema):
+            skipped_reason = f"보강 테이블이 DB에 없어 조회 불가: {utils.missing_join_tables(conn, resolved_schema)}"
 
         if skipped_reason:
             results[step_id] = {
@@ -254,17 +276,22 @@ def _execute_merged_target_group(
             continue
 
         schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=False, union_mode=True)
-        try:
-            draft = _draft_query_description(question, schema_block)
-            sql_result = _write_sql(draft, schema_block)
-        except Exception as e:
-            # 이 도메인 하나만 그룹에서 제외한다(질문 전체를 죽이지 않는다) -
-            # 미해결 개념/무효 조건과 같은 skipped_reason 취급.
-            results[step_id] = {
-                "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-                "skipped_reason": f"SQL 생성 LLM 호출 실패로 그룹에서 제외: {e}",
-            }
-            continue
+        compiled = sql_builder.compile_sql(resolved_schema, apply_limit=False, union_mode=True)
+        if compiled is not None:
+            sql_result = compiled
+        else:
+            try:
+                draft = _draft_query_description(question, schema_block)
+                sql_result = _write_sql(draft, schema_block)
+            except Exception as e:
+                # 이 도메인 하나만 그룹에서 제외한다(질문 전체를 죽이지 않는다) -
+                # 미해결 개념/무효 조건과 같은 skipped_reason 취급.
+                results[step_id] = {
+                    "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
+                    "skipped_reason": f"SQL 생성 LLM 호출 실패로 그룹에서 제외: {e}",
+                }
+                continue
+        all_notes.extend(sql_result.get("assumptions") or [])
 
         contributing_step_ids.append(step_id)
         contributing_domains.append(domain)
@@ -1167,7 +1194,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 continue
             parts.append(
                 f"[RDB:{result.get('domain', '')}] {result.get('count', 0)}건 조회, "
-                f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE}, SQL: {result['sql']}"
+                f"기준일 {rdb_schema.get_domain_as_of(result.get('domain', ''))}, SQL: {result['sql']}"
             )
         elif engine == "graph":
             if result.get("status") == "chained":

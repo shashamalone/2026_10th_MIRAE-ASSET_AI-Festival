@@ -120,6 +120,53 @@ def collect_needed_concepts(step: dict) -> list[str]:
     return deduped
 
 
+# 도메인 → Graph 엔티티 클래스. fp:productCode는 RDB 상품코드 컬럼(pd_no/pd_itm_no/itm_no)과
+# 같은 ISIN/RIC 값이라(nodes._apply_graph_handoff 주석·2026-09-05 실측) 코드 조건으로 바로 쓸 수 있다.
+_DOMAIN_GRAPH_CLASS = {"국내ETF": "ETF", "해외ETF": "ETF", "펀드": "PublicFund", "채권": "Bond"}
+
+
+def resolve_product_name_entities(step: dict) -> tuple[dict, list[str]]:
+    """product_name_entities를 Graph 엔티티 해소(완전일치·정규형 완전일치)로
+    '상품코드 in (...)' 조건으로 바꾼다. AGENTS.md "상품명은 완전일치 우선,
+    유사명 대체 금지" 원칙이다 - 'KODEX 200'을 LIKE '%KODEX 200%'로 걸면
+    14건이 잡히는 사고(2026-09-03 실측 Q4)를 여기서 막는다.
+
+    해소되지 않은 이름(ambiguous·not_found·Graph 장애)은 product_name_entities에
+    그대로 남겨 build_condition_list가 예전처럼 contains로 처리하고, 그 사실을
+    메모로 남긴다. 부분일치는 폴백이지 대체가 아니다."""
+    entities = step.get("product_name_entities") or []
+    class_name = _DOMAIN_GRAPH_CLASS.get(step.get("domain", ""))
+    if not entities or not class_name:
+        return step, []
+    from agent.graph_logic import graph_entity  # RDB만 쓰는 스크립트가 Graph 스토어를 열지 않도록 지연 import
+
+    remaining: list[dict] = []
+    codes: list[str] = []
+    notes: list[str] = []
+    for e in entities:
+        surface = str(e.get("surface_form") or "").strip()
+        try:
+            res = graph_entity.resolve_entity(surface, class_name)
+        except Exception as exc:  # noqa: BLE001 - Graph 장애는 RDB 조회를 막지 않는다
+            notes.append(f"'{surface}' Graph 해소 실패({type(exc).__name__}) - 상품명 부분일치로 조회")
+            remaining.append(e)
+            continue
+        if res["status"] == "resolved" and res.get("codes"):
+            codes.extend(res["codes"])
+            notes.append(f"'{surface}' → 상품코드 {list(res['codes'])} ({res.get('match_mode')} 완전일치)")
+        else:
+            notes.append(f"'{surface}' 완전일치 상품 없음({res['status']}) - 상품명 부분일치로 조회(유사명 대체 아님)")
+            remaining.append(e)
+    if not codes:
+        return step, notes
+    new_step = dict(step)
+    new_step["product_name_entities"] = remaining
+    new_step["conditions"] = list(step.get("conditions") or []) + [
+        {"attribute": "상품코드", "operator": "in", "value": ", ".join(dict.fromkeys(codes)), "value_2": ""}
+    ]
+    return new_step, notes
+
+
 def build_condition_list(step: dict) -> list[dict]:
     """step의 conditions에 product_name_entities를 조건 형태로 흡수해서
     하나의 리스트로 합친다. 이후 코드는 이 리스트 하나만 다루면 된다.
@@ -129,11 +176,21 @@ def build_condition_list(step: dict) -> list[dict]:
     conditions: list[dict] = [dict(c) for c in step.get("conditions", [])]
 
     for e in step.get("product_name_entities") or []:
-        # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
-        # contains로 매칭한다.
-        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": ""})
+        # resolve_product_name_entities가 완전일치로 못 푼 이름만 여기 남는다.
+        # 그때만 contains 폴백을 쓴다(공백·접미사 표기 차이 대비).
+        surface = str(e["surface_form"]).strip()
+        # "국민성장펀드"처럼 화자가 붙인 상품군 토큰은 이름의 일부가 아니다. 그대로 LIKE를 걸면
+        # '미래에셋…국민성장혼합자산…'을 놓친다(2026-09-05 Q25 실측 0행). graph_entity의 5단계와 같은 규칙.
+        for token in _PRODUCT_TYPE_SUFFIXES:
+            if surface.endswith(token) and len(surface) - len(token) >= 2:
+                surface = surface[: -len(token)].strip()
+                break
+        conditions.append({"attribute": "상품명", "operator": "contains", "value": surface, "value_2": ""})
 
     return conditions
+
+
+_PRODUCT_TYPE_SUFFIXES = (" ETF", "ETF", " ETN", "ETN", " 공모펀드", "공모펀드", " 펀드", "펀드", " 채권", "채권")
 
 
 def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[dict], list[str]]:
@@ -655,6 +712,41 @@ RDB_API_BASE_URL = os.environ.get("RDB_API_BASE_URL", "http://40.82.145.44:8000"
 RDB_API_TIMEOUT = float(os.environ.get("RDB_API_TIMEOUT", "30"))
  
  
+_AVAILABLE_TABLES: set[str] | None = None
+
+
+def available_tables(conn) -> set[str] | None:
+    """원격 DB에 실제로 존재하는 schema.table 집합. 프로세스당 1회만 조회한다.
+    카탈로그가 로컬 빌드 기준으로 참조하는 보강 테이블이 원격에 없을 수 있다
+    (2026-09-05 실측: enriched.etf_kr_enriched 부재 → 9-03 측정에서 UndefinedTable
+    19회, 매번 LLM 수정 3회를 헛돌았다). 조회 자체가 실패하면 None(알 수 없음)."""
+    global _AVAILABLE_TABLES
+    if _AVAILABLE_TABLES is None:
+        try:
+            rows = run_sql(conn, "SELECT table_schema || '.' || table_name AS t FROM information_schema.tables "
+                                 "WHERE table_schema NOT IN ('pg_catalog', 'information_schema')")
+            _AVAILABLE_TABLES = {r["t"] for r in rows}
+        except Exception:  # noqa: BLE001 - 가드가 조회를 막으면 안 된다
+            return None
+    return _AVAILABLE_TABLES
+
+
+def missing_join_tables(conn, resolved_schema: dict) -> list[str]:
+    """resolved_schema.joins가 참조하는 테이블 중 DB에 없는 것. 실행 전에 걸러
+    '확인할 수 없음'으로 답하게 한다 - 없는 테이블에 LLM 재시도를 붓지 않는다."""
+    tables = available_tables(conn)
+    if tables is None:
+        return []
+    missing = []
+    for j in resolved_schema.get("joins") or []:
+        parts = j.split()
+        if "JOIN" in parts:
+            t = parts[parts.index("JOIN") + 1]
+            if t not in tables and t not in missing:
+                missing.append(t)
+    return missing
+
+
 def get_pg_connection():
     """이름은 호출부 호환을 위해 그대로 뒀다. 실제로는 psycopg2 커넥션이
     아니라 재사용 가능한 requests.Session이다. .close()는 requests.Session에도
