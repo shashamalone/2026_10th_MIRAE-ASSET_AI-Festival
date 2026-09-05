@@ -350,6 +350,16 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
             if not any(f.get("column") == as_of for f in fields):
                 fields.append({"attribute": f"출처기준일({as_of})", "column": as_of,
                                "spec": spec_for_column(domain, as_of, metadata)})
+    output_fields = []
+
+    def output_binding(record: dict, key: str) -> dict:
+        name = record["column"]
+        info = metadata.get(name, {})
+        return {"attribute": record["attribute"], "key": key,
+                "column": name if "." in name else f"{table}.{name}",
+                "as_of_columns": [c.strip() for c in info.get("as_of_column", "").split(",") if c.strip()],
+                "unit": info.get("unit", ""), "zero_null_rule": info.get("zero_null_rule", "")}
+
     if union_mode:
         mapped = {f["attribute"]: f for f in fields}
         if not sort_expr or not {"상품코드", "상품명"} <= mapped.keys():
@@ -357,12 +367,19 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
         projections = [f"{column(mapped['상품코드'])}::text AS code",
                        f"{column(mapped['상품명'])}::text AS name", f"{literal(domain)} AS domain",
                        f"{sort_expr} AS sort_value"]
+        output_fields = [output_binding(mapped["상품코드"], "code"),
+                         output_binding(mapped["상품명"], "name"),
+                         output_binding(sort, "sort_value")]
+        if sort.get("spec") and sort["spec"].value_type == "ordinal":
+            # sort_value is an internal rank, not the original rating/category.
+            output_fields[-1]["attribute"] = f"정렬순위({sort['attribute']})"
     else:
         # Physical output names preserve existing answer provenance and consumers.
         projections, seen = [], set()
         for record in fields + ([sort] if sort else []):
             col = column(record)
             alias = record["column"].split(".")[-1]
+            output_fields.append(output_binding(record, alias))
             if alias not in seen:
                 projections.append(f"{col} AS {identifier(alias)}")
                 seen.add(alias)
@@ -384,4 +401,5 @@ def compile_select(resolved: dict, *, apply_limit: bool = True, union_mode: bool
             if limit is not None:
                 sql += f"\nLIMIT {limit}"
     return {"sql": sql, "assumptions": assumptions, "compiled": True,
-            "compiler": "catalog-sql-v1", "column_refs": sorted(refs)}
+            "compiler": "catalog-sql-v1", "column_refs": sorted(refs),
+            "output_fields": output_fields}

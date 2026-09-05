@@ -32,8 +32,10 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from agent.get_clova import _llm_answer, _llm_plan
@@ -139,6 +141,13 @@ def _write_sql(draft_text: str, schema_block: str) -> dict:
 
 
 def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max_retries: int) -> dict:
+    result = _execute_target_step_query(step, question, conn, apply_limit, max_retries)
+    # Preserve requested fields even when compilation, policy or execution blocks.
+    result["requested_fields"] = list(step.get("fields") or [])
+    return result
+
+
+def _execute_target_step_query(step: dict, question: str, conn, apply_limit: bool, max_retries: int) -> dict:
     """role="target"인 RDB 단계(최종 답의 일부가 되는 조회). intent가
     구조화한 conditions/sort/fields를 그대로 쓴다."""
     if step.get("graph_handoff_blocked"):
@@ -186,6 +195,7 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
         "sql_compiler": sql_result["compiler"], "column_refs": sql_result["column_refs"],
+        "output_fields": sql_result["output_fields"],
         "unverified_subtypes": resolved_schema.get("unverified_subtypes", []),
     }
     if run["error"]:
@@ -235,6 +245,8 @@ def _execute_merged_target_group(
     schema_blocks: list[str] = []
     all_notes: list[str] = []
     results: dict[str, dict] = {}
+    output_fields_by_domain: dict[str, list] = {}
+    requested_fields_by_domain = {s["domain"]: list(s.get("fields") or []) for s in steps}
 
     for step in steps:
         step_id = step["step_id"]
@@ -288,6 +300,7 @@ def _execute_merged_target_group(
             continue
 
         contributing_step_ids.append(step_id)
+        output_fields_by_domain[domain] = sql_result["output_fields"]
         contributing_domains.append(domain)
         subqueries.append(sql_result["sql"].strip().rstrip(";"))
         schema_blocks.append(f"[{domain} 서브쿼리]\n{schema_block}")
@@ -322,6 +335,8 @@ def _execute_merged_target_group(
         "rows": run["rows"], "count": len(run["rows"]),
         "sql": run["sql"], "assumptions": all_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
+        "output_fields_by_domain": output_fields_by_domain,
+        "requested_fields_by_domain": requested_fields_by_domain,
     }
     if run["error"]:
         results[primary_step_id]["error"] = run["error"]
@@ -1529,6 +1544,199 @@ def _build_answer_preview(merged_rows: list[dict], total_budget: int = 20) -> li
     return [{k: v for k, v in row.items() if not k.startswith("_")} for row in preview]
 
 
+def _field_evidence(label: str, binding: dict | None, row: dict | None,
+                    failure: str | None = None) -> dict:
+    """A missing key is not SQL NULL; zero/False are values, not absence."""
+    item = {"field": label, "column": (binding or {}).get("column"),
+            "status": failure, "value": None}
+    if failure:
+        return item
+    if row is None:
+        item["status"] = "no_rows"
+    elif binding is None:
+        item["status"] = "unmapped"
+    elif binding["key"] not in row:
+        item["status"] = "not_selected"
+    else:
+        value = row[binding["key"]]
+        item["value"] = value
+        if value is None:
+            item["status"] = "null"
+        elif isinstance(value, str) and not value.strip():
+            item["status"] = "empty"
+        elif (isinstance(value, float) and not math.isfinite(value)) or (
+                hasattr(value, "is_finite") and not value.is_finite()):
+            item.update(status="invalid", value=None)
+        else:
+            item["status"] = "available"
+        item["unit"] = binding.get("unit", "")
+        item["zero_null_rule"] = binding.get("zero_null_rule", "")
+        rule = item["zero_null_rule"] or ""
+        if item["status"] == "available" and "사용 금지" in rule:
+            item["status"] = "restricted"
+        if item["status"] == "available" and not isinstance(value, bool):
+            try:
+                is_zero = Decimal(str(value).strip().replace(",", "")).is_zero()
+            except InvalidOperation:
+                is_zero = False
+            if is_zero and "0" in rule and ("값 없음" in rule or "is_available=false" in rule):
+                item["status"] = "zero_unavailable"
+    return item
+
+
+def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> list[dict]:
+    """Use execution-time projection bindings, never re-resolve fields with an LLM.
+
+    No question IDs/product names are special-cased. Older/legacy SQL without
+    projection metadata is reported as unverified, not guessed from similar keys.
+    Each record is kept separate (including different markets of one product).
+    """
+    req = (state.get("intent") or {}).get("output_requirements") or {}
+    plans = {p["step_id"]: p for p in state.get("plan") or []}
+    targets = [(sid, r) for sid, r in (state.get("step_results") or {}).items()
+               if r.get("engine") == "rdb" and r.get("role", "target") == "target"
+               and not r.get("merged_into")]
+    contract = []
+    per_step = max(1, row_budget // max(1, len(targets)))
+    for sid, result in targets:
+        rows = result.get("rows") or []
+        failure = "query_failed" if result.get("error") else (
+            "blocked" if result.get("skipped_reason") else None)
+        # Do not display stale/partial rows after a failed query as valid values.
+        visible = [] if failure else rows[:per_step]
+        for index, row in enumerate(visible or [None]):
+            domain = (row or {}).get("domain") or result.get("domain", "")
+            bindings = result.get("output_fields_by_domain", {}).get(
+                domain, result.get("output_fields") or [])
+            labels = result.get("requested_fields_by_domain", {}).get(domain,
+                result.get("requested_fields", plans.get(sid, {}).get("fields", req.get("fields") or [])))
+            labels = list(labels or [])
+            if len(targets) == 1:
+                # A planner omission must not silently erase an intent request.
+                labels.extend(req.get("fields") or [])
+            has_date_request = any(catalog_sql.normalize(f) in utils.PROVENANCE_CONCEPTS for f in labels)
+            # Identification and source dates are compiler-provided provenance.
+            labels.extend(b["attribute"] for b in bindings
+                          if b["attribute"] in {"상품명", "상품코드"}
+                          or (b["attribute"].startswith("출처기준일(") and not has_date_request))
+            if not labels:
+                labels = list(req.get("fields") or ["조회 결과"])
+            by_label = {}
+            for binding in bindings:
+                by_label.setdefault(catalog_sql.normalize(binding["attribute"]), []).append(binding)
+            items, seen = [], set()
+            for label in labels:
+                normalized = catalog_sql.normalize(label)
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                matches = by_label.get(normalized, [])
+                if normalized in utils.PROVENANCE_CONCEPTS:
+                    dates = list(dict.fromkeys(c for b in bindings for c in b.get("as_of_columns", [])))
+                    if dates:
+                        for date_column in dates:
+                            binding = next((b for b in bindings if b["key"] == date_column), None)
+                            items.append(_field_evidence(f"{label}({date_column})", binding, row, failure))
+                        continue
+                # A request for source column names is provenance, not a DB value.
+                if "컬럼" in normalized and any(word in normalized for word in ("근거", "출처")):
+                    item = _field_evidence(label, None, row, failure)
+                    if bindings and not failure and row is not None:
+                        item.update(status="available", value="각 항목의 근거 컬럼을 함께 표시했습니다.")
+                    items.append(item)
+                    continue
+                columns = {b["column"] for b in matches}
+                binding = matches[0] if len(columns) == 1 else None
+                item = _field_evidence(label, binding, row, failure)
+                if binding and row is not None and not failure:
+                    item["as_of"] = [_field_evidence(c, next((b for b in bindings if b["key"] == c), None), row)
+                                     for c in binding.get("as_of_columns", []) if c != binding["key"]]
+                items.append(item)
+            contract.append({"step_id": sid, "domain": domain, "row_number": index + 1 if visible else None,
+                             "retrieved_rows": len(rows), "displayed_rows": len(visible),
+                             "items": items, "notes": list(result.get("assumptions") or [])})
+    return contract
+
+
+_FIELD_UNAVAILABLE_TEXT = {
+    "null": "제공된 조회 결과의 값이 NULL이어서 확인할 수 없습니다. 0 또는 해당 사실의 부재를 뜻하지 않습니다.",
+    "empty": "제공된 조회 결과가 빈 값이어서 확인할 수 없습니다.",
+    "not_selected": "조회 결과에 해당 컬럼이 포함되지 않아 확인할 수 없습니다. NULL 여부도 확인되지 않았습니다.",
+    "unmapped": "요청 항목과 조회 컬럼의 대응을 확정하지 못해 확인할 수 없습니다.",
+    "no_rows": "조회 결과가 0건이어서 확인할 수 없습니다. 상품 자체가 존재하지 않는다는 뜻은 아닙니다.",
+    "query_failed": "조회에 실패하여 확인할 수 없습니다. 값의 존재 여부는 확인되지 않았습니다.",
+    "blocked": "조회가 차단되어 확인할 수 없습니다. 값의 존재 여부는 확인되지 않았습니다.",
+    "invalid": "조회 값이 유효한 수치가 아니어서 확인할 수 없습니다.",
+    "zero_unavailable": "유효한 측정값으로 확인할 수 없습니다. 카탈로그에서 원천 0을 결측·불가용으로 정의합니다.",
+    "restricted": "카탈로그에서 판정·필터·정렬에 사용할 수 없는 값으로 정의합니다.",
+}
+
+
+def _display_field_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
+def _render_rdb_answer_contract(contract: list[dict]) -> str:
+    """Values and absence notices are rendered by code; no LLM can omit them."""
+    blocks = []
+    for record in contract:
+        heading = f"[{record['domain']} / {record['step_id']}]"
+        if record["row_number"] is not None:
+            heading += (f" 조회 결과 {record['row_number']}번"
+                        f" (반환 {record['retrieved_rows']}건 중 {record['displayed_rows']}건 표시)")
+        lines = [heading]
+        for available, title in [(True, "확인된 값"), (False, "확인 불가 항목")]:
+            selected = [i for i in record["items"] if (i["status"] == "available") == available]
+            if not selected:
+                continue
+            lines.extend(["", title])
+            for item in selected:
+                value = _display_field_value(item["value"]) if available else _FIELD_UNAVAILABLE_TEXT[item["status"]]
+                if item["status"] in {"zero_unavailable", "restricted"}:
+                    value += f" 원천값: {_display_field_value(item['value'])}; 규칙: {item['zero_null_rule']}"
+                source = f" (근거 컬럼: {item['column']})" if item["column"] else ""
+                unit = (f" [원천 단위: {item['unit']}]"
+                        if available and item.get("unit") not in (None, "", "공식 문서 미표기") else "")
+                dates = item.get("as_of") or []
+                date_refs = f" [카탈로그 기준일 컬럼: {', '.join(d['field'] for d in dates)}]" if dates else ""
+                lines.append(f"- {item['field']}: {value}{unit}{source}{date_refs}")
+                if available and item["value"] == 0 and item.get("zero_null_rule"):
+                    lines.append(f"  - 원천 값 해석 규칙: {item['zero_null_rule']}")
+        # Dates already shown as requested/provenance fields need not be repeated
+        # under every numeric item. Missing date bindings still get a clear reason.
+        shown_columns = {i["column"] for i in record["items"] if i.get("column")}
+        extra_dates = {d["field"]: d for i in record["items"] for d in i.get("as_of", [])
+                       if d.get("column") not in shown_columns}
+        if extra_dates:
+            lines.extend(["", "추가 기준일 상태"])
+            for label, date_item in extra_dates.items():
+                value = (_display_field_value(date_item["value"]) if date_item["status"] == "available"
+                         else _FIELD_UNAVAILABLE_TEXT[date_item["status"]])
+                lines.append(f"- 기준일({label}): {value}")
+        if any(i.get("unit") == "공식 문서 미표기" for i in record["items"]):
+            lines.extend(["", "카탈로그에서 단위를 확인할 수 없는 값은 단위를 추정하지 않고 원문으로 표시했습니다."])
+        if record["notes"]:
+            lines.extend(["", "SQL 조회 단계 유의사항(최종 출력 여부와 별개)"] + [f"- {n}" for n in dict.fromkeys(record["notes"])])
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _invoke_answer_with_field_fallback(llm, messages: list, has_field_answer: bool) -> dict:
+    try:
+        response = llm.invoke(messages)
+        return response if isinstance(response, dict) else {}
+    except Exception:
+        if not has_field_answer:
+            raise
+        # A narrative model outage must not discard already retrieved RDB facts.
+        return {"answer": "추가 설명 생성에 실패했습니다. 아래는 확인된 RDB 조회 결과입니다.",
+                "think_trace": "RDB 항목별 상태를 출력했으며 추가 설명 생성은 실패했습니다."}
+
+
 def generate_answer_node(state: PipelineState) -> dict:
     # 1. State에서 필요한 값 추출 (question_id가 들어온다고 가정)
     question_id = state.get("question_id", "Q-UNKNOWN")
@@ -1542,6 +1750,24 @@ def generate_answer_node(state: PipelineState) -> dict:
     # 실제 근거(SQL/건수/Graph 관계·evidence)를 조립한다(§10).
     retrieved_context = _build_retrieved_context(state)
 
+    field_contract = _build_rdb_answer_contract(state)
+    field_answer = _render_rdb_answer_contract(field_contract)
+    narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
+    # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
+    # narrative questions still use the existing synthesis path plus the contract.
+    structured_only = (bool(field_contract) and not narrative_topics
+                       and intent.get("task") == "lookup"
+                       and not route.get("needs_graph") and not route.get("needs_vector")
+                       and not any(r.get("engine") in {"graph", "vector"}
+                                   for r in (state.get("step_results") or {}).values()))
+    if structured_only:
+        response = {"question_id": question_id, "question": question,
+                    "retrieved_context": retrieved_context,
+                    "think_trace": "RDB 실행 결과와 요청 항목의 컬럼 대응을 대조하여 값과 확인 불가 사유를 구분해 표시했습니다.",
+                    "answer": field_answer}
+        return {"answer": json.dumps(response, ensure_ascii=False),
+                "trace": ["답변 생성: 요청 항목별 결정론적 출력 (추가 LLM 호출 없음)"]}
+
     # 3. 예외 처리: 데이터가 없는 경우
     if not merged_rows:
         # 서술형 질문은 blocking_reasons가 비어 있어도 "문서 미확보" 때문에
@@ -1553,6 +1779,8 @@ def generate_answer_node(state: PipelineState) -> dict:
                 reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
         reason = f" ({'; '.join(reasons)})" if reasons else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
+        if field_answer:
+            answer_text += "\n\n" + field_answer
         
         final_response = {
             "question_id": question_id,
@@ -1579,31 +1807,40 @@ def generate_answer_node(state: PipelineState) -> dict:
     # 5. 구조화된 출력(Structured Output)으로 LLM 호출
     structured_llm = _llm_answer.with_structured_output(FINAL_ANSWER_JSON_SCHEMA, method="json_schema")
 
-    response = structured_llm.invoke(
+    response = _invoke_answer_with_field_fallback(structured_llm,
         [
             ("system", ANSWER_SYSTEM_PROMPT),
             (
                 "human",
                 f"[질문]\n{question}\n\n"
                 f"[질문이 요구한 항목] (answer는 이 항목만 다룬다)\n{requested_items}\n\n"
+                f"[요청 항목별 RDB 상태] (값/NULL/미조회/실패를 구별한다. 아래 구조화 항목은 코드가 별도로 출력하므로 answer에는 문서·관계 설명만 작성한다.)\n"
+                f"{json.dumps(field_contract, ensure_ascii=False, default=str)}\n\n"
                 f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
-                f"[이미 SQL로 적용된 조건] (아래 데이터는 이 조건을 전부 만족하는 행만 남은 결과다. "
-                f"이 조건에 쓰인 컬럼이 데이터에 안 보여도 이미 만족된 것이니 다시 확인하지 마라)\n"
+                f"[계획의 조건] (실제 적용 여부는 SQL 실행 기록과 조정된 규칙을 따른다. "
+                f"SELECT에 필터 컬럼이 없다는 이유만으로 실행된 필터를 무효로 판단하지 않는다.)\n"
                 f"{applied_conditions}\n\n"
                 f"[SQL 실행 시 실제로 적용되거나 조정된 규칙]\n{sql_assumptions}\n\n"
                 f"[실제 실행 기록] (think_trace는 이 로그를 근거로 요약할 것 - 지어내지 말 것)\n{execution_log}\n\n"
                 f"[검색된 데이터] (전체 {len(merged_rows)}건 중 {len(preview)}건 표시)\n{rows_text}",
             ),
-        ]
+        ], bool(field_answer)
     )
     
     # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
+    answer_text = response.get("answer") or ""
+    if not isinstance(answer_text, str):
+        answer_text = json.dumps(answer_text, ensure_ascii=False, default=str)
+    if field_answer:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), field_answer] if part)
+    if not answer_text.strip():
+        answer_text = "검색 결과는 있으나 최종 설명을 생성하지 못했습니다. 요청 항목의 근거를 확인해야 합니다."
     final_response = {
         "question_id": question_id,
         "question": question,
         "retrieved_context": retrieved_context,
         "think_trace": response.get("think_trace", "추론 과정 생성 누락"),
-        "answer": response.get("answer", "답변 생성 누락")
+        "answer": answer_text
     }
     
     # 최종적으로 문자열로 직렬화하여 반환 (FastAPI 라우터단에서 바로 리턴 가능하도록)

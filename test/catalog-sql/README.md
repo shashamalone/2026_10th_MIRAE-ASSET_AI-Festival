@@ -34,11 +34,38 @@ python test/catalog-sql/run_checks.py pipeline --env-file <existing-env-path> --
 server release are still verified. The source cache is never changed. Outputs
 must remain in the current worktree's agent-scoped artifact directory.
 
-For the frozen-code 35x3 run use `--ids "" --rounds 3`. This is 35 cold + 70 warm
-executions, not 105 warm executions. Preserve superseded 429 attempts and report
+The user currently requires **one round only** (`--rounds 1`); do not repeat
+paid pipeline runs to smooth out model variability. Preserve superseded 429 attempts and report
 both the attempted denominator and the scoreable denominator. Do not execute
 the legacy analyzer's `main` without redirecting its module-level `HERE`, since
 it overwrites tracked historical output files.
+
+## Requested-field answer contract
+
+- The compiler exports serializable projection bindings (request label, result
+  key, source column, unit, source dates, zero/null policy). The answer node uses
+  those execution-time bindings, not a second LLM-based column guess.
+- Direct RDB `lookup` without Graph/Vector or narrative topics renders fields in
+  code and makes **no answer-model call**. Exact names, numbers, decimals and dates
+  remain unchanged; the submission API still has its original five fields.
+- Every requested field in scope is displayed with its value or a distinct
+  reason: NULL, blank, unselected column, unresolved mapping, zero result rows,
+  blocked query, failed query, or a metadata-defined unavailable/restricted value.
+  Default numeric zero and false remain values. A catalog zero-as-unavailable
+  rule preserves the raw zero but does not present it as a valid measurement.
+- Mixed/narrative queries retain synthesis and append the deterministic RDB
+  block. A blank answer or narrative-model outage cannot erase that block.
+  This does not prove that all free-form narrative claims are correct.
+- Source-date fields are bound using catalog metadata, not the dataset's release
+  date. Rows are not cross-filled between products/markets. Display truncation
+  is explicit (returned rows versus displayed rows).
+- This layer cannot recover requirements already lost by intent analysis,
+  manufacture missing source values, or create missing Graph/ontology plans.
+  Legacy SQL without projection bindings is reported as unmapped, not guessed.
+
+`test_answer_contract.py` covers NULLs, zeros/false, blanks, missing projections,
+failures, field completeness, exact values, provenance, multirow separation,
+truncation, narrative omissions/outages, joins, and UNION ordinal-rank safety.
 
 ## Review / outstanding limitations
 
