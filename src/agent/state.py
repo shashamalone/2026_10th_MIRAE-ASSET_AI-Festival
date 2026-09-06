@@ -72,16 +72,12 @@ def ready_step_ids(plan: list[dict], done: set[str]) -> set[str]:
 
 class ChatbotState(TypedDict, total=False):
     # --- 입력 ---
-    question_id: str # 추가
+    question_id: str 
     question: str
-    # SQL 실행이 실패했을 때 몇 번까지 재시도할지. 안 주면
-    # nodes.DEFAULT_MAX_SQL_RETRIES(3)를 쓴다. 호출 시점에
-    # app.invoke({"question": ..., "max_sql_retries": 5})처럼 넘기면
-    # 이번 실행에서만 그 값을 쓴다.
+
     max_sql_retries: int
 
     # --- 노드 2: 질문 분석(analyze_intent_node) ---
-    # INTENT_ANALYSIS_JSON_SCHEMA(schemas.py) 형태의 구조화 출력 결과.
     intent: dict
 
     # --- 노드 3: DB 검색 흐름 결정(plan_query_db.plan_query_node) ---
@@ -89,7 +85,6 @@ class ChatbotState(TypedDict, total=False):
     route: dict | None
 
     # --- 노드 4: RDB / GraphDB / VectorDB 검색 (병렬) ---
-    # step_id -> 그 단계의 결과. plan의 각 step_id와 1:1로 대응한다.
     step_results: Annotated[dict[str, Any], merge_step_results]
 
     # --- 노드 5: 결과 합치기 ---

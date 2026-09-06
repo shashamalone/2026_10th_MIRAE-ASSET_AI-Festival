@@ -37,9 +37,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-# 저장소 루트: src/infrastructure/graph_db/client.py 기준 3단계 위.
-# kb.config와 같은 기준을 독립적으로 계산해 infrastructure adapter가 kb
-# 패키지에 결합되지 않게 한다.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 MAX_ROWS = 10_000
@@ -95,7 +92,6 @@ class OxigraphClient:
         local_store_path: str | Path | None = None,
         endpoint: str | None = None,
         timeout: float | None = None,
-        # Backward-compatible alias for the previous single local store.
         store_path: str | Path | None = None,
     ) -> None:
         remote_value = remote_store_path or os.getenv("OXIGRAPH_REMOTE_STORE_PATH")
@@ -111,9 +107,6 @@ class OxigraphClient:
             or os.getenv("OXIGRAPH_ENDPOINT", "")
         )
         self.remote_store_path = _anchor(remote_value) if remote_value else None
-        # An endpoint-only deployment must not emit a fake local-store failure
-        # on every query. Keep the historical default only for local development
-        # where no transport was configured at all.
         self.local_store_path = (
             _anchor(local_value) if local_value
             else REPO_ROOT / "artifacts" / "oxigraph"
@@ -135,9 +128,6 @@ class OxigraphClient:
         ):
             if path is None:
                 continue
-            # 경로 비교 때문에 원격 mount에 실제 접근하지 않도록 문자열만
-            # 정규화한다. Path.resolve()는 UNC/NFS 장애 시 여기서 먼저
-            # 지연되거나 실패할 수 있다.
             path_key = os.path.normcase(os.path.abspath(os.fspath(path)))
             if path_key in attempted_paths:
                 continue
@@ -219,18 +209,6 @@ class OxigraphClient:
         return rows if max_rows is None else rows[:max_rows]
 
     def triple_count(self) -> int:
-        # GRAPH 절만 쓴다. 예전에는 `{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } }`
-        # 였는데, HTTP transport(Oxigraph 서버)는 기본 그래프를 네임드 그래프의
-        # 합집합으로 취급하므로 두 분기가 같은 트리플을 각각 한 번씩 잡아
-        # 정확히 2배가 나왔다(2026-09-05 실측: 실제 1,169,374 -> 보고 2,338,748).
-        #
-        # 반대로 `{ ?s ?p ?o }`만 남기면 store transport가 깨진다. pyoxigraph의
-        # Store.query()는 use_default_graph_as_union 기본값이 False라서, 이
-        # 프로젝트처럼 ABox/TBox를 전부 네임드 그래프(http://mafest.ai/graph/...)에
-        # 넣는 구성에서는 0을 돌려준다.
-        #
-        # GRAPH 절은 두 transport 모두에서 같은 값을 준다. 데이터가 전부 네임드
-        # 그래프에 있다는 전제이며, build_graph 파이프라인이 그렇게 적재한다.
         result = self.query(
             """
             SELECT (COUNT(*) AS ?count)

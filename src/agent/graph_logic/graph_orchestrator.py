@@ -59,8 +59,6 @@ def _plan_json_schema(fragment: SchemaFragment) -> dict:
     GRAPH_PLAN_SYSTEM 규칙 7과 `_sanitize_plan`(아래) 두 곳에서 강제한다."""
     classes = [compact_uri(x) for x in fragment.classes]
     object_properties = [compact_uri(x.uri) for x in fragment.properties if x.kind == "object"]
-    # rdfs:label 은 TBox datatype property 가 아니지만 분류 개체(fp:InvestmentRegion
-    # 등)의 이름을 얻는 유일한 경로다. graph_plan 이 catalog 검사를 면제한다.
     datatype_properties = [compact_uri(x.uri) for x in fragment.properties
                            if x.kind == "datatype"] + ["rdfs:label"]
     node_id = {"type": "string", "description": _ID.pattern}
@@ -124,9 +122,7 @@ def _fast_plan(question: str, frame: dict, seed_class: str = "Company") -> tuple
     똑같이 결정적 plan으로 처리해서 이 실패를 없앤다."""
     relations = frame.get("relations") or []
     if frame.get("relation_scope"):
-        # A question may contain several independent relations. Only this
-        # step's dependency chain may decide its path; other clauses are not
-        # permission to add a subsidiary or holding edge.
+
         predicates = {str(r.get("relation", "")).casefold() for r in relations}
         has_subsidiary = bool(predicates & {"subsidiary_of", "has_subsidiary", "자회사"})
         has_holding = bool(predicates & {"holds", "holding", "held_by", "편입", "보유"})
@@ -216,12 +212,12 @@ def _sanitize_plan(plan: dict, entity: dict, trace: list[str] | None = None) -> 
             if _ID.fullmatch(str(node.get("id", "")))}
 
     if "seed" not in used:
-        # ① 원래 id 문자열이 해소된 URI/정식명을 품고 있으면 그 node가 seed다.
+
         marks = [str(entity.get(key) or "") for key in ("uri", "canonical_name")]
         hits = [str(node.get("id", "")) for node in nodes
                 if any(mark and mark in str(node.get("id", "")) for mark in marks)]
         if len(hits) != 1:
-            # ② class가 해소된 엔티티와 호환되는 node가 유일할 때만 seed로 본다.
+
             entity_class = entity.get("class_uri") or ""
             hits = [str(node.get("id", "")) for node in nodes
                     if entity_class and catalog().compatible(
@@ -644,11 +640,6 @@ def run_theme_membership(question: str, theme_keyword: str, *, limit: int = 100)
         exact = _theme_candidates(keyword, partial=False)
         if exact:
             facet_groups.append((keyword, exact))
-        # "중국 반도체"처럼 taxonomy의 두 독립 축을 띄어 쓴 표현은 그
-        # 전체 문자열과 정확히 일치하는 Theme 하나가 없다. 전체 표현을
-        # 먼저 조회한 뒤에만 공백 토큰별 후보를 구하고, 아래에서 ETF 코드
-        # 교집합을 취한다. 어느 한 facet도 Graph에서 확인되지 않으면 기존
-        # 안전 계약대로 not_found다.
         elif len(facets) > 1:
             for facet in facets:
                 candidates = _theme_candidates(facet, partial=True)

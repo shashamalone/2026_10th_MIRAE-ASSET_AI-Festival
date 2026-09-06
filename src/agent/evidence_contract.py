@@ -1,4 +1,4 @@
-"""Question-level evidence constraints, independent of evaluation IDs/products."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -44,11 +44,7 @@ def restore_explicit_comparators(intent: dict, question: str) -> tuple[dict, lis
 
 
 def restore_relative_event_window(intent: dict, question: str, *, today: date | None = None) -> tuple[dict, list[str]]:
-    """Fix invented event dates only for explicit relative-month requests.
 
-    This does not manufacture event history, use a return period as an event
-    filter, or override a user-specified absolute reference date.
-    """
     match = re.search(r"최근\s*(\d{1,2})\s*개월", question)
     if not match or not re.search(r"이력|사건|뉴스", question) or re.search(r"20\d{2}[-/.년]", question):
         return intent, []
@@ -81,7 +77,7 @@ DOCUMENT_EVIDENCE_CONCEPTS = {
 
 
 def is_document_evidence_field(label: str) -> bool:
-    """Document citations are evidence metadata, never an RDB column guess."""
+
     normalized = re.sub(r"\s+", "", str(label or "")).casefold()
     return (
         normalized in DOCUMENT_EVIDENCE_CONCEPTS
@@ -91,7 +87,7 @@ def is_document_evidence_field(label: str) -> bool:
 
 
 def _graph_output_aliases(outputs: list[dict], *property_names: str) -> list[str]:
-    """Return declared aliases for exact ontology property local names."""
+
     suffixes = tuple(
         suffix
         for name in property_names
@@ -121,9 +117,7 @@ def graph_field_evidence(label: str, product_code: str, results: dict) -> dict |
         dates = _graph_output_aliases(outputs, "asOf")
         source_ids = _graph_output_aliases(outputs, "sourceId")
         requested_aliases = weights if "비중" in normalized else dates
-        # Theme/product classification queries can return the same productCode,
-        # but they are not holdings evidence.  Ignore them instead of appending
-        # an empty dict that is later rendered as ``[{}, {}]``.
+
         if not codes or not requested_aliases:
             continue
         for row in result.get("rows") or []:
@@ -164,7 +158,7 @@ def request_blockers(intent: dict, question: str, *, today: date | None = None) 
     if intent.get("issuer_type_conflict"):
         blockers.append(intent["issuer_type_conflict"])
     today = today or date.today()
-    # Completed calendar-year observations cannot be replaced by a rolling rate.
+
     if "수익률" in question and any(w in question for w in ("연간", "확정", "연도별")):
         for year in re.findall(r"(?<!\d)(20\d{2})\s*년", question):
             if date(int(year), 12, 31) >= today:
@@ -202,8 +196,6 @@ def restore_class_comparison(intent: dict, question: str) -> tuple[dict, list[st
     fields.extend(f for f in ("운용사종목번호", "대표예탁원종목번호", "예탁원종목번호", "운용회사대외기관코드") if f not in fields)
     output["fields"] = fields
     output["narrative_topics"] = _non_identity_topics(output.get("narrative_topics") or [])
-    # A class code alone is not a global product search term. The base name is
-    # the scope and suffixes are checked on returned source names, exactly.
     fixed = {**intent, "task": "comparison", "relations": [],
              "target_entities": [{"entity_type": "product_name", "surface_form": base}],
              "identity_comparison": {"base": base, "classes": classes},

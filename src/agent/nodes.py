@@ -236,7 +236,7 @@ def _execute_target_step_query(step: dict, question: str, conn, apply_limit: boo
 def _execute_merged_target_group(
     steps: list[dict], question: str, conn, sort: dict, sort_limit: str, max_retries: int
 ) -> dict[str, dict]:
-    """§9: route.merge_group_step_ids에 속한 RDB target 단계들을 UNION ALL
+    """route.merge_group_step_ids에 속한 RDB target 단계들을 UNION ALL
     서브쿼리 하나로 묶어 SQL 레벨에서 정렬·절단까지 끝낸다.
 
     각 도메인은 _execute_target_step과 완전히 같은 개념->컬럼 해석
@@ -735,11 +735,7 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
 def rdb_search_node(state: PipelineState) -> dict:
     plan = state.get("plan") or []
     route = state.get("route") or {}
-    # §5 웨이브 스케줄러: graph.py의 dispatch가 "이번 웨이브에 rdb 엔진이
-    # 준비됐다"고 판단해서 이 노드를 불렀더라도, plan에는 아직 depends_on이
-    # 안 채워진 다른 rdb 단계가 같이 있을 수 있다(교차질의처럼 rdb 단계가
-    # 여러 개인데 그중 일부만 이번 웨이브에 준비된 경우). ready_step_ids로
-    # "이미 끝났거나 아직 준비 안 된" 단계를 걸러내고 이번 웨이브 몫만 처리한다.
+
     done = set((state.get("step_results") or {}).keys())
     ready = ready_step_ids(plan, done)
     rdb_steps = [s for s in plan if s.get("engine") == "rdb" and s["step_id"] in ready]
@@ -747,9 +743,6 @@ def rdb_search_node(state: PipelineState) -> dict:
     if not rdb_steps:
         return {"trace": ["RDB 검색: 이번 웨이브에 실행할 RDB 단계가 없어 건너뜀"]}
 
-    # 재시도 횟수는 사용자가 지정할 수 있다: app.invoke({"question": ...,
-    # "max_sql_retries": 5})처럼 호출 시점에 state로 넘기면 그 값을 쓰고,
-    # 안 주면 DEFAULT_MAX_SQL_RETRIES(3)를 쓴다.
     max_retries = state.get("max_sql_retries") or DEFAULT_MAX_SQL_RETRIES
 
     try:
@@ -763,11 +756,6 @@ def rdb_search_node(state: PipelineState) -> dict:
     apply_limit = not route.get("needs_merge_rank", False)
     all_step_results = state.get("step_results") or {}
 
-    # §9: route.merge_group_step_ids에 속한 단계들은 개별 실행이 아니라
-    # UNION ALL 한 번으로 묶는다. 이번 웨이브에 그 그룹의 멤버가 전부(2개
-    # 이상) 준비돼야 묶을 수 있다 - 일부만 준비됐으면(§5 웨이브 스케줄러와의
-    # 알려진 제약, 계획서 §4 참고) UNION의 의미가 없으므로 그냥 개별 경로로
-    # 처리한다(정렬은 못 하지만 조회 자체는 된다).
     merge_group_ids = set(route.get("merge_group_step_ids") or [])
     group_steps = [s for s in rdb_steps if s["step_id"] in merge_group_ids]
     group_steps = [_apply_graph_handoff(s, all_step_results) for s in group_steps]
@@ -806,10 +794,6 @@ def rdb_search_node(state: PipelineState) -> dict:
             if step.get("role") == "entity_lookup":
                 result = _execute_entity_lookup_step(step, conn, max_retries)
             else:
-                # §8 Graph -> RDB 핸드오프: 이 단계가 의존하는 Graph 단계의
-                # entity_codes를 "상품코드 in (...)" 조건으로 주입한다.
-                # 대부분의 질문은 depends_on이 비어 있거나 Graph를 안
-                # 기다리므로 이 함수는 아무것도 안 바꾸고 그대로 통과시킨다.
                 handoff_step = _apply_graph_handoff(step, all_step_results)
                 if handoff_step is not step and not handoff_step.get("graph_handoff_blocked"):
                     if handoff_step.get("issuer_name_entities"):
@@ -917,14 +901,6 @@ def graph_search_node(state: PipelineState) -> dict:
         relation = step["relation"]
         is_terminal = relation["id"] not in referenced_ids
 
-        # "체인 중간 단계"는 relation 자체가 object_ref를 쓰는지가 아니라
-        # 다른 relation의 object_ref로 "참조되는지"(= terminal이 아닌지)로
-        # 판단한다. 체인의 시작 relation(예: "에코프로의 자회사"의 R1)은
-        # 자기 자신은 object_ref를 안 쓰지만(object_entity로 직접 이름을
-        # 줌) 뒤의 relation(R2)에게 참조되는 non-terminal이다 - 이걸 여기서
-        # 실행해버리면 terminal 단계(R2)가 나중에 또 같은 조회를 반복하거나
-        # (원래 있던 버그, 2026-09-02 실측) seed를 잘못 잡는다. 체인의
-        # 실제 다단계 조회는 terminal 단계 하나에서만 수행한다.
         if not is_terminal:
             step_results[step_id] = {
                 "engine": "graph", "status": "chained", "rows": [],
@@ -951,20 +927,13 @@ def graph_search_node(state: PipelineState) -> dict:
             continue
 
         try:
-            # 테마 관계는 일반 seed 해소(resolve_frame_seed, "이름 하나 ->
-            # URI 하나")로 처리하지 않는다. "반도체"처럼 사용자가 쓰는
-            # 키워드는 LSEG 176테마 taxonomy에서 흔히 여러 하위 테마
-            # ("K-반도체","글로벌반도체" 등)에 걸쳐 있어 후보가 2개 이상이면
-            # 곧장 ambiguous로 멈추는 일반 경로로는 항상 실패한다(2026-09-02
-            # 실측). entity_role="theme"이면 후보 테마를 전부 찾아 합치는
-            # 전용 경로(run_theme_membership)로 보낸다.
+
             if frame["entities"][0]["role"] == "theme":
                 result = graph_orchestrator.run_theme_membership(question, frame["entities"][0]["text"], limit=frame["limit"])
             else:
                 result = graph_orchestrator.run(question, frame=frame)
         except Exception as e:
-            # 예외 문구를 note에도 남긴다 - trace만 두면 step_results 조립에서
-            # 버려져 노트북에 status만 보이고 원인을 추적할 수 없었다(2026-09-03).
+
             result = {"status": "abstain_exception", "rows": [], "evidence": [],
                       "entity_codes": [], "trace": [f"{type(e).__name__}: {e}"],
                       "note": f"{type(e).__name__}: {e}"}
@@ -1003,19 +972,15 @@ def graph_search_node(state: PipelineState) -> dict:
 # ---------------------------------------------------------------------------
 # 노드 4c: VectorDB 검색
 # ---------------------------------------------------------------------------
-# 0828 실험 노트북에서 확인한 값들. 실제 top1 점수가 0.55~0.68 구간이라
-# 0.45 아래는 "질문과 무관한 문서를 억지로 인용"하는 쪽에 가까웠다.
+
 VECTOR_SCORE_FLOOR = 0.45
 VECTOR_MAX_TOPICS = 3
 VECTOR_DEFAULT_TOP_K = 5
 VECTOR_SCOPE_LIMIT = 50
-# RDB 결과 행에는 LLM이 고른 컬럼만 담긴다(예: pd_nm, pd_net_tamt만).
-# 코드 컬럼이 아예 없는 경우가 흔해서 이름 컬럼으로도 스코프를 잡아야 한다.
+
 VECTOR_CODE_KEYS = ("pd_itm_no", "itm_no", "pd_no", "상품코드", "product_id", "code")
 VECTOR_NAME_KEYS = ("pd_nm", "itm_nm", "상품명", "name", "product_name")
-# 요청 주제 ↔ vec.document_chunk.section_type 대조용 힌트. 847/974 문서가
-# 표지 투자위험 요약(risk) 청크뿐이라, 섹션을 제한하지 않으면 '운용 전략'
-# 질문에도 위험 청크가 floor를 넘겨 인용된다(2026-09-03 실측).
+
 VECTOR_SECTION_HINTS = {
     "objective_strategy": ("전략", "투자목적", "투자 목적", "운용목표", "운용 목표", "운용방침", "운용 방침"),
     "risk": ("위험", "리스크"),
@@ -1136,8 +1101,7 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     codes, names = _vector_scope(state, step)
     dependencies = [(state.get("step_results") or {}).get(sid) or {}
                     for sid in step.get("depends_on") or []]
-    # A failed product/relationship lookup is not permission to search unrelated
-    # prospectuses globally. Independent document-only plans have no dependency.
+
     if dependencies and not codes and not names:
         return {"engine": "vector", "status": "unresolved_product_scope", "chunks": [],
                 "count": 0, "queries": [], "raw_top": [],
@@ -1150,10 +1114,7 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     summary = _summarize_coverage(product_ids, coverage)
 
     if (codes or names) and not product_ids:
-        # 상품을 지목했는데 product_master 완전일치에 실패한 경우다. 여기서
-        # 전체 문서로 넓히면 다른 상품의 투자설명서를 그 상품의 근거처럼
-        # 인용하게 되므로(상품명 완전일치 우선·유사명 대체 금지) 검색을
-        # 생략하고 사유만 남긴다.
+
         return {
             "engine": "vector", "status": "no_product_match",
             "chunks": [], "count": 0, "queries": [],
@@ -1163,8 +1124,6 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
             "note": f"상품 후보 {len(codes) + len(names)}건을 product_master에서 해소하지 못해 문서 검색 생략",
         }
 
-    # topic마다 따로 임베딩한다. "투자 위험"과 "기초지수"는 문서 안에서
-    # 서로 다른 section에 있어서 질문 하나로는 한쪽만 걸린다.
     topics = (step.get("topics") or [])[:VECTOR_MAX_TOPICS]
     labels = topics + [f for f in (step.get("fields") or []) if f not in topics]
     hints = _section_hints(labels)
@@ -1197,11 +1156,8 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     elif ordered:
         status = "low_confidence"
     elif product_ids and summary["matched"] == 0 and missing > 0:
-        # 상품은 특정했는데 그 상품의 투자설명서 자체가 없는 경우다.
-        # "검색 결과 없음"과 구분해야 답변이 사유를 정확히 말할 수 있다.
         status = "no_document"
     elif hints:
-        # 문서는 있으나 요청 주제 섹션이 없다(예: risk 청크만 적재된 문서).
         status = "topic_not_covered"
     else:
         status = "no_hit"
@@ -1264,8 +1220,6 @@ def vector_search_node(state: PipelineState) -> dict:
 
     for step in vector_steps:
         step_id = step["step_id"]
-        # 단계별로 감싼다 - 한 단계의 임베딩/DB 실패가 다른 단계까지
-        # 죽이면 근거를 더 모을 수 있었던 질문도 통째로 답변불가가 된다.
         try:
             result = _run_vector_step(state, step, question)
         except Exception as exc:
@@ -1568,11 +1522,7 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 f"Graph 관계 근거 · {rel_desc} · {status_text} · "
                 f"{len(result.get('rows') or [])}건{evidence_note}"
             )
-            # 편입(Holding) 관계는 골드셋 22번이 "편입내역 문서명과 근거 문장"을
-            # 요구하는데, 그래프의 fp:sourceId 에는 운용사 브랜드명만 있다.
-            # 문서명·URL·기준일은 수집 사이드카에서 뽑은 인덱스에 있으므로
-            # 여기서 조인해 붙인다(배포된 Oxigraph 가 읽기 전용이라 트리플로
-            # 넣을 수 없다). 붙는 게 없으면 아무것도 추가하지 않는다.
+ 
             for citation_line in holdings_provenance.describe_rows(result.get("rows") or []):
                 parts.append(f"편입내역 문서 근거 · {citation_line}")
         elif engine == "vector":
@@ -1597,7 +1547,7 @@ def _build_answer_preview(merged_rows: list[dict], total_budget: int = 20) -> li
     """merged_rows[:N]으로 그냥 자르면, 여러 도메인/엔진 결과가 섞였을 때
     step_results 순회 순서상 먼저 오는 도메인 하나가 예산을 전부 차지해
     나머지 도메인이 답변 생성 LLM에게 아예 안 보이는 문제가 있었다
-    (2026-09-02, "SK하이닉스가 발행한 채권과 SK하이닉스를 편입한 ETF"
+    ("SK하이닉스가 발행한 채권과 SK하이닉스를 편입한 ETF"
     질문 - graph_RG1의 100건이 step_results에서 가장 먼저 와 예산 20을
     다 채우는 바람에, 실제로 존재하는 채권 16건과 ETF RDB 100건이 통째로
     안 보여서 최종 답변에 채권 쪽이 완전히 누락됐다. RDB/Graph 양쪽 다
@@ -1620,9 +1570,6 @@ def _build_answer_preview(merged_rows: list[dict], total_budget: int = 20) -> li
     preview: list[dict] = []
     for key in order:
         preview.extend(groups[key][:per_domain])
-
-    # 도메인 수가 적어서(예: 2개) per_domain 몫이 남는 도메인이 생기면,
-    # 남는 예산을 순서대로 더 채운다 - 정확히 total_budget을 채우기 위함.
     remaining = total_budget - len(preview)
     if remaining > 0:
         for key in order:
@@ -1679,12 +1626,7 @@ def _field_evidence(label: str, binding: dict | None, row: dict | None,
 
 
 def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> list[dict]:
-    """Use execution-time projection bindings, never re-resolve fields with an LLM.
 
-    No question IDs/product names are special-cased. Older/legacy SQL without
-    projection metadata is reported as unverified, not guessed from similar keys.
-    Each record is kept separate (including different markets of one product).
-    """
     req = (state.get("intent") or {}).get("output_requirements") or {}
     plans = {p["step_id"]: p for p in state.get("plan") or []}
     targets = [(sid, r) for sid, r in (state.get("step_results") or {}).items()
@@ -1696,7 +1638,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
         rows = result.get("rows") or []
         failure = "query_failed" if result.get("error") else (
             "blocked" if result.get("skipped_reason") else None)
-        # Do not display stale/partial rows after a failed query as valid values.
+
         visible = [] if failure else rows[:per_step]
         for index, row in enumerate(visible or [None]):
             domain = (row or {}).get("domain") or result.get("domain", "")
@@ -1706,10 +1648,10 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                 result.get("requested_fields", plans.get(sid, {}).get("fields", req.get("fields") or [])))
             labels = list(labels or [])
             if len(targets) == 1:
-                # A planner omission must not silently erase an intent request.
+
                 labels.extend(req.get("fields") or [])
             has_date_request = any(catalog_sql.normalize(f) in utils.PROVENANCE_CONCEPTS for f in labels)
-            # Identification and source dates are compiler-provided provenance.
+
             labels.extend(b["attribute"] for b in bindings
                           if b["attribute"] in {"상품명", "상품코드"}
                           or b["attribute"].startswith("조건근거(") or b["attribute"] == "AUM통화"
@@ -1727,8 +1669,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                     continue
                 seen.add(normalized)
                 if evidence_contract.is_identity_field(label) and (state.get("intent") or {}).get("identity_comparison"):
-                    # The cross-record verdict is rendered once, not guessed as
-                    # a per-product physical column with a contradictory NULL.
+
                     continue
                 derived = (row or {}).get("_derived_fields", {}).get(normalized)
                 code_binding = next((b for b in bindings if b["attribute"] in {"상품코드", "조건근거(상품코드)"}), None)
@@ -1760,7 +1701,7 @@ def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> li
                                 item["detail"] = "카탈로그에 연결된 원천별 날짜입니다. 해당 수치 자체의 관측일로 하나를 확정하거나 모두 같은 기준일로 간주하지 않습니다."
                             items.append(item)
                         continue
-                # A request for source column names is provenance, not a DB value.
+
                 if utils.is_source_column_request(label):
                     item = _field_evidence(label, None, row, failure)
                     if bindings and not failure and row is not None:
@@ -1811,12 +1752,10 @@ def _display_field_value(value) -> str:
 
 
 def _public_field_label(value: object) -> str:
-    """Remove a trailing physical-column annotation from an answer label."""
     return re.sub(r"\([A-Za-z_][A-Za-z0-9_.]*\)$", "", str(value or "")).strip()
 
 
 def _display_contract_value(item: dict) -> str:
-    """Render graph-derived structured fields as user values, not JSON internals."""
     value = item.get("value")
     normalized = re.sub(r"\s+", "", str(item.get("field") or ""))
     if isinstance(value, list) and all(isinstance(entry, dict) for entry in value):
@@ -1845,7 +1784,6 @@ def _display_contract_value(item: dict) -> str:
 
 
 def _render_rdb_answer_contract(contract: list[dict]) -> str:
-    """Values and absence notices are rendered by code; no LLM can omit them."""
     blocks = []
     shown_notes: set[str] = set()
     shown_unit_notice = False
@@ -1904,8 +1842,6 @@ def _render_rdb_answer_contract(contract: list[dict]) -> str:
                     lines.append(f"- {fields} : {value}")
                     if detail:
                         lines.append(f"  - 사유: {detail}")
-        # Dates already shown as requested/provenance fields need not be repeated
-        # under every numeric item. Missing date bindings still get a clear reason.
         shown_columns = {i["column"] for i in record["items"] if i.get("column")}
         extra_dates = {d["field"]: d for i in record["items"] for d in i.get("as_of", [])
                        if d.get("column") not in shown_columns}
@@ -1938,20 +1874,11 @@ def _invoke_answer_with_field_fallback(llm, messages: list, has_field_answer: bo
     except Exception:
         if not has_field_answer:
             raise
-        # A narrative model outage must not discard already retrieved RDB facts.
         return {"answer": "추가 설명 생성에 실패했습니다. 아래는 확보된 조회 결과와 문서 근거입니다.",
                 "think_trace": "확보된 항목별 상태와 근거를 출력했으며 추가 설명 생성은 실패했습니다."}
 
 
 def _sanitize_generated_narrative(value: object) -> str:
-    """Keep prose only; structured values are rendered by the code contract.
-
-    Some structured-output providers have returned a mapping in ``answer`` or
-    its Python-literal string form.  Appending that value before the verified
-    field contract exposes implementation syntax and duplicates every value.
-    Vector citations and deterministic fields are appended separately, so a
-    mapping/list here can be discarded without losing retrieved evidence.
-    """
     if not isinstance(value, str):
         return ""
     text = value.strip()
@@ -1969,11 +1896,6 @@ def _sanitize_generated_narrative(value: object) -> str:
 
 
 def _render_vector_sources(step_results: dict) -> str:
-    """Execution-bound references survive model omissions, blanks and outages.
-
-    Retrieval is not proof of the whole question. Date types stay separate, and
-    a missing URL/title/publisher is not invented. Excerpts are bounded per doc.
-    """
     lines, seen, quote_words = [], set(), {}
     for _sid, result in step_results.items():
         if result.get("engine") != "vector":
@@ -2015,7 +1937,6 @@ def _render_vector_sources(step_results: dict) -> str:
 
 
 def _render_execution_limits(state: PipelineState) -> str:
-    """Expose actual failed prerequisites, never turn abstention rows into facts."""
     step_ids = tuple((state.get("step_results") or {}).keys())
 
     def public_reason(value: object) -> str:
@@ -2057,13 +1978,7 @@ def _render_execution_limits(state: PipelineState) -> str:
 
 
 def _render_graph_results(step_results: dict, plan: list[dict] | None = None) -> str:
-    """Keep terminal relationship records visible without leaking intermediates.
 
-    Graph rows consumed as RDB filters are candidate sets, not the final answer.
-    Their verified field evidence is attached to the filtered RDB rows by the
-    answer contract, so rendering them again would expose supersets (for example
-    Q22's 14 constituent candidates before the three-product intersection).
-    """
     public_labels = {
         "etf_code": "상품코드", "code": "상품코드", "product_code": "상품코드",
         "etf_name": "상품명", "name": "상품명", "product_name": "상품명",
@@ -2112,7 +2027,7 @@ def _render_graph_results(step_results: dict, plan: list[dict] | None = None) ->
 
 
 def _build_public_execution_summary(state: PipelineState) -> str:
-    """Describe execution stages without exposing internal routing identifiers."""
+
     step_results = list((state.get("step_results") or {}).items())
     if not step_results:
         return "; ".join((state.get("route") or {}).get("blocking_reasons") or []) or "실행 결과 미확보"
@@ -2152,7 +2067,7 @@ def _build_public_execution_summary(state: PipelineState) -> str:
 
 
 def generate_answer_node(state: PipelineState) -> dict:
-    # 1. State에서 필요한 값 추출 (question_id가 들어온다고 가정)
+
     question_id = state.get("question_id", "Q-UNKNOWN")
     question = state.get("question", "")
     merged_rows = state.get("merged_rows") or []
@@ -2160,8 +2075,6 @@ def generate_answer_node(state: PipelineState) -> dict:
     intent = state.get("intent") or {}
     blocking_reasons = route.get("blocking_reasons") or []
 
-    # 2. retrieved_context (답변 근거) - state["step_results"]에서 엔진별
-    # 실제 근거(SQL/건수/Graph 관계·evidence)를 조립한다(§10).
     retrieved_context = _build_retrieved_context(state)
 
     field_contract = _build_rdb_answer_contract(state)
@@ -2176,8 +2089,7 @@ def generate_answer_node(state: PipelineState) -> dict:
     )
     narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
     execution_summary = _build_public_execution_summary(state)
-    # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
-    # narrative questions still use the existing synthesis path plus the contract.
+
     document_body = any(str(c.get("chunk_text") or "").strip()
                         for r in (state.get("step_results") or {}).values()
                         if r.get("engine") == "vector" and r.get("status") == "ok"
@@ -2204,21 +2116,13 @@ def generate_answer_node(state: PipelineState) -> dict:
 
     # 3. 예외 처리: 데이터가 없는 경우
     if not merged_rows:
-        # 서술형 질문은 blocking_reasons가 비어 있어도 "문서 미확보" 때문에
-        # 답을 못 하는 경우가 있다. 그 사유를 그대로 답변에 남긴다.
+
         reasons = list(blocking_reasons)
         for result in (state.get("step_results") or {}).values():
             if result.get("engine") == "vector" and result.get("status") not in (None, "ok"):
                 detail = result.get("note") or result.get("error") or ""
                 reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
-        # 답변 불가 자체는 정답일 수 있다(골드셋 Q31~Q35). 감점되는 것은 거부가
-        # 아니라 **사유를 말하지 않는 것**이다. 실측: 그 5문항 19회차 중 17회차가
-        # MISSING_EVIDENCE 단독 실패였고, blocking_reasons 가 비면 여기서
-        # 27자 고정 문자열만 나갔다.
-        #
-        # 그래서 intent 가 실제로 무엇을 찾으려 했는지를 문장에 싣는다 - 조건 값,
-        # 지목한 엔티티, 대상 도메인, 그리고 조회 기준일과 0건 사실이다.
-        # 지어내지 않는다. 전부 이미 state 에 있는 값을 되뇌는 것뿐이다.
+
         reasons.extend(_describe_abstain_reason(intent, route))
         reason = f" ({'; '.join(reasons)})" if reasons and not execution_limits else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
@@ -2246,9 +2150,7 @@ def generate_answer_node(state: PipelineState) -> dict:
     requested_items = _describe_requested_items(intent)
     vector_status = _describe_vector_status(state.get("step_results") or {})
     sql_assumptions = _describe_sql_assumptions(state.get("step_results") or {})
-    # §10: think_trace를 LLM이 매번 새로 지어내지 않고, 파이프라인이 각
-    # 노드에서 실제로 쌓아 온 실행 기록(질의 분석 -> plan 수립 -> 엔진별
-    # 조회 -> 결과 합치기)을 근거로 요약하게 한다.
+
     execution_log = "\n".join(state.get("trace") or []) or "(기록 없음)"
 
     # 5. 구조화된 출력(Structured Output)으로 LLM 호출
@@ -2274,8 +2176,7 @@ def generate_answer_node(state: PipelineState) -> dict:
             ),
         ], bool(field_answer or vector_sources or graph_answer)
     )
-    
-    # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
+
     answer_text = _sanitize_generated_narrative(response.get("answer"))
     if field_answer:
         answer_text = "\n\n".join(part for part in [answer_text.strip(), field_answer] if part)

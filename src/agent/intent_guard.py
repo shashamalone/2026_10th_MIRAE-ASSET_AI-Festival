@@ -40,9 +40,7 @@ def _fix_condition(c: dict) -> tuple[dict, list[str]]:
     operator = (c.get("operator") or "").strip()
 
     if operator and operator not in _ALLOWED_OPERATORS:
-        # 값이 콤마 없는 단일 값이면서 operator가 "in"이면 "eq"로 정규화한다.
-        # 그 외 enum 밖 값은 별칭 매핑으로 되돌리고, 매핑도 없으면 건드리지
-        # 않는다(다음 단계가 unresolved 개념으로 안전하게 처리하게 둔다).
+
         value = c.get("value") or ""
         if operator.lower() == "in" and "," not in value:
             c["operator"] = "eq"
@@ -138,9 +136,6 @@ def _fix_output_requirements(output_req: dict, domain_names: set[str]) -> tuple[
                          + (f" (도메인 이름: {dropped})" if dropped else ""))
     return output_req, notes
 
-
-# attribute가 이 표의 키와 정확히 일치하는 조건만 relations로 재분류한다 -
-# 새 관계 이름을 추측하지 않는다(아래 _extract_relation_conditions 참고).
 _RELATION_WORDS = {
     "편입": "holds", "보유": "holds", "포함": "holds", "편입종목": "holds",
     "자회사": "subsidiary_of", "계열사": "subsidiary_of", "출자": "subsidiary_of",
@@ -210,7 +205,7 @@ def _extract_theme_relations(intent: dict) -> tuple[list[dict], list[str]]:
     """"OOO 테마"/"OOO 섹터"류 표현이 relations 어디에도(entity_role="theme")
     안 잡혔으면 raw_question에서 직접 뽑아 relations에 추가한다.
 
-    2026-09-02 실측: "미래에셋에서 운용하는 반도체 테마 국내ETF..." 질문에서
+    "미래에셋에서 운용하는 반도체 테마 국내ETF..." 질문에서
     LLM이 relations를 완전히 빈 배열로 반환하고 "반도체"를 어디에도
     구조화된 형태로 안 남겼다(product_domain.subtype엔 "테마형"이라는
     두루뭉술한 값만 있었다). 그런데도 최종 답은 우연히 맞았는데, SQL 생성
@@ -267,17 +262,7 @@ _ETF_SCOPE_WORDS = {"국내", "해외", "상장", "주식", "실제", "관련", 
 
 
 def _extract_compound_etf_theme_relations(intent: dict) -> tuple[list[dict], list[str]]:
-    """Recover an explicit two-token ETF descriptor omitted as a theme relation.
 
-    A holdings question such as ``중국 반도체 ETF`` can be returned by the
-    intent model with ``subtype=["반도체"]`` and no theme relation.  ``반도체``
-    is not an RDB product subtype, while the complete phrase is two independent
-    Graph taxonomy facets.  Only recover the phrase when all of these facts are
-    explicit in the model output and question: a holdings relation, a domestic
-    ETF domain, the reported subtype, and exactly one adjacent descriptor token
-    before that subtype and ``ETF``/``ETN``.  The Graph resolver still has to
-    verify both facets; this guard never invents a product list or answer value.
-    """
     relations = list(intent.get("relations") or [])
     if any(relation.get("entity_role") == "theme" for relation in relations):
         return [], []
@@ -333,7 +318,7 @@ def _drop_redundant_theme_conditions(conditions: list[dict], relations: list[dic
     있다는 사실만으로 관계를 확정하지 않는다"). 그런데도 LLM(특히
     verify_intent_node의 judge 재검토 패스)이 relations에 이미
     entity_role="theme" 관계가 있는데도 conditions에 "테마"=값 조건을
-    중복으로 남기는 사례가 실측됐다(2026-09-02, "미래에셋에서 운용하는
+    중복으로 남기는 사례가 실측됐다("미래에셋에서 운용하는
     반도체 테마 국내ETF..." 질문 - analyze_intent_node 직후엔
     _extract_theme_relations가 relations만 정확히 채웠는데, 그 뒤
     verify_intent_node가 같은 스키마로 다시 호출되면서 relations는 그대로
@@ -362,7 +347,7 @@ def _drop_redundant_superlative_conditions(conditions: list[dict], sort: dict) -
     """"가장 큰/가장 작은/최고/최소" 같은 최상급 표현은 sort(attribute+order+limit)
     로만 표현해야 하는데, analyze_intent_node(또는 verify_intent_node의 재검토
     패스)가 같은 attribute를 conditions에도 값 없이(value="") 중복으로 남기는
-    사례가 실측됐다(2026-09-06, "국내 상장 ETF 중 총보수율이 가장 낮은 상품은?"
+    사례가 실측됐다("국내 상장 ETF 중 총보수율이 가장 낮은 상품은?"
     질문 - sort는 {attribute:"총보수율", order:"asc", limit:"1"}로 정확히
     들어갔는데 conditions에 {attribute:"총보수율", operator:"lte", value:""}가
     그대로 남아 있었다).
@@ -430,12 +415,7 @@ def _drop_redundant_theme_subtypes(product_domains: list[dict],
 
 
 def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
-    """Use explicit path endpoints, never unrelated question clauses, as scope.
 
-    A Company -> Holding -> Product path returns products, not companies.
-    A named company issuing bonds is already a catalogue-backed issuer filter.
-    Only redundant positive holding flags with a bound relation are removed.
-    """
     domains = [d.get("domain") for d in intent.get("product_domain") or []]
     conditions = list(intent.get("conditions") or [])
     relations, notes = [], []
@@ -464,8 +444,7 @@ def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
             if (relation.get("subject_domain", "").casefold() in {"company", "기업", "회사"}
                     and re.search(r"상품|product|etf|펀드", path)):
                 targets = [d for d in domains if d in {"국내ETF", "해외ETF", "펀드"}]
-                # Do not split an intermediate referenced node: its successors
-                # need a single explicit result identity.
+
                 if targets and relation.get("id") not in referenced:
                     for index, domain in enumerate(targets):
                         rid = relation.get("id") if index == 0 else f"{relation.get('id')}_scope{index}"
@@ -494,10 +473,7 @@ def _normalize_product_relations(intent: dict) -> tuple[dict, list[str]]:
         and re.search(r"(?:ETF|상장지수)", raw_question, re.IGNORECASE)
         and not _EXPLICIT_OVERSEAS_ETF_SCOPE.search(raw_question)
     )
-    # "중국 반도체 ETF"의 중국은 투자지역/테마이지 상장 시장 지정이 아니다.
-    # 적재된 보유관계가 국내 상장 ETF productCode를 반환하는데 분석기가
-    # 해외ETF로 잡으면 Graph 성공 뒤 RDB에서 전부 0건이 된다. 해외 상장·
-    # 거래소를 명시하지 않은 편입 ETF 질문만 국내ETF로 안전하게 교정한다.
+
     if unqualified_etf and any(item.get("domain") == "해외ETF" for item in product_domains):
         product_domains = [
             {**item, "domain": "국내ETF"} if item.get("domain") == "해외ETF" else item
@@ -528,8 +504,6 @@ def guard_intent(intent: dict) -> tuple[dict, list[str]]:
     fixed["product_domain"] = [{**d, "subtype": _strip_blank_strings(d.get("subtype") or [])}
                                for d in intent.get("product_domain") or []]
 
-    # 조건으로 잘못 들어온 관계 표현을 relations로 먼저 옮긴 뒤, 남은
-    # conditions와 relations(새로 옮겨진 것 포함) 각각을 마저 교정한다.
     raw_conditions, extracted_relations, extract_notes = _extract_relation_conditions(intent)
     notes.extend(extract_notes)
 
@@ -590,10 +564,7 @@ def guard_intent(intent: dict) -> tuple[dict, list[str]]:
 
     relations = fixed_relations
     task = intent.get("task", "")
-    # relations가 있으면 이 질문은 정의상 관계형이다. comparison(관계를 낀
-    # 비교)만 예외로 허용하고, 그 외 값(lookup/filter_rank/explanation/
-    # recommendation 등 - 실측으로 LLM이 이 중 아무거나 잘못 낼 수 있음을
-    # 확인했다)은 전부 relation으로 재분류한다.
+
     if relations and task not in ("relation", "comparison"):
         fixed["task"] = "relation"
         notes.append(f"relations가 있는데 task='{task}' -> 'relation'으로 재분류")
