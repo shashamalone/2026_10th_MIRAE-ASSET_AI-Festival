@@ -201,6 +201,13 @@ class ReadOnlyPreflightTest(unittest.TestCase):
         with patch.object(VERIFIER, "request", side_effect=responses), self.assertRaises(SystemExit):
             VERIFIER.collect_preflight("https://data-api.test", 1_226_698)
 
+    def test_preflight_accepts_previous_api_version_before_upgrade(self):
+        responses = preflight_responses()
+        responses[0][1]["api_version"] = "4.3.0"
+        with patch.object(VERIFIER, "request", side_effect=responses):
+            receipt = VERIFIER.collect_preflight("https://data-api.test", 1_226_698)
+        self.assertEqual(receipt["api"]["version"], "4.3.0")
+
 
 if __name__ == "__main__":
     unittest.main()

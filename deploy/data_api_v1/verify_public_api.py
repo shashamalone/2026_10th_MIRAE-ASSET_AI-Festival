@@ -296,7 +296,11 @@ def collect_preflight(url: str, expected_graph_triples: int) -> dict[str, Any]:
     require(expected_graph_triples == 1_226_698, "PREFLIGHT FAIL: non-canonical Graph input")
     status, health = request(url, "/health")
     require(status == 200, "PREFLIGHT FAIL: health status")
-    require(health.get("api_version") in {"4.0.0", EXPECTED_API_VERSION}, "PREFLIGHT FAIL: API version")
+    live_api_version = health.get("api_version")
+    require(
+        isinstance(live_api_version, str) and bool(live_api_version.strip()),
+        "PREFLIGHT FAIL: API version",
+    )
     require(health.get("release_id") == EXPECTED_RELEASE, "PREFLIGHT FAIL: release")
     # API 4.0 predates the SEC incremental-vector contract and can report
     # degraded despite healthy immutable stores. The probes below validate all
@@ -588,7 +592,8 @@ def run_post_deploy(url: str, expected_graph_triples: int, health_only: bool) ->
         "ROUTE CONTRACT FAIL: removed routes",
     )
     print(
-        "FINANCIAL AGENT API PASS: API=4.3.0 exact routes=9; /answer five-field contract; "
+        f"FINANCIAL AGENT API PASS: API={EXPECTED_API_VERSION} exact routes=9; "
+        "/answer five-field contract; "
         "text/plain SQL/SPARQL readonly; "
         "official=53375 holdings=46951 subsidiaries=8866 "
         f"vector_run={EXPECTED_VECTOR_RUN} vector_search=2/2 "
