@@ -312,6 +312,10 @@ def compile_graph_plan(plan: dict, entity: dict, fragment: SchemaFragment,
         ])
         evidence_vars.extend(aliases[key] for key in
                              ("as_of", "source", "document", "document_title"))
+        for key in ("document_publisher", "document_date", "document_quote"):
+            where.append(f"OPTIONAL {{ {ref(node_id)} {_term(_EVIDENCE_PROPERTIES['document'])} ?{aliases['document']} . "
+                         f"?{aliases['document']} {_term(_EVIDENCE_PROPERTIES[key])} ?{aliases[key]} . }}")
+            select_vars.append(aliases[key])
 
     projected = select_vars + evidence_vars
     projected = list(dict.fromkeys(projected))

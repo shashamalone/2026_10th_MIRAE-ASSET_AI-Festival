@@ -102,6 +102,7 @@ langchain_naver가 설치되어 있지 않거나 애매한 relation이 아예 �
 """
 from __future__ import annotations
 from typing import Any
+import re
 from agent.prompts import RELATION_ORIGIN_SYSTEM_PROMPT
 from agent.get_clova import _llm_plan
 
@@ -328,6 +329,27 @@ def plan_query_node(state: PipelineState) -> PipelineState:
               needs_merge_rank / used_llm_fallback 등).
     """
     intent = state["intent"]
+    import re
+    question = state.get("question") or intent.get("raw_question", "")
+    policy_request = ("정책" in question and sum(t in question for t in ("구조", "운용주체", "자금조달", "출자")) >= 2)
+    if policy_request:
+        terms = [e.get("surface_form", "") for e in intent.get("target_entities") or [] if e.get("surface_form")]
+        if not terms:
+            subject = re.match(r"\s*([^.!?]+?)의\s", question)
+            terms = [subject.group(1)] if subject else []
+        req = intent.get("output_requirements") or {}
+        return {"plan": [{"step_id": "vector_policy", "engine": "vector", "depends_on": [],
+                          "document_scope": "policy", "subject_terms": terms,
+                          "topics": req.get("narrative_topics", []), "fields": req.get("fields", [])}],
+                "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": True,
+                          "needs_merge_rank": False, "blocking_reasons": []},
+                "trace": _trace("정책·자금조달 설명: 상품 마스터가 아닌 공식 정책/운용 문서 카탈로그에서 주체를 대조합니다.")}
+    from agent.evidence_contract import request_blockers
+    blockers = request_blockers(intent, state.get("question") or intent.get("raw_question", ""))
+    if blockers:
+        return {"plan": [], "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": False,
+                "needs_merge_rank": False, "blocking_reasons": blockers},
+                "trace": _trace("요청 근거 계약: " + "; ".join(blockers))}
 
     domains = _normalize_domains(intent)
     domain_names = [d["domain"] for d in domains]
@@ -505,6 +527,7 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                         "sort": sort if sort_attribute else None,
                         "fields": fields,
                         "product_name_entities": product_name_entities,
+                        "class_suffixes": (intent.get("identity_comparison") or {}).get("classes", []),
                         "triggers": rdb_triggers,
                     }
                 )
@@ -514,6 +537,8 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     # 3) Vector 단계: 서술형 답변이 필요하면 마지막에 하나
     # -----------------------------------------------------------------
     needs_vector = bool(narrative_topics) or answer_format in ("narrative", "list_with_narrative")
+    if intent.get("identity_comparison") and not narrative_topics:
+        needs_vector = False
     if needs_vector:
         upstream = rdb_step_ids or terminal_graph_step_ids
         plan.append(
@@ -547,6 +572,10 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     else:
         merge_group_ids = []
     needs_merge_rank = len(merge_group_ids) > 1
+    rank_domains = {p.get("domain") for p in plan if p["step_id"] in merge_group_ids}
+    if needs_merge_rank and "해외ETF" in rank_domains and len(rank_domains) > 1 and "".join(sort_attribute.split()).casefold() in {"aum", "순자산", "순자산총액", "순자산규모"}:
+        needs_merge_rank = False
+        blocking_reasons.append("해외ETF의 거래통화 AUM과 국내 상품의 원화 AUM은 환율·환산 기준일 없이 합쳐 순위를 매길 수 없습니다. 각 도메인 안에서만 정렬해 표시합니다.")
 
     # -----------------------------------------------------------------
     # 4) 라우팅 요약
@@ -575,6 +604,30 @@ def plan_query_node(state: PipelineState) -> PipelineState:
         "llm_fallback_unavailable": llm_fallback_attempted_but_unavailable,
         "blocking_reasons": blocking_reasons,
     }
+
+    # Explicit parent-and-subsidiary enumeration is a union of alternative
+    # issuers/holdings, not the intersection used for independent constraints.
+    question = state.get("question", "")
+    by_id = {r["id"]: r for r in relations}
+    for target_step in plan:
+        if target_step.get("engine") != "rdb":
+            continue
+        alternatives = {}
+        for sid in target_step.get("depends_on") or []:
+            relation = by_id.get(sid.removeprefix("graph_"), {})
+            if relation.get("relation") not in {"holds", "holding", "held_by"}:
+                continue
+            chain, seen, root = [], set(), relation
+            while root and root.get("id") not in seen:
+                seen.add(root.get("id")); chain.append(root)
+                if not root.get("object_ref"):
+                    break
+                root = by_id.get(root["object_ref"], {})
+            name = root.get("object_entity", "")
+            if name and re.search(re.escape(name) + r"\s*(?:및|와|과)\s*(?:확인된\s*)?자회사", question):
+                alternatives.setdefault(name, []).append((sid, len(chain) > 1))
+        target_step["graph_any_groups"] = [[sid for sid, _ in group] for group in alternatives.values()
+                                            if {is_child for _, is_child in group} == {True, False}]
 
     # task 기반 안전망: intent.task가 "relation"인데 plan에 Graph 단계가
     # 하나도 없으면 relations 추출 자체가 누락됐을 가능성이 있다. task도

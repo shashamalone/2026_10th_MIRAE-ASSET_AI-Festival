@@ -7,6 +7,17 @@
     "etf_gl": {"value": "2026-08-21", "basis": "종가 기준일(du_clpr_base_dt 최빈값); 행별 개별값 존재"},
     "fund_pub": {"value": "2026-08-21", "basis": "주최측 스냅샷(2026-08-24 배포); 원천에 기준일 컬럼 없음"}
   },
+  "relationship_as_of": {
+    "etf_kr_holdings": {
+      "value": "2026-08-21",
+      "basis": "KODEX/TIGER/RISE/ACE 운용사별 편입 공시; 원문·URL·기준일·SHA-256은 metadata/etf_holdings_provenance.json",
+      "organizer_cutoff": "2026-08-24",
+      "eligible_products": 725,
+      "available_products": 723,
+      "unavailable_products": 2,
+      "holding_rows": 47244
+    }
+  },
   "rating_rank": {"AAA":1,"AA+":2,"AA":3,"AA-":4,"A+":5,"A":6,"A-":7,"BBB+":8,"BBB":9,"BBB-":10,"BB+":11,"BB":12,"BB-":13,"B+":14,"B":15,"B-":16,"CCC":17,"CC":18,"C":19},
   "mandatory_filters": {
     "etf_kr": [{"binding":"etf_kr.group","operator":"==","value":"ETF"}],

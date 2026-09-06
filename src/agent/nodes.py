@@ -31,7 +31,13 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 """
 from __future__ import annotations
 
+import ast
 import json
+import re
+import math
+import os
+import time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from agent.get_clova import _llm_answer, _llm_plan
@@ -42,9 +48,12 @@ from agent.state import ready_step_ids
 
 from agent.graph_logic import graph_orchestrator
 from tools import holdings_provenance, rdb_schema
+from tools import schema_snapshot
+from tools import catalog_sql
 from agent import utils
+from agent import evidence_contract
 from agent.get_clova import embed
-from tools.vector_search import get_coverage, resolve_product_ids, search_documents
+from tools.vector_search import get_coverage, resolve_product_ids, search_documents, search_policy_documents
 
 PipelineState = dict[str, Any]
 
@@ -69,6 +78,8 @@ def analyze_intent_node(state: PipelineState) -> dict:
         ]
     )
     intent, guard_notes = guard_intent(intent)
+    intent, request_notes = utils.preserve_explicit_output_requests(intent, state["question"])
+    guard_notes.extend(request_notes)
     domains = [d.get("domain") for d in (intent.get("product_domain") or [])]
     trace = [f"질의 분석 완료. product_domain={domains}"]
     trace.extend(f"질의 분석 보정: {note}" for note in guard_notes)
@@ -106,6 +117,28 @@ def verify_intent_node(state: PipelineState) -> dict:
         trace_msg = "의도 분석 검수 완료: 수정 사항 없음 (원본 유지)"
 
     final_intent, guard_notes = guard_intent(final_intent)
+    final_intent, comparator_notes = evidence_contract.restore_explicit_comparators(final_intent, question)
+    guard_notes.extend(comparator_notes)
+    final_intent, time_notes = evidence_contract.restore_relative_event_window(final_intent, question)
+    guard_notes.extend(time_notes)
+    final_intent, class_notes = evidence_contract.restore_class_comparison(final_intent, question)
+    guard_notes.extend(class_notes)
+    final_intent, cross_notes = evidence_contract.restore_cross_market_identity(final_intent, question)
+    guard_notes.extend(cross_notes)
+    final_intent, identity_notes = utils.resolve_named_product_domains(final_intent)
+    guard_notes.extend(identity_notes)
+    final_intent, subtype_notes = utils.prune_inferred_named_subtypes(final_intent, question)
+    guard_notes.extend(subtype_notes)
+    final_intent, issuer_notes = utils.validate_issuer_subjects(final_intent, question)
+    guard_notes.extend(issuer_notes)
+    final_intent, region_notes = utils.preserve_explicit_investment_region(final_intent, question)
+    guard_notes.extend(region_notes)
+    final_intent, exposure_notes = utils.preserve_overseas_exposure_scope(final_intent, question)
+    guard_notes.extend(exposure_notes)
+    final_intent, theme_notes = utils.restore_shared_theme_scope(final_intent, question)
+    guard_notes.extend(theme_notes)
+    final_intent, request_notes = utils.preserve_explicit_output_requests(final_intent, question)
+    guard_notes.extend(request_notes)
     trace = [trace_msg]
     trace.extend(f"의도 검수 보정: {note}" for note in guard_notes)
 
@@ -135,8 +168,19 @@ def _write_sql(draft_text: str, schema_block: str) -> dict:
 
 
 def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max_retries: int) -> dict:
+    result = _execute_target_step_query(step, question, conn, apply_limit, max_retries)
+    # Preserve requested fields even when compilation, policy or execution blocks.
+    result["requested_fields"] = list(step.get("fields") or [])
+    return result
+
+
+def _execute_target_step_query(step: dict, question: str, conn, apply_limit: bool, max_retries: int) -> dict:
     """role="target"인 RDB 단계(최종 답의 일부가 되는 조회). intent가
     구조화한 conditions/sort/fields를 그대로 쓴다."""
+    if step.get("graph_handoff_blocked"):
+        return {"engine": "rdb", "role": "target", "domain": step["domain"],
+                "rows": [], "count": 0, "sql": None,
+                "skipped_reason": step["graph_handoff_blocked"]}
     step, policy_notes = utils.apply_sale_policy(step)
     domain = step["domain"]
     needed_concepts = utils.collect_needed_concepts(step)
@@ -163,20 +207,25 @@ def _execute_target_step(step: dict, question: str, conn, apply_limit: bool, max
 
     schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=apply_limit)
     try:
-        draft = _draft_query_description(question, schema_block)
-        sql_result = _write_sql(draft, schema_block)
+        draft = "확정 카탈로그 기반 결정론적 SQL"
+        sql_result = catalog_sql.compile_select(resolved_schema, apply_limit=apply_limit)
     except Exception as e:
         return {
             "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-            "error": f"SQL 생성 LLM 호출 실패: {e}",
+            "error": f"SQL 컴파일/스키마 검증 실패: {e}",
         }
 
     run = _run_sql_with_retry(conn, domain, question, schema_block, sql_result, max_retries)
+    output_views = resolved_schema.get("output_views") or []
+    rows = utils.derive_output_views(run["rows"], output_views)
     result = {
         "engine": "rdb", "role": "target", "domain": domain,
-        "rows": run["rows"], "count": len(run["rows"]),
+        "rows": rows, "count": len(rows), "output_views": output_views,
         "sql": run["sql"], "sql_draft_nl": draft, "assumptions": policy_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
+        "sql_compiler": sql_result["compiler"], "column_refs": sql_result["column_refs"],
+        "output_fields": sql_result["output_fields"],
+        "unverified_subtypes": resolved_schema.get("unverified_subtypes", []),
     }
     if run["error"]:
         result["error"] = run["error"]
@@ -211,6 +260,13 @@ def _execute_merged_target_group(
     1년수익률) 조건이 무효인 도메인은 이 그룹에서만 제외하고 사유를
     남긴다 - 질문 전체를 답변불가 처리하지 않는다."""
     sort_order = sort.get("order") or "desc"
+    try:
+        if sort_order not in {"asc", "desc"}:
+            raise catalog_sql.CompileError("정렬 방향은 asc/desc여야 합니다")
+        parsed_limit = catalog_sql.limit_value(sort_limit)
+    except catalog_sql.CompileError as exc:
+        return {step["step_id"]: {"engine": "rdb", "role": "target", "domain": step["domain"],
+                "rows": [], "count": 0, "sql": None, "skipped_reason": str(exc)} for step in steps}
 
     contributing_step_ids: list[str] = []
     contributing_domains: list[str] = []
@@ -218,10 +274,17 @@ def _execute_merged_target_group(
     schema_blocks: list[str] = []
     all_notes: list[str] = []
     results: dict[str, dict] = {}
+    output_fields_by_domain: dict[str, list] = {}
+    requested_fields_by_domain = {s["domain"]: list(s.get("fields") or []) for s in steps}
 
     for step in steps:
         step_id = step["step_id"]
         domain = step["domain"]
+        if step.get("graph_handoff_blocked"):
+            results[step_id] = {"engine": "rdb", "role": "target", "domain": domain,
+                               "rows": [], "count": 0, "sql": None,
+                               "skipped_reason": step["graph_handoff_blocked"]}
+            continue
         step2, policy_notes = utils.apply_sale_policy(step)
         # UNION 서브쿼리는 4개 고정 별칭(상품코드/상품명/도메인/정렬값)만
         # 내보낸다 - 도메인마다 컬럼 구성이 달라도 UNION ALL은 컬럼
@@ -255,22 +318,23 @@ def _execute_merged_target_group(
 
         schema_block = utils.format_resolved_schema(resolved_schema, apply_limit=False, union_mode=True)
         try:
-            draft = _draft_query_description(question, schema_block)
-            sql_result = _write_sql(draft, schema_block)
+            sql_result = catalog_sql.compile_select(resolved_schema, apply_limit=False, union_mode=True)
         except Exception as e:
             # 이 도메인 하나만 그룹에서 제외한다(질문 전체를 죽이지 않는다) -
             # 미해결 개념/무효 조건과 같은 skipped_reason 취급.
             results[step_id] = {
                 "engine": "rdb", "role": "target", "domain": domain, "rows": [], "count": 0, "sql": None,
-                "skipped_reason": f"SQL 생성 LLM 호출 실패로 그룹에서 제외: {e}",
+                "skipped_reason": f"SQL 컴파일/스키마 검증 실패로 그룹에서 제외: {e}",
             }
             continue
 
         contributing_step_ids.append(step_id)
+        output_fields_by_domain[domain] = sql_result["output_fields"]
         contributing_domains.append(domain)
         subqueries.append(sql_result["sql"].strip().rstrip(";"))
         schema_blocks.append(f"[{domain} 서브쿼리]\n{schema_block}")
         all_notes.extend(policy_notes)
+        all_notes.extend(sql_result.get("assumptions", []))
 
     if not subqueries:
         # 그룹 전체가 제외됐다(전부 미해결/무효/정렬 불가) - 이미 각
@@ -278,14 +342,14 @@ def _execute_merged_target_group(
         return results
 
     order_dir = "ASC" if sort_order == "asc" else "DESC"
-    limit_clause = f"\nLIMIT {int(sort_limit)}" if str(sort_limit).isdigit() else ""
+    limit_clause = f"\nLIMIT {parsed_limit}" if parsed_limit is not None else ""
     combined_sql = (
         "SELECT * FROM (\n" + "\n  UNION ALL\n".join(subqueries) + "\n) merged\n"
         f"ORDER BY sort_value {order_dir} NULLS LAST{limit_clause}"
     )
     combined_schema_block = "\n\n".join(schema_blocks)
 
-    sql_result = {"sql": combined_sql, "assumptions": []}
+    sql_result = {"sql": combined_sql, "assumptions": [], "compiled": True}
     # domain 인자는 _run_sql_with_retry가 실패 시 rdb_schema.get_full_column_list(domain)
     # 로 "실제 컬럼 전체 목록"을 만드는 데만 쓰인다. 이 쿼리는 여러 테이블에
     # 걸쳐 있어 도메인 하나로는 완전한 목록이 안 되지만, 그 함수는 §9를 위해
@@ -294,12 +358,42 @@ def _execute_merged_target_group(
     # 서브쿼리 스키마 전부)에서 나온다.
     run = _run_sql_with_retry(conn, contributing_domains[0], question, combined_schema_block, sql_result, max_retries)
 
+    hydration = []
+    if not run["error"] and run["rows"]:
+        # Phase 1 ranks using a common four-column projection. Phase 2 fetches
+        # requested source fields only for selected IDs, without changing rank.
+        for original in steps:
+            domain = original["domain"]
+            selected = [r for r in run["rows"] if r.get("domain") == domain]
+            if not selected:
+                continue
+            codes = list(dict.fromkeys(str(r["code"]) for r in selected))
+            detail_step = {**original, "sort": None, "conditions": list(original.get("conditions") or []) + [
+                {"attribute": "상품코드", "operator": "in", "value": ", ".join(codes), "value_2": ""}]}
+            detail = _execute_target_step_query(detail_step, question, conn, False, max_retries)
+            hydration.append({"domain": domain, "sql": detail.get("sql"), "error": detail.get("error") or detail.get("skipped_reason"),
+                              "count": detail.get("count", 0)})
+            if detail.get("error") or detail.get("skipped_reason"):
+                all_notes.append(f"{domain} 상위 상품 상세값 조회 실패: {detail.get('error') or detail.get('skipped_reason')}")
+                continue
+            code_column = rdb_schema.get_attribute_catalog(domain)["상품코드"].column
+            output_fields_by_domain[domain] = detail.get("output_fields") or []
+            for row in selected:
+                candidates = [r for r in detail.get("rows") or [] if str(r.get(code_column)) == str(row["code"])]
+                if len(candidates) == 1:
+                    row.update({k: v for k, v in candidates[0].items() if k not in {"code", "name", "domain", "sort_value"}})
+                else:
+                    all_notes.append(f"{domain} {row['code']}: 상세 원천 행 {len(candidates)}건으로 유일성 미확보; 임의 행을 선택하지 않았습니다.")
+
     primary_step_id = contributing_step_ids[0]
     results[primary_step_id] = {
         "engine": "rdb", "role": "target", "domain": "+".join(contributing_domains),
         "rows": run["rows"], "count": len(run["rows"]),
         "sql": run["sql"], "assumptions": all_notes + run["assumptions"],
         "sql_attempts": run["attempts"], "sql_retry_log": run["attempts_log"],
+        "output_fields_by_domain": output_fields_by_domain,
+        "requested_fields_by_domain": requested_fields_by_domain,
+        "hydration_queries": hydration,
     }
     if run["error"]:
         results[primary_step_id]["error"] = run["error"]
@@ -338,6 +432,142 @@ def _fix_sql(question: str, schema_block: str, real_columns_desc: str, wrong_sql
     )
 
 
+# ---------------------------------------------------------------------------
+# 재시도 루프가 쓰는 "실제 컬럼 목록"과 에러 분류 (T-116)
+#
+# 왜 필요한가: _fix_sql 은 실패한 SQL 을 고치라고 LLM 에게 넘기면서 "실제
+# 컬럼 목록"을 근거로 준다. 그 근거가 지금까지 rdb_schema 상수에서 나왔는데,
+# 그 상수가 틀려서 SQL 이 실패한 경우(2026-09-05 실측: enriched.etf_kr_enriched
+# 는 배포 DB에 없다) 수리 루프는 방금 실패한 것과 같은 오답을 근거로 다시
+# 쓴다. 구조적으로 수렴하지 않고 재시도 예산만 태우며, 실패 1건이 LLM 호출
+# max_retries 건으로 증폭돼 서버 분당 한도(기본 60)를 밀어 올린다.
+# ---------------------------------------------------------------------------
+
+# 서버 rate limit 은 60초 슬라이딩 윈도우다(api.py PUBLIC_RATE_LIMIT_PER_MINUTE).
+#
+# ⚠ 알려진 한계: 이 값은 Retry-After 를 "존중"한 것이 아니라 윈도우 길이를
+# 아는 상태에서의 추정이다. utils.run_sql 이 RuntimeError 로 문자열만 던져
+# 헤더가 여기까지 오지 않기 때문이다. 정확히 하려면 (a) 서버가 Retry-After 를
+# 주고(T-119) (b) utils.run_sql 이 그 값을 예외에 실어 줘야 한다 - (b)는
+# utils.py 라서 이 task 의 write_scope 밖이다.
+#
+# 대기 횟수를 1회로 묶는다. 사용자 질의 경로라서 최대 체감 지연을 60초
+# 안쪽으로 유지해야 하고, 윈도우가 60초이므로 그보다 짧게 기다리면 어차피
+# 다시 429 가 난다.
+_RATE_LIMIT_WAIT_SECONDS = float(os.environ.get("RDB_API_RATE_LIMIT_WAIT", "60"))
+_MAX_RATE_LIMIT_WAITS = 1
+
+
+def _live_column_list(domain: str, schema_block: str = "") -> str:
+    """이 도메인이 SQL 에서 쓸 수 있는 컬럼 목록을 live 스키마 기준으로 만든다.
+
+    컬럼의 존재 여부는 live(information_schema)가 정본이고, 각 컬럼의 설명은
+    카탈로그가 정본이다. 둘을 합쳐서 주되, 카탈로그에만 있고 live 에 없는
+    컬럼은 "쓰지 말 것"이라고 명시한다 - 그게 바로 수리 루프를 무한히 헛돌게
+    만들던 항목이기 때문이다.
+
+    기본 테이블 컬럼만 나열하면 조인으로 들어오는 컬럼(예: 총보수율의
+    pm.expense_ratio)을 LLM 이 "없는 컬럼"으로 오해한다. 그래서 조인이
+    제공하는 별칭 컬럼도 같이 알려 준다 - **단, 이번 쿼리에 그 조인이 실제로
+    등록돼 있을 때만.**
+
+    조인은 질의가 그 개념을 실제로 쓸 때만 resolved_schema 에 등록되고, 그때만
+    schema_block 에 "LEFT JOIN ... AS <별칭> ON ..." 줄이 들어간다
+    (utils.format_resolved_schema). 등록되지도 않은 별칭을 "그대로 쓸 수
+    있다"고 알려 주면, LLM 이 그 별칭을 써서 "missing FROM-clause entry"
+    라는 **새로운** 실패를 만든다 - 수리하러 온 함수가 고장을 만드는 셈이다.
+    그래서 schema_block 에 실제로 등록된 별칭만 노출한다.
+
+    **live 근거를 못 얻으면 예외를 던진다.** 예전엔 카탈로그로 조용히
+    폴백했는데, 그러면 이 함수가 존재하는 이유(틀린 카탈로그로 수리하지
+    않기)가 사라진다. 호출부가 이 예외를 받아 수리 자체를 포기한다.
+    """
+    entry = rdb_schema.DOMAIN_TABLE_INFO.get(domain)
+    if not entry:
+        raise schema_snapshot.SnapshotUnavailableError(
+            f"도메인 {domain!r} 의 기본 테이블을 알 수 없어 live 컬럼 목록을 "
+            "만들 수 없다."
+        )
+
+    # 실패는 그대로 전파한다(폴백 금지).
+    snapshot = schema_snapshot.get_snapshot()
+    live_columns = schema_snapshot.get_columns(entry["table"], snapshot)
+
+    catalog_lines = rdb_schema.get_full_column_list(domain)
+    # 카탈로그 줄은 "컬럼명 (설명)" 형태다. 컬럼명으로 색인한다.
+    described: dict[str, str] = {}
+    for line in catalog_lines:
+        described[line.split(" (", 1)[0].strip()] = line
+
+    lines = [
+        f"[{entry['table']} 의 live 실제 컬럼 {len(live_columns)}개 "
+        f"- 이 목록에 없는 컬럼은 DB에 존재하지 않으므로 절대 쓰지 말 것]"
+    ]
+    lines.extend(described.get(col, f"{col} (카탈로그에 설명 없음)") for col in live_columns)
+
+    stale = sorted(set(described) - set(live_columns))
+    if stale:
+        lines.append(
+            "(카탈로그에는 있으나 live 에 없는 컬럼 - 쓰면 반드시 실패한다: "
+            + ", ".join(stale) + ")"
+        )
+
+    # 이번 쿼리에 등록된 조인만 노출한다. utils 는 조인을
+    # "LEFT JOIN <테이블> AS <별칭> ON <조건>" 으로 렌더하므로 "AS <별칭> ON"
+    # 이 schema_block 에 있는지로 판정한다.
+    joined = [
+        f"{spec.column} ({concept}; {spec.join_alias} 조인으로 제공)"
+        for concept, spec in rdb_schema.ATTRIBUTE_CATALOG.get(domain, {}).items()
+        if spec.join_table
+        and "." in spec.column
+        and spec.join_alias
+        and f"AS {spec.join_alias} ON" in schema_block
+    ]
+    if joined:
+        lines.append("[이번 쿼리의 JOIN 으로 제공되는 컬럼 - 그대로 쓸 수 있다]")
+        lines.extend(joined)
+    else:
+        # 조인이 없는 쿼리에서 별칭을 쓰면 missing FROM-clause 로 실패한다.
+        lines.append(
+            "(이번 쿼리에는 JOIN 이 없다. base 테이블에 없는 값은 만들어 낼 수 "
+            "없으므로, 별칭(ee., pm. 같은 접두어)을 새로 지어내지 말 것.)"
+        )
+
+    return "\n".join(lines)
+
+
+def _is_rate_limited(error_desc: str) -> bool:
+    """서버 분당 한도에 걸린 응답인지."""
+    return "HTTP 429" in error_desc or "RATE_LIMITED" in error_desc
+
+
+def _is_schema_contract_violation(error_desc: str) -> bool:
+    """실패 원인이 '카탈로그가 없는 것을 가리켜서'인지 판별한다.
+
+    없는 테이블/컬럼을 참조했다는 에러는 두 가지 원인이 있다.
+      (1) LLM 이 없는 이름을 지어냈다  -> 고치라고 시키면 된다.
+      (2) 카탈로그 자체가 틀렸다       -> 고치라고 시켜도 같은 근거를 다시
+          받으므로 영원히 못 고친다.
+    둘을 구분하려고, 그런 에러가 났을 때만 T-115 의 계약 검증을 한 번 돌린다.
+    계약이 깨져 있으면 (2)이므로 재시도하지 않고 즉시 멈춘다.
+    """
+    lowered = error_desc.lower()
+    undefined_object = any(
+        token in lowered
+        for token in ("undefinedtable", "undefinedcolumn", "does not exist", "존재하지")
+    )
+    if not undefined_object:
+        return False
+    try:
+        rdb_schema.assert_schema_contract()
+    except schema_snapshot.SchemaContractError:
+        return True
+    except Exception:
+        # 계약을 확인할 수 없으면 단정하지 않는다(기존 동작 유지).
+        return False
+    return False
+
+
 def _run_sql_with_retry(
     conn, domain: str, question: str, schema_block: str, sql_result: dict, max_retries: int
 ) -> dict:
@@ -354,10 +584,48 @@ def _run_sql_with_retry(
     함수로 분리하면서 그 문제도 같이 없앴다."""
     current_sql = sql_result["sql"]
     assumptions = list(sql_result.get("assumptions", []))
-    real_columns_desc = "\n".join(rdb_schema.get_full_column_list(domain))
+    # [T-116] 근거를 카탈로그 상수가 아니라 live 스키마에서 만든다. 이 한 줄이
+    # 바뀌지 않으면 T-115 의 계약 검증이 있어도 수리 루프는 여전히 틀린 근거로
+    # 돈다.
+    #
+    # live 근거를 못 얻으면 카탈로그로 폴백하지 않는다. 폴백하면 정확히
+    # 예전 동작(틀린 근거로 수리)으로 되돌아가기 때문이다. 대신 "수리 금지"
+    # 상태로 진행한다 - 원래 SQL 은 그대로 한 번 실행해 본다(멀쩡할 수도
+    # 있다). 실패했을 때 근거 없이 고치지 않을 뿐이다.
     attempts_log: list[str] = []
 
-    for attempt in range(1, max_retries + 1):
+    # 예산이 없으면 아무것도 하지 않는다. live 스키마를 먼저 받아 오면
+    # 쓰지도 않을 네트워크 호출(테이블 수 + 3회)을 낭비한다.
+    if max_retries <= 0:
+        return {
+            "rows": [], "sql": current_sql, "assumptions": assumptions,
+            "attempts": 0, "attempts_log": attempts_log,
+            "error": f"재시도 예산이 0 이하라 SQL 을 한 번도 실행하지 않았다(max_retries={max_retries}).",
+        }
+
+    try:
+        # Compiler already verified every used physical reference. Never repair
+        # compiled SQL with an LLM, even if the database later rejects it.
+        real_columns_desc = "" if sql_result.get("compiled") else _live_column_list(domain, schema_block)
+        repair_allowed = True
+        ground_truth_error = ""
+    except Exception as exc:
+        real_columns_desc = ""
+        repair_allowed = False
+        ground_truth_error = str(exc)
+        attempts_log.append(f"(live 스키마 근거 확보 실패 - SQL 수리 비활성화: {exc})")
+        print(
+            "[⚠️ 근거 없음] live 스키마를 확인할 수 없어 SQL 자동 수리를 "
+            f"비활성화합니다(원래 SQL 은 그대로 1회 실행). 원인: {exc}\n"
+        )
+
+    # rate limit 대기는 "SQL 을 고쳐 보는 시도"가 아니므로 재시도 예산을
+    # 쓰지 않는다. for 문은 예산과 대기를 구분할 수 없어 while 로 바꿨다.
+    attempt = 0
+    rate_limit_waits = 0
+
+    while attempt < max_retries:
+        attempt += 1
         try:
             # conn.commit()을 여기서 부르지 않는다. Postgres 커넥션이 아니라
             # requests.Session이라 트랜잭션 개념 자체가 없다 - POST 요청
@@ -378,6 +646,58 @@ def _run_sql_with_retry(
             error_desc = utils.describe_pg_error(e)
             first_line = error_desc.splitlines()[0] if error_desc else "(빈 에러 메시지)"
             attempts_log.append(f"시도 {attempt}: 실패 - {first_line}")
+
+            # [T-116] 고쳐서 될 실패인지 먼저 가른다. 아래 두 종류는 LLM 에게
+            # 넘겨도 절대 해결되지 않으므로 재시도 예산을 태우면 안 된다.
+
+            if _is_rate_limited(error_desc):
+                # SQL 이 틀린 게 아니라 서버 한도에 걸린 것이다. 여기서 _fix_sql
+                # 을 부르면 멀쩡한 SQL 을 LLM 이 "고쳐서" 망가뜨리고, 그 호출이
+                # 다시 한도를 밀어 올린다. 같은 SQL 로 기다렸다 다시 친다.
+                if rate_limit_waits >= _MAX_RATE_LIMIT_WAITS:
+                    print(f"[⏳ 한도 초과] {rate_limit_waits}회 대기 후에도 429. 중단합니다.\n")
+                    return {
+                        "rows": [], "sql": current_sql, "assumptions": assumptions,
+                        "attempts": attempt, "attempts_log": attempts_log,
+                        "error": f"서버 분당 요청 한도(429)를 {rate_limit_waits}회 "
+                                 f"대기 후에도 넘지 못했다. 마지막 에러: {error_desc}",
+                    }
+                rate_limit_waits += 1
+                attempt -= 1  # 한도 대기는 'SQL 수정 시도'가 아니므로 예산 미소비
+                attempts_log.append(
+                    f"  (429 - {_RATE_LIMIT_WAIT_SECONDS:.0f}초 대기 후 같은 SQL 재실행, "
+                    f"{rate_limit_waits}/{_MAX_RATE_LIMIT_WAITS})"
+                )
+                print(f"[⏳ 429] 분당 한도. {_RATE_LIMIT_WAIT_SECONDS:.0f}초 대기 후 재시도합니다.\n")
+                time.sleep(_RATE_LIMIT_WAIT_SECONDS)
+                continue
+
+            if sql_result.get("compiled"):
+                attempts_log.append("  (결정론적 SQL: 컬럼/조건 보존을 위해 LLM 수리 금지)")
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": f"컴파일된 SQL 실행 실패(임의 재작성 안 함): {error_desc}",
+                }
+
+            if _is_schema_contract_violation(error_desc):
+                # 카탈로그가 없는 것을 가리키고 있다. LLM 에게 고치라고 하면
+                # 같은 카탈로그를 근거로 다시 받으므로 영원히 수렴하지 않는다.
+                # 여기서 멈추는 것이 재시도 증폭(=429 발생원)을 끊는 지점이다.
+                attempts_log.append("  (스키마 계약 위반 - 재시도 무의미, 즉시 중단)")
+                print(
+                    "[🛑 스키마 계약 위반] 카탈로그가 배포 DB에 없는 테이블/컬럼을 "
+                    "가리키고 있습니다. SQL 을 고쳐서 해결될 문제가 아니라 재시도를 "
+                    "중단합니다. tools.schema_snapshot 으로 스냅샷을 갱신하고 "
+                    "rdb_schema 카탈로그를 맞추세요.\n"
+                    f"원인(DB 에러):\n{error_desc}\n"
+                )
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": "스키마 계약 위반으로 재시도 중단(카탈로그가 배포 DB와 "
+                             f"어긋남). 마지막 에러: {error_desc}",
+                }
             # error_desc가 여러 줄(예: describe_api_error의 검증 에러 목록)이면
             # 첫 줄만으로는 원인을 알 수 없으므로 전체 내용을 별도로 남긴다.
             # _fix_sql에는 이미 error_desc 전체가 그대로 전달되지만, 사람이
@@ -397,6 +717,22 @@ def _run_sql_with_retry(
                     "rows": [], "sql": current_sql, "assumptions": assumptions,
                     "attempts": attempt, "attempts_log": attempts_log,
                     "error": f"{max_retries}회 재시도 후에도 실패. 마지막 에러: {error_desc}",
+                }
+
+            if not repair_allowed:
+                # live 근거 없이 고치라고 하면 예전과 똑같이 틀린 근거로
+                # 헛돌게 된다. 고치지 않고 정직하게 멈춘다.
+                attempts_log.append("  (live 근거 없음 - 수리하지 않고 중단)")
+                print(
+                    "[🛑 수리 중단] live 스키마 근거가 없어 SQL 을 고치지 "
+                    "않습니다. 근거 없는 수정은 예전의 무한 재시도로 되돌아갑니다.\n"
+                    f"원인(DB 에러):\n{error_desc}\n"
+                )
+                return {
+                    "rows": [], "sql": current_sql, "assumptions": assumptions,
+                    "attempts": attempt, "attempts_log": attempts_log,
+                    "error": "live 스키마 근거를 얻지 못해 SQL 수리를 중단했다"
+                             f"(근거 실패: {ground_truth_error}). DB 에러: {error_desc}",
                 }
 
             # _fix_sql은 Clova LLM에 네트워크 요청을 보낸다. 이 호출 자체가
@@ -434,6 +770,16 @@ def _run_sql_with_retry(
                 f"수정 이유(LLM 판단): {fix_reason}\n"
                 f"수정된 SQL:\n{fix_result['sql']}\n"
             )
+
+    # 여기까지 오면 안 된다(max_retries<=0 은 함수 앞에서 이미 걸렀고, 루프는
+    # 모든 경로에서 return 한다). 그래도 None 을 흘려보내지는 않는다 - 예전
+    # for 문 버전은 이 구멍으로 None 을 내보내 호출부에서 AttributeError 로
+    # 터졌다.
+    return {
+        "rows": [], "sql": current_sql, "assumptions": assumptions,
+        "attempts": attempt, "attempts_log": attempts_log,
+        "error": "재시도 루프가 결과 없이 종료됐다(도달하면 안 되는 경로).",
+    }
 
 
 def _execute_entity_lookup_step(step: dict, conn, max_retries: int) -> dict:
@@ -482,19 +828,40 @@ def _apply_graph_handoff(step: dict, step_results: dict[str, Any]) -> dict:
     GraphDB의 fp:productCode와 값이 같은 ISIN/RIC임을 확인)가 이미 실제
     컬럼으로 매핑하므로, 이후는 기존 자연어 초안 -> SQL 생성 파이프라인이
     그대로 처리한다."""
-    entity_codes: list[str] = []
-    for dep_id in step.get("depends_on") or []:
-        dep_result = step_results.get(dep_id) or {}
-        if dep_result.get("engine") == "graph":
-            entity_codes.extend(dep_result.get("entity_codes") or [])
-    if not entity_codes:
+    entity_codes = None
+    issuer_names = []
+    any_groups = step.get("graph_any_groups") or []
+    grouped = {sid for group in any_groups for sid in group}
+    dependency_groups = any_groups + [[sid] for sid in step.get("depends_on") or [] if sid not in grouped]
+    for group in dependency_groups:
+        group_codes = []
+        has_product_graph = False
+        for dep_id in group:
+            dep_result = step_results.get(dep_id) or {}
+            if dep_result.get("engine") != "graph":
+                continue
+            if dep_result.get("handoff_kind") == "issuer_names" and step.get("domain") == "채권":
+                if dep_result.get("status") != "ok" or not dep_result.get("issuer_names"):
+                    return {**step, "graph_handoff_blocked": "발행사 후보의 기업관계 근거를 확보하지 못했습니다."}
+                issuer_names.extend(dep_result["issuer_names"])
+                continue
+            has_product_graph = True
+            if dep_result.get("coverage_truncated") and (step.get("sort") or {}).get("attribute"):
+                return {**step, "graph_handoff_blocked": "선행 관계 조회가 반환 상한에 도달하여 전체 후보를 확보하지 못했습니다. 일부 후보로 전체 최고·순위를 확정하지 않습니다."}
+            codes = dep_result.get("entity_codes") or []
+            if dep_result.get("error") or dep_result.get("status") not in (None, "ok"):
+                return {**step, "graph_handoff_blocked": f"선행 Graph 단계 {dep_id}에서 관계에 맞는 상품코드를 확보하지 못해 제한 없는 RDB 조회를 중단했습니다."}
+            group_codes.extend(codes)
+        if has_product_graph:
+            entity_codes = list(dict.fromkeys(group_codes)) if entity_codes is None else [c for c in entity_codes if c in set(group_codes)]
+    if issuer_names:
+        step = {**step, "issuer_name_entities": list(dict.fromkeys(issuer_names))}
+    if entity_codes is None:
         return step
-    entity_codes = list(dict.fromkeys(entity_codes))  # 중복 제거, 순서는 유지
-    new_step = dict(step)
-    new_step["conditions"] = list(step.get("conditions") or []) + [
-        {"attribute": "상품코드", "operator": "in", "value": ", ".join(entity_codes), "value_2": ""}
-    ]
-    return new_step
+    if not entity_codes:
+        return {**step, "graph_handoff_blocked": "선행 관계 조건을 모두 만족하는 상품코드의 교집합이 0건입니다. 관계별 후보의 합집합으로 대신하지 않습니다."}
+    return {**step, "conditions": list(step.get("conditions") or []) + [
+        {"attribute": "상품코드", "operator": "in", "value": ", ".join(entity_codes), "value_2": ""}]}
 
 
 def rdb_search_node(state: PipelineState) -> dict:
@@ -535,6 +902,7 @@ def rdb_search_node(state: PipelineState) -> dict:
     # 처리한다(정렬은 못 하지만 조회 자체는 된다).
     merge_group_ids = set(route.get("merge_group_step_ids") or [])
     group_steps = [s for s in rdb_steps if s["step_id"] in merge_group_ids]
+    group_steps = [_apply_graph_handoff(s, all_step_results) for s in group_steps]
     solo_steps = [s for s in rdb_steps if s["step_id"] not in merge_group_ids]
 
     try:
@@ -575,11 +943,12 @@ def rdb_search_node(state: PipelineState) -> dict:
                 # 대부분의 질문은 depends_on이 비어 있거나 Graph를 안
                 # 기다리므로 이 함수는 아무것도 안 바꾸고 그대로 통과시킨다.
                 handoff_step = _apply_graph_handoff(step, all_step_results)
-                if handoff_step is not step:
-                    injected = handoff_step["conditions"][-1]
-                    trace_msgs.append(
-                        f"RDB 검색 [{step_id}]: Graph 핸드오프 - 상품코드 {len(injected['value'].split(', '))}개 조건 주입"
-                    )
+                if handoff_step is not step and not handoff_step.get("graph_handoff_blocked"):
+                    if handoff_step.get("issuer_name_entities"):
+                        trace_msgs.append(f"RDB 검색 [{step_id}]: Graph 기업관계의 발행사 후보 {len(handoff_step['issuer_name_entities'])}개를 원본 발행사 컬럼과 대조")
+                    else:
+                        injected = handoff_step["conditions"][-1]
+                        trace_msgs.append(f"RDB 검색 [{step_id}]: Graph 핸드오프 - 상품코드 {len(injected['value'].split(', '))}개 조건 주입")
                 result = _execute_target_step(handoff_step, state.get("question", ""), conn, apply_limit, max_retries)
             step_results[step_id] = result
 
@@ -626,12 +995,19 @@ def _build_graph_frame(relation: dict, relations_by_id: dict[str, dict]) -> dict
     root = _chain_root_relation(relation, relations_by_id)
     text = (root.get("object_entity") or "").strip()
     role = root.get("entity_role") or "product"
+    chain, seen, current = [], set(), relation
+    while current and current.get("id") not in seen:
+        seen.add(current.get("id"))
+        chain.append(dict(current))
+        current = relations_by_id.get(current.get("object_ref"))
+    chain.reverse()
     return {
         "entities": [{"text": text, "role": role}] if text else [],
-        "relations": [],
+        "relations": chain,
+        "relation_scope": True,
         "requested_fields": [],
         "constraints": [],
-        "limit": 100,
+        "limit": 500,
     }
 
 
@@ -691,6 +1067,12 @@ def graph_search_node(state: PipelineState) -> dict:
             continue
 
         frame = _build_graph_frame(relation, relations_by_id)
+        issuer_handoff = (relation.get("relation") in {"issued_by", "issuedBy", "발행", "issues"}
+                          and relation.get("subject_domain", "").casefold() in {"채권", "bond"}
+                          and len(frame["relations"]) == 2
+                          and frame["relations"][0].get("relation") in {"subsidiary_of", "has_subsidiary"})
+        if issuer_handoff:
+            frame["relations"] = [{**frame["relations"][0], "subject_domain": "Company"}]
         if not frame["entities"]:
             step_results[step_id] = {
                 "engine": "graph", "status": "abstain_no_seed_text", "rows": [],
@@ -709,7 +1091,7 @@ def graph_search_node(state: PipelineState) -> dict:
             # 실측). entity_role="theme"이면 후보 테마를 전부 찾아 합치는
             # 전용 경로(run_theme_membership)로 보낸다.
             if frame["entities"][0]["role"] == "theme":
-                result = graph_orchestrator.run_theme_membership(question, frame["entities"][0]["text"])
+                result = graph_orchestrator.run_theme_membership(question, frame["entities"][0]["text"], limit=frame["limit"])
             else:
                 result = graph_orchestrator.run(question, frame=frame)
         except Exception as e:
@@ -727,8 +1109,21 @@ def graph_search_node(state: PipelineState) -> dict:
             "evidence": result.get("evidence", []),
             "entity": result.get("entity"),
             "sparql": result.get("sparql"),
+            "graph_plan": result.get("graph_plan") or result.get("plan"),
+            "evidence_level": result.get("evidence_level"),
+            "coverage_truncated": result.get("coverage_truncated", False),
             "note": result.get("note"),
         }
+        if issuer_handoff:
+            graph_plan = step_results[step_id].get("graph_plan") or {}
+            aliases = [o["alias"] for o in graph_plan.get("outputs") or []
+                       if o.get("property") in {"fp:organizationName", "http://mafest.ai/ontology#organizationName"}]
+            names = [row[a] for row in result.get("rows") or [] for a in aliases if row.get(a)]
+            root_name = frame["entities"][0]["text"] if frame["entities"] else ""
+            if root_name and re.search(re.escape(root_name) + r"\s*(?:및|와|과)\s*(?:확인된\s*)?자회사", question):
+                names.append(root_name)
+            step_results[step_id].update(handoff_kind="issuer_names", issuer_names=list(dict.fromkeys(names)))
+            step_results[step_id]["note"] = (result.get("note") or "") + " 확인한 기업관계를 발행사 후보로 전달하며, 채권 발행 사실은 RDB 발행사 컬럼에서 별도 검증합니다."
         trace_msgs.append(
             f"GraphDB 검색 [{step_id}]: status={result.get('status')}, "
             f"{len(result.get('rows', []))}건 조회, entity_codes={len(result.get('entity_codes', []))}건"
@@ -845,6 +1240,12 @@ def _normalize_chunk(chunk: dict) -> dict:
         "published_at": str(chunk.get("published_at") or ""),
         "source_url": chunk.get("source_url") or "",
         "product_ids": list(chunk.get("product_ids") or []),
+        "page_number": chunk.get("page_number"),
+        "heading_path": chunk.get("heading_path") or "",
+        "document_title": chunk.get("document_title") or "",
+        "publisher": chunk.get("publisher") or "",
+        "source_type": chunk.get("source_type") or "",
+        "retrieval_method": chunk.get("retrieval_method") or "vector_similarity",
     }
 
 
@@ -855,7 +1256,27 @@ def _run_vector_step(state: PipelineState, step: dict, question: str) -> dict:
     검색 -> 상태 판정 순서다. 요청 주제 섹션이 하나도 안 걸리면 결과가
     없을 때 topic_not_covered로 남기고, 걸린 결과가 있어도 미확보 주제를
     topic_coverage/note에 적는다."""
+    if step.get("document_scope") == "policy":
+        documents = search_policy_documents(step.get("subject_terms") or [])
+        chunks = [_normalize_chunk({**r, "chunk_id": r.get("chunk_id") or f"metadata:{r['document_id']}",
+                                   "retrieval_method": "subject_catalog", "citation_text": r.get("citation_text") or ""}) for r in documents]
+        return {"engine": "vector", "status": "ok" if chunks else "no_official_document", "chunks": chunks,
+                "count": len(chunks), "queries": step.get("subject_terms") or [], "raw_top": [],
+                "product_scope": {"codes": [], "names": [], "product_ids": [], "coverage": _summarize_coverage([], {})},
+                "topic_coverage": {"requested": {}, "uncovered": {}},
+                "note": "공식 정책/운용 출처 유형과 주체 문자열을 대조했습니다. 본문 없는 문서는 주장 근거로 사용할 수 없습니다."}
     codes, names = _vector_scope(state, step)
+    dependencies = [(state.get("step_results") or {}).get(sid) or {}
+                    for sid in step.get("depends_on") or []]
+    # A failed product/relationship lookup is not permission to search unrelated
+    # prospectuses globally. Independent document-only plans have no dependency.
+    if dependencies and not codes and not names:
+        return {"engine": "vector", "status": "unresolved_product_scope", "chunks": [],
+                "count": 0, "queries": [], "raw_top": [],
+                "product_scope": {"codes": [], "names": [], "product_ids": [],
+                                  "coverage": _summarize_coverage([], {})},
+                "topic_coverage": {"requested": {}, "uncovered": {}},
+                "note": "선행 상품·관계 조회에서 대상 상품을 확보하지 못했습니다. 무관한 상품의 문서로 대체하지 않습니다."}
     product_ids = resolve_product_ids(codes, names) if (codes or names) else []
     coverage = get_coverage(product_ids) if product_ids else {}
     summary = _summarize_coverage(product_ids, coverage)
@@ -1036,6 +1457,10 @@ def merge_results_node(state: PipelineState) -> dict:
 
     merged_rows: list[dict] = []
     for step_id, result in step_results.items():
+        if result.get("error") or result.get("skipped_reason"):
+            continue
+        if result.get("engine") in {"graph", "vector"} and result.get("status") not in (None, "ok", "chained"):
+            continue
         if result.get("engine") == "rdb" and result.get("role", "target") == "target":
             for row in result.get("rows", []):
                 tagged = dict(row)
@@ -1056,8 +1481,12 @@ def merge_results_node(state: PipelineState) -> dict:
                     "인용": (chunk.get("chunk_text") or "")[:400],
                     "기준일": chunk.get("effective_as_of", ""),
                     "출처URL": chunk.get("source_url", ""),
+                    "근거ID": chunk.get("chunk_id", ""),
+                    "발행일": chunk.get("published_at", ""),
+                    "페이지": chunk.get("page_number"),
                     "상품ID": ", ".join(chunk.get("product_ids") or []),
-                    "유사도": round(float(chunk.get("score") or 0.0), 3),
+                    "유사도": round(float(chunk.get("score") or 0.0), 3) if chunk.get("retrieval_method") != "subject_catalog" else None,
+                    "검색방식": chunk.get("retrieval_method") or "vector_similarity",
                     "_domain": "vector",
                     "_step_id": step_id,
                 })
@@ -1209,7 +1638,8 @@ def _build_retrieved_context(state: PipelineState) -> str:
     """§10: route.domains + 고정 스냅샷 날짜 대신, state["step_results"]를
     순회해 각 엔진이 실제로 무엇을 근거로 썼는지 조립한다.
 
-    - RDB 단계: 도메인, 조회 건수, 기준일, 실행된 SQL. merged_into로
+    - RDB 단계: 공식 데이터셋명, 조회 건수, 기준일. SQL 전문, 물리 컬럼과
+      내부 단계 ID는 사용자에게 노출하지 않는다. merged_into로
       다른 단계에 흡수됐거나(§9 UNION 그룹의 비대표 멤버) skipped/error인
       단계는 실제로 근거를 낸 게 없으므로 뺀다.
     - Graph 단계: 어떤 relation(주체 -- 관계 --> 대상)을 탐색했는지(plan에서
@@ -1221,15 +1651,34 @@ def _build_retrieved_context(state: PipelineState) -> str:
     plan_by_id = {s["step_id"]: s for s in state.get("plan") or []}
     parts: list[str] = []
 
+    dataset_labels = {
+        "채권": "국내채권마스터",
+        "국내ETF": "국내ETF·ETN마스터",
+        "해외ETF": "해외ETF·ETN마스터",
+        "펀드": "공모펀드마스터",
+    }
+
     for step_id, result in step_results.items():
         engine = result.get("engine")
         if engine == "rdb":
             if result.get("merged_into") or result.get("skipped_reason") or result.get("error") or not result.get("sql"):
                 continue
-            parts.append(
-                f"[RDB:{result.get('domain', '')}] {result.get('count', 0)}건 조회, "
-                f"기준일 {rdb_schema.DATA_SNAPSHOT_DATE}, SQL: {result['sql']}"
+            domain = str(result.get("domain") or "")
+            summary = (
+                f"{dataset_labels.get(domain, domain + ' 데이터')} · "
+                f"{rdb_schema.DATA_SNAPSHOT_DATE} · {result.get('count', 0)}건"
             )
+            parts.append(summary)
+            for detail in result.get("hydration_queries") or []:
+                if not detail.get("error"):
+                    detail_domain = str(detail.get("domain") or "")
+                    parts.append(
+                        f"{dataset_labels.get(detail_domain, detail_domain + ' 데이터')} 상위 상품 상세 · "
+                        f"{detail.get('count', 0)}건"
+                    )
+            if result.get("output_views"):
+                labels = ", ".join(v["attribute"] for v in result["output_views"])
+                parts.append(f"[로컬 온톨로지 규칙 적용] {labels}: RDB 원천값 + 저장소 TBox 정의; 원격 GraphDB 조회 아님")
         elif engine == "graph":
             if result.get("status") == "chained":
                 continue
@@ -1243,11 +1692,12 @@ def _build_retrieved_context(state: PipelineState) -> str:
                 ev = evidence[0]
                 evidence_note = f", 근거: {ev.get('source_table')}.{ev.get('source_column')}({ev.get('as_of_rule')})"
             elif evidence:
-                evidence_note = f", 행 단위 근거 {len(evidence)}건 확보(출처 문서·기준일 포함)"
+                evidence_note = f", 행 단위 근거 {len(evidence)}건 확보(원천 식별자·기준일; 문서 메타 확보 여부 별도)"
             else:
                 evidence_note = ""
+            status_text = "근거 확보" if result.get("status") == "ok" else "근거 미확보"
             parts.append(
-                f"[Graph] {rel_desc} - status={result.get('status')}, "
+                f"Graph 관계 근거 · {rel_desc} · {status_text} · "
                 f"{len(result.get('rows') or [])}건{evidence_note}"
             )
             # 편입(Holding) 관계는 골드셋 22번이 "편입내역 문서명과 근거 문장"을
@@ -1256,14 +1706,16 @@ def _build_retrieved_context(state: PipelineState) -> str:
             # 여기서 조인해 붙인다(배포된 Oxigraph 가 읽기 전용이라 트리플로
             # 넣을 수 없다). 붙는 게 없으면 아무것도 추가하지 않는다.
             for citation_line in holdings_provenance.describe_rows(result.get("rows") or []):
-                parts.append(f"[Graph:출처] {citation_line}")
+                parts.append(f"편입내역 문서 근거 · {citation_line}")
         elif engine == "vector":
             if result.get("status") == "chained":
                 continue
-            # abstain/no_document이면 note 대신 error를 붙인다 - 답변 LLM이
-            # "문서 미확보"를 사유로 말할 수 있어야 한다.
-            detail = result.get("note") or result.get("error") or ""
-            segments = [f"[Vector] status={result.get('status')}, {result.get('count', 0)}건, {detail}"]
+            # 내부 status와 검색 임계값은 숨기고 근거 확보 여부만 표시한다.
+            available = result.get("status") == "ok" and bool(result.get("chunks"))
+            segments = [
+                f"Vector 문서 근거 · {result.get('count', 0)}건"
+                if available else "Vector 문서 근거 · 확인할 수 없음"
+            ]
             segments.extend(
                 f"인용: {c.get('citation_text')}({c.get('effective_as_of')})"
                 for c in (result.get("chunks") or [])[:2]
@@ -1318,6 +1770,511 @@ def _build_answer_preview(merged_rows: list[dict], total_budget: int = 20) -> li
     return [{k: v for k, v in row.items() if not k.startswith("_")} for row in preview]
 
 
+def _field_evidence(label: str, binding: dict | None, row: dict | None,
+                    failure: str | None = None) -> dict:
+    """A missing key is not SQL NULL; zero/False are values, not absence."""
+    item = {"field": label, "column": (binding or {}).get("column"),
+            "status": failure, "value": None}
+    if failure:
+        return item
+    if row is None:
+        item["status"] = "no_rows"
+    elif binding is None:
+        item["status"] = "unmapped"
+    elif binding["key"] not in row:
+        item["status"] = "not_selected"
+    else:
+        value = row[binding["key"]]
+        item["value"] = value
+        if value is None:
+            item["status"] = "null"
+        elif isinstance(value, str) and not value.strip():
+            item["status"] = "empty"
+        elif (isinstance(value, float) and not math.isfinite(value)) or (
+                hasattr(value, "is_finite") and not value.is_finite()):
+            item.update(status="invalid", value=None)
+        else:
+            item["status"] = "available"
+        item["unit"] = binding.get("unit", "")
+        item["zero_null_rule"] = binding.get("zero_null_rule", "")
+        rule = item["zero_null_rule"] or ""
+        if item["status"] == "available" and "사용 금지" in rule:
+            item["status"] = "restricted"
+        if item["status"] == "available" and not isinstance(value, bool):
+            try:
+                is_zero = Decimal(str(value).strip().replace(",", "")).is_zero()
+            except InvalidOperation:
+                is_zero = False
+            if is_zero and "0" in rule and ("값 없음" in rule or "is_available=false" in rule):
+                item["status"] = "zero_unavailable"
+    return item
+
+
+def _build_rdb_answer_contract(state: PipelineState, row_budget: int = 20) -> list[dict]:
+    """Use execution-time projection bindings, never re-resolve fields with an LLM.
+
+    No question IDs/product names are special-cased. Older/legacy SQL without
+    projection metadata is reported as unverified, not guessed from similar keys.
+    Each record is kept separate (including different markets of one product).
+    """
+    req = (state.get("intent") or {}).get("output_requirements") or {}
+    plans = {p["step_id"]: p for p in state.get("plan") or []}
+    targets = [(sid, r) for sid, r in (state.get("step_results") or {}).items()
+               if r.get("engine") == "rdb" and r.get("role", "target") == "target"
+               and not r.get("merged_into")]
+    contract = []
+    per_step = max(1, row_budget // max(1, len(targets)))
+    for sid, result in targets:
+        rows = result.get("rows") or []
+        failure = "query_failed" if result.get("error") else (
+            "blocked" if result.get("skipped_reason") else None)
+        # Do not display stale/partial rows after a failed query as valid values.
+        visible = [] if failure else rows[:per_step]
+        for index, row in enumerate(visible or [None]):
+            domain = (row or {}).get("domain") or result.get("domain", "")
+            bindings = result.get("output_fields_by_domain", {}).get(
+                domain, result.get("output_fields") or [])
+            labels = result.get("requested_fields_by_domain", {}).get(domain,
+                result.get("requested_fields", plans.get(sid, {}).get("fields", req.get("fields") or [])))
+            labels = list(labels or [])
+            if len(targets) == 1:
+                # A planner omission must not silently erase an intent request.
+                labels.extend(req.get("fields") or [])
+            has_date_request = any(catalog_sql.normalize(f) in utils.PROVENANCE_CONCEPTS for f in labels)
+            # Identification and source dates are compiler-provided provenance.
+            labels.extend(b["attribute"] for b in bindings
+                          if b["attribute"] in {"상품명", "상품코드"}
+                          or b["attribute"].startswith("조건근거(") or b["attribute"] == "AUM통화"
+                          or b["attribute"].startswith("정렬근거(")
+                          or (b["attribute"].startswith("출처기준일(") and not has_date_request))
+            if not labels:
+                labels = list(req.get("fields") or ["조회 결과"])
+            by_label = {}
+            for binding in bindings:
+                by_label.setdefault(catalog_sql.normalize(binding["attribute"]), []).append(binding)
+            items, seen = [], set()
+            for label in labels:
+                normalized = catalog_sql.normalize(label)
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                if evidence_contract.is_identity_field(label) and (state.get("intent") or {}).get("identity_comparison"):
+                    # The cross-record verdict is rendered once, not guessed as
+                    # a per-product physical column with a contradictory NULL.
+                    continue
+                derived = (row or {}).get("_derived_fields", {}).get(normalized)
+                code_binding = next((b for b in bindings if b["attribute"] in {"상품코드", "조건근거(상품코드)"}), None)
+                code = (row or {}).get(code_binding["key"], "") if code_binding else ""
+                graph_item = evidence_contract.graph_field_evidence(label, code, state.get("step_results") or {})
+                if graph_item and not failure:
+                    items.append(graph_item)
+                    continue
+                if derived and not failure:
+                    items.append(dict(derived))
+                    continue
+                matches = by_label.get(normalized, [])
+                if normalized in utils.PROVENANCE_CONCEPTS:
+                    dates = list(dict.fromkeys(c for b in bindings for c in b.get("as_of_columns", [])))
+                    if dates:
+                        for date_column in dates:
+                            binding = next((b for b in bindings if b["key"] == date_column), None)
+                            metric_date = normalized in {"aum기준일", "수익률기준일", "수치기준일", "지표기준일"}
+                            date_label = f"{label} 검토용 원천 갱신일({date_column})" if metric_date else f"{label}({date_column})"
+                            item = _field_evidence(date_label, binding, row, failure)
+                            related = list(dict.fromkeys(
+                                b.get("attribute") for b in bindings
+                                if date_column in (b.get("as_of_columns") or []) and b.get("attribute")
+                                and b.get("key") != date_column
+                            ))
+                            suffix = f" ({'·'.join(related)} 관련)" if related else ""
+                            item["answer_field"] = f"{label}{suffix}"
+                            if metric_date:
+                                item["detail"] = "카탈로그에 연결된 원천별 날짜입니다. 해당 수치 자체의 관측일로 하나를 확정하거나 모두 같은 기준일로 간주하지 않습니다."
+                            items.append(item)
+                        continue
+                # A request for source column names is provenance, not a DB value.
+                if utils.is_source_column_request(label):
+                    item = _field_evidence(label, None, row, failure)
+                    if bindings and not failure and row is not None:
+                        item.update(status="available", value="각 항목의 근거 컬럼을 함께 표시했습니다.")
+                    items.append(item)
+                    continue
+                columns = {b["column"] for b in matches}
+                binding = matches[0] if len(columns) == 1 else None
+                item = _field_evidence(label, binding, row, failure)
+                if binding and row is not None and not failure:
+                    item["as_of"] = []
+                    for column in binding.get("as_of_columns", []):
+                        if column == binding["key"]:
+                            continue
+                        date_item = _field_evidence(
+                            column, next((b for b in bindings if b["key"] == column), None), row
+                        )
+                        date_item["answer_field"] = f"{label} 기준일"
+                        item["as_of"].append(date_item)
+                items.append(item)
+            contract.append({"step_id": sid, "domain": domain, "row_number": index + 1 if visible else None,
+                             "retrieved_rows": len(rows), "displayed_rows": len(visible),
+                             "items": items, "notes": list(result.get("assumptions") or [])})
+    return contract
+
+
+_FIELD_UNAVAILABLE_TEXT = {
+    "null": "제공된 조회 결과의 값이 NULL이어서 확인할 수 없습니다. 0 또는 해당 사실의 부재를 뜻하지 않습니다.",
+    "empty": "제공된 조회 결과가 빈 값이어서 확인할 수 없습니다.",
+    "not_selected": "조회 결과에 해당 컬럼이 포함되지 않아 확인할 수 없습니다. NULL 여부도 확인되지 않았습니다.",
+    "unmapped": "요청 항목과 조회 컬럼의 대응을 확정하지 못해 확인할 수 없습니다.",
+    "no_rows": "조회 결과가 없어 확인할 수 없습니다.",
+    "query_failed": "제공 데이터로 확인할 수 없습니다.",
+    "blocked": "제공 데이터로 확인할 수 없습니다.",
+    "invalid": "조회 값이 유효한 수치가 아니어서 확인할 수 없습니다.",
+    "zero_unavailable": "유효한 측정값으로 확인할 수 없습니다. 카탈로그에서 원천 0을 결측·불가용으로 정의합니다.",
+    "restricted": "카탈로그에서 판정·필터·정렬에 사용할 수 없는 값으로 정의합니다.",
+    "derivation_unavailable": "원천값에 분류 규칙을 적용하지 못해 확인할 수 없습니다.",
+}
+
+
+def _display_field_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
+def _public_field_label(value: object) -> str:
+    """Remove a trailing physical-column annotation from an answer label."""
+    return re.sub(r"\([A-Za-z_][A-Za-z0-9_.]*\)$", "", str(value or "")).strip()
+
+
+def _display_contract_value(item: dict) -> str:
+    """Render graph-derived structured fields as user values, not JSON internals."""
+    value = item.get("value")
+    normalized = re.sub(r"\s+", "", str(item.get("field") or ""))
+    if isinstance(value, list) and all(isinstance(entry, dict) for entry in value):
+        if normalized in {"편입비중", "종목별비중"}:
+            weights = list(dict.fromkeys(
+                str(field_value)
+                for entry in value
+                for key, field_value in entry.items()
+                if (str(key).casefold().endswith("weight") or key == "비중")
+                and field_value not in (None, "", "미조회·확인 불가", "NULL·확인 불가")
+            ))
+            if weights:
+                return ", ".join(
+                    weight if weight.endswith("%") else f"{weight}%" for weight in weights
+                )
+        if normalized in {"편입기준일", "편입내역기준일"}:
+            dates = list(dict.fromkeys(
+                str(field_value)
+                for entry in value
+                for key, field_value in entry.items()
+                if str(key).casefold().endswith("_as_of") and field_value not in (None, "", "미확보")
+            ))
+            if dates:
+                return ", ".join(dates)
+    return _display_field_value(value)
+
+
+def _render_rdb_answer_contract(contract: list[dict]) -> str:
+    """Values and absence notices are rendered by code; no LLM can omit them."""
+    blocks = []
+    shown_notes: set[str] = set()
+    shown_unit_notice = False
+    for record in contract:
+        heading = f"[{record['domain']}]"
+        if record["row_number"] is not None:
+            heading += f" 조회 결과 {record['row_number']}번"
+            if record["row_number"] == 1:
+                heading += f" (반환 {record['retrieved_rows']}건 중 {record['displayed_rows']}건 표시)"
+        lines = [heading]
+        for available, title in [(True, "확인된 값"), (False, "확인 불가 항목")]:
+            selected = [i for i in record["items"] if (i["status"] == "available") == available]
+            if not selected:
+                continue
+            lines.extend(["", title])
+            if available:
+                grouped_available: dict[tuple[str, str, str, str], list[dict]] = {}
+                for item in selected:
+                    field = _public_field_label(item.get("answer_field") or item["field"])
+                    unit = (
+                        f" (단위: {item['unit']})"
+                        if item.get("unit") not in (None, "", "공식 문서 미표기") else ""
+                    )
+                    key = (field, unit, str(item.get("detail") or ""), str(item.get("zero_null_rule") or ""))
+                    grouped_available.setdefault(key, []).append(item)
+                for (field, unit, detail, zero_rule), items in grouped_available.items():
+                    values = list(dict.fromkeys(_display_contract_value(item) for item in items))
+                    lines.append(f"- {field}: {', '.join(values)}{unit}")
+                    if detail:
+                        lines.append(f"  - 산출 근거: {detail}")
+                    if any(item["value"] == 0 for item in items) and zero_rule:
+                        lines.append(f"  - 원천 값 해석 규칙: {zero_rule}")
+            else:
+                grouped: dict[tuple[str, str], list[dict]] = {}
+                for item in selected:
+                    value = _FIELD_UNAVAILABLE_TEXT[item["status"]]
+                    if item["status"] in {"zero_unavailable", "restricted"}:
+                        value += (
+                            f" 원천값: {_display_field_value(item['value'])}; "
+                            f"규칙: {item['zero_null_rule']}"
+                        )
+                    key = (value, str(item.get("detail") or ""))
+                    grouped.setdefault(key, []).append(item)
+                for (value, detail), items in grouped.items():
+                    fields = ", ".join(dict.fromkeys(
+                        _public_field_label(item.get("answer_field") or item["field"]) for item in items
+                    ))
+                    lines.append(f"- {fields}: {value}")
+                    if detail:
+                        lines.append(f"  - 산출 근거: {detail}")
+        # Dates already shown as requested/provenance fields need not be repeated
+        # under every numeric item. Missing date bindings still get a clear reason.
+        shown_columns = {i["column"] for i in record["items"] if i.get("column")}
+        extra_dates = {d["field"]: d for i in record["items"] for d in i.get("as_of", [])
+                       if d.get("column") not in shown_columns}
+        if extra_dates:
+            lines.extend(["", "추가 기준일 상태"])
+            rendered_dates: set[tuple[str, str]] = set()
+            for _label, date_item in extra_dates.items():
+                value = (_display_field_value(date_item["value"]) if date_item["status"] == "available"
+                         else _FIELD_UNAVAILABLE_TEXT[date_item["status"]])
+                label = _public_field_label(date_item.get("answer_field") or "기준일")
+                if (label, value) not in rendered_dates:
+                    lines.append(f"- {label}: {value}")
+                    rendered_dates.add((label, value))
+        if (not shown_unit_notice
+                and any(i.get("unit") == "공식 문서 미표기" for i in record["items"])):
+            lines.extend(["", "카탈로그에서 단위를 확인할 수 없는 값은 단위를 추정하지 않고 원문으로 표시했습니다."])
+            shown_unit_notice = True
+        new_notes = [note for note in dict.fromkeys(record["notes"]) if note not in shown_notes]
+        if new_notes:
+            lines.extend(["", "조회 유의사항"] + [f"- {note}" for note in new_notes])
+            shown_notes.update(new_notes)
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _invoke_answer_with_field_fallback(llm, messages: list, has_field_answer: bool) -> dict:
+    try:
+        response = llm.invoke(messages)
+        return response if isinstance(response, dict) else {}
+    except Exception:
+        if not has_field_answer:
+            raise
+        # A narrative model outage must not discard already retrieved RDB facts.
+        return {"answer": "추가 설명 생성에 실패했습니다. 아래는 확보된 조회 결과와 문서 근거입니다.",
+                "think_trace": "확보된 항목별 상태와 근거를 출력했으며 추가 설명 생성은 실패했습니다."}
+
+
+def _sanitize_generated_narrative(value: object) -> str:
+    """Keep prose only; structured values are rendered by the code contract.
+
+    Some structured-output providers have returned a mapping in ``answer`` or
+    its Python-literal string form.  Appending that value before the verified
+    field contract exposes implementation syntax and duplicates every value.
+    Vector citations and deterministic fields are appended separately, so a
+    mapping/list here can be discarded without losing retrieved evidence.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if not text or text[0] not in "[{":
+        return text
+    parsed: object
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        try:
+            parsed = ast.literal_eval(text)
+        except (SyntaxError, ValueError):
+            return text
+    return "" if isinstance(parsed, (dict, list)) else text
+
+
+def _render_vector_sources(step_results: dict) -> str:
+    """Execution-bound references survive model omissions, blanks and outages.
+
+    Retrieval is not proof of the whole question. Date types stay separate, and
+    a missing URL/title/publisher is not invented. Excerpts are bounded per doc.
+    """
+    lines, seen, quote_words = [], set(), {}
+    for _sid, result in step_results.items():
+        if result.get("engine") != "vector":
+            continue
+        chunks = result.get("chunks") or []
+        if result.get("status") != "ok" or not chunks:
+            lines.append("- 요청한 내용을 뒷받침할 문서 근거를 확보하지 못했습니다.")
+            continue
+        for chunk in chunks:
+            key = (chunk.get("document_id"), chunk.get("chunk_id"))
+            if key in seen:
+                continue
+            seen.add(key)
+            title = chunk.get("document_title") or chunk.get("citation_text") or "문서명 미확보"
+            lines.extend([f"- 근거ID {chunk.get('chunk_id') or '미확보'}: {title}",
+                          f"  - 문서ID: {chunk.get('document_id') or '미확보'}; "
+                          f"발표기관: {chunk.get('publisher') or '미확보'}; "
+                          f"발행일: {chunk.get('published_at') or '미확보'}; "
+                          f"내용 기준일: {chunk.get('effective_as_of') or '미확보'}"])
+            if chunk.get("page_number") is not None:
+                lines.append(f"  - 페이지: {chunk['page_number']}; 절: {chunk.get('heading_path') or '미확보'}")
+            url = str(chunk.get("source_url") or "")
+            lines.append(f"  - 원문 URL: {url if url.startswith(('https://', 'http://')) else '미확보'}")
+            doc = chunk.get("document_id") or url or str(key)
+            budget = max(0, 25 - quote_words.get(doc, 0))
+            words = str(chunk.get("chunk_text") or "").split()
+            if budget and words:
+                selected = words[:budget]
+                quote_words[doc] = quote_words.get(doc, 0) + len(selected)
+                excerpt = " ".join(selected)[:240]
+                suffix = " …(발췌)" if len(words) > budget or len(" ".join(selected)) > 240 else ""
+                lines.append(f"  - 근거 원문: {excerpt}{suffix}")
+            elif not words:
+                lines.append("  - 본문 미확보: 문서 메타데이터만 확인했으며 정책·전략 주장의 근거 문장은 확보하지 못했습니다.")
+    if not lines:
+        return ""
+    return ("Vector 문서 검색 출처\n검색된 문서의 출처이며, 검색 유사도만으로 편입·기업관계를 확정하지 않습니다.\n"
+            + "\n".join(lines))
+
+
+def _render_execution_limits(state: PipelineState) -> str:
+    """Expose actual failed prerequisites, never turn abstention rows into facts."""
+    step_ids = tuple((state.get("step_results") or {}).keys())
+
+    def public_reason(value: object) -> str:
+        text = str(value or "").strip()
+        for step_id in step_ids:
+            text = re.sub(rf"(?<![\w가-힣]){re.escape(step_id)}(?=\s*:|에서|\b)", "조회 단계", text)
+        text = text.replace("선행 Graph 단계 조회 단계에서", "선행 관계 조회에서")
+        text = text.replace("제한 없는 RDB 조회", "대상 제한이 없는 상품 조회")
+        return text
+
+    notes = [public_reason(reason) for reason in (state.get("route") or {}).get("blocking_reasons") or []]
+    question = state.get("question", "")
+    if re.search(r"최근\s*\d+\s*(?:개월|년)|연결된\s*이력", question):
+        notes.append("아래 관계는 적재된 스냅샷에서 조회한 결과입니다. 기간별 이력·사건일을 대조하는 조회가 구현되지 않아 요청 기간 전체의 이력 또는 현재 편입 여부를 확정할 수 없습니다. 뉴스 언급을 편입 사실로 간주하지 않습니다.")
+    if re.search(r"중복률|중복도", question):
+        notes.append("편입종목 중복도는 동일 기준일의 전체 보유내역과 종목 식별자·비중, 클래스 중복 제거가 확인되어야 계산할 수 있습니다. 현재 실행 경로에는 이 전수 대조·계산 단계가 없어 수치 중복률을 제공하지 않습니다. 일부 검색된 편입관계는 계산 결과가 아닙니다.")
+    if re.search(r"매수\s*가능|판매\s*가능", question):
+        for domain in (state.get("intent") or {}).get("product_domain") or []:
+            policy = rdb_schema.get_sale_policy(domain.get("domain", ""))
+            if policy.get("mode") == "no_filter":
+                notes.append(f"{domain['domain']}: 카탈로그 정책상 판매·매수 가능 여부를 확정하지 않습니다. 수량 원천값 조회와 실제 주문 가능 판정은 다릅니다. {policy.get('reason', '')}")
+    for _sid, result in (state.get("step_results") or {}).items():
+        reason = result.get("skipped_reason") or result.get("error")
+        if reason:
+            if result.get("error"):
+                notes.append("조회 중 연결 또는 실행 문제가 발생했습니다.")
+            else:
+                notes.append(public_reason(reason))
+        if result.get("engine") == "graph" and result.get("status") not in (None, "ok", "chained"):
+            notes.append(
+                "요청한 관계 근거 미확보: 제공 데이터에서 확인하지 못했습니다. "
+                "편입·발행·자회사·동일 상품 관계를 확인한 결과가 아닙니다."
+            )
+        if result.get("engine") == "graph" and result.get("status") == "ok" and result.get("note"):
+            notes.append(public_reason(result["note"]))
+        if result.get("coverage_truncated"):
+            notes.append("관계 조회 반환 상한에 도달했습니다. 목록 완전성·전체 순위는 확인되지 않았습니다.")
+    return "조회 한계\n\n" + "\n".join(f"- {n}" for n in dict.fromkeys(notes)) if notes else ""
+
+
+def _render_graph_results(step_results: dict, plan: list[dict] | None = None) -> str:
+    """Keep terminal relationship records visible without leaking intermediates.
+
+    Graph rows consumed as RDB filters are candidate sets, not the final answer.
+    Their verified field evidence is attached to the filtered RDB rows by the
+    answer contract, so rendering them again would expose supersets (for example
+    Q22's 14 constituent candidates before the three-product intersection).
+    """
+    public_labels = {
+        "etf_code": "상품코드", "code": "상품코드", "product_code": "상품코드",
+        "etf_name": "상품명", "name": "상품명", "product_name": "상품명",
+        "security_code": "편입종목코드", "security_name": "편입종목명",
+        "weight": "편입비중", "holding_as_of": "편입 기준일",
+        "holding_source": "편입내역 출처", "as_of": "기준일", "source": "출처",
+    }
+    consumed_by_rdb = {
+        dependency
+        for step in plan or []
+        if step.get("engine") == "rdb"
+        for dependency in step.get("depends_on") or []
+    }
+    blocks = []
+    for sid, result in step_results.items():
+        if sid in consumed_by_rdb:
+            continue
+        if result.get("engine") != "graph" or result.get("status") != "ok" or result.get("error"):
+            continue
+        rows = result.get("rows") or []
+        if not rows:
+            continue
+        lines = [
+            "Graph 관계 조회 결과",
+            f"확인된 관계 {len(rows)}건 중 {min(len(rows), 20)}건을 표시합니다. "
+            "분류 연결과 실제 편입 관계는 서로 대체하지 않습니다.",
+        ]
+        if result.get("note"):
+            lines.append(result["note"])
+        for index, row in enumerate(rows[:20], 1):
+            values = []
+            for key, value in row.items():
+                if key.startswith("_"):
+                    continue
+                if value is None or str(value).strip() == "":
+                    value = "값 미확보(확인 불가)"
+                if key.endswith("quote"):
+                    value = " ".join(str(value).split()[:25])[:240]
+                label = public_labels.get(key, str(key).replace("_", " "))
+                values.append(f"{label}: {_display_field_value(value)}")
+            lines.append(f"- {index}. " + "; ".join(values))
+        if result.get("time_window_note"):
+            lines.append(result["time_window_note"])
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def _build_public_execution_summary(state: PipelineState) -> str:
+    """Describe execution stages without exposing internal routing identifiers."""
+    step_results = list((state.get("step_results") or {}).items())
+    if not step_results:
+        return "; ".join((state.get("route") or {}).get("blocking_reasons") or []) or "실행 결과 미확보"
+
+    totals: dict[str, int] = {}
+    for _step_id, result in step_results:
+        engine = str(result.get("engine") or "unknown")
+        totals[engine] = totals.get(engine, 0) + 1
+    seen: dict[str, int] = {}
+    labels = {"graph": "관계 조회", "rdb": "상품 데이터 조회", "vector": "문서 검색"}
+    internal_ids = [step_id for step_id, _result in step_results]
+    lines = []
+    for _step_id, result in step_results:
+        engine = str(result.get("engine") or "unknown")
+        seen[engine] = seen.get(engine, 0) + 1
+        label = labels.get(engine, "조회")
+        if engine == "rdb" and result.get("domain"):
+            label = f"{result['domain']} 데이터 조회"
+        elif totals[engine] > 1:
+            label += f" {seen[engine]}"
+
+        detail = str(result.get("skipped_reason") or result.get("note") or "")
+        for internal_id in internal_ids:
+            detail = re.sub(
+                rf"(?<![\w가-힣]){re.escape(internal_id)}(?=\s*:|에서|\b)",
+                "선행 조회",
+                detail,
+            )
+        status = result.get("status") or (
+            "실패" if result.get("error") else "차단" if result.get("skipped_reason") else "조회 완료"
+        )
+        lines.append(
+            f"{label}: 상태={status}; 반환={len(result.get('rows') or result.get('chunks') or [])}건"
+            + (f"; {detail}" if detail else "")
+        )
+    return "\n".join(lines)
+
+
 def generate_answer_node(state: PipelineState) -> dict:
     # 1. State에서 필요한 값 추출 (question_id가 들어온다고 가정)
     question_id = state.get("question_id", "Q-UNKNOWN")
@@ -1330,6 +2287,44 @@ def generate_answer_node(state: PipelineState) -> dict:
     # 2. retrieved_context (답변 근거) - state["step_results"]에서 엔진별
     # 실제 근거(SQL/건수/Graph 관계·evidence)를 조립한다(§10).
     retrieved_context = _build_retrieved_context(state)
+
+    field_contract = _build_rdb_answer_contract(state)
+    field_answer = _render_rdb_answer_contract(field_contract)
+    identity_answer = evidence_contract.render_identity_comparison(state)
+    if identity_answer:
+        field_answer = "\n\n".join([identity_answer, field_answer])
+    vector_sources = _render_vector_sources(state.get("step_results") or {})
+    execution_limits = _render_execution_limits(state)
+    graph_answer = _render_graph_results(
+        state.get("step_results") or {}, state.get("plan") or []
+    )
+    narrative_topics = (intent.get("output_requirements") or {}).get("narrative_topics") or []
+    execution_summary = _build_public_execution_summary(state)
+    # Only direct structured lookup bypasses synthesis. Graph/Vector evidence and
+    # narrative questions still use the existing synthesis path plus the contract.
+    document_body = any(str(c.get("chunk_text") or "").strip()
+                        for r in (state.get("step_results") or {}).values()
+                        if r.get("engine") == "vector" and r.get("status") == "ok"
+                        for c in r.get("chunks") or [])
+    industry_topics = re.findall(r"([가-힣A-Za-z0-9]+)\s*산업\s*위험", " ".join([question] + narrative_topics))
+    document_text = " ".join(str(c.get("chunk_text") or "") for r in (state.get("step_results") or {}).values()
+                             if r.get("engine") == "vector" for c in r.get("chunks") or [])
+    uncovered_industries = [topic for topic in dict.fromkeys(industry_topics) if topic not in document_text]
+    if uncovered_industries:
+        document_body = False
+        execution_limits += "\n\n산업별 위험 근거 미확보: " + ", ".join(uncovered_industries) + ". 일반 상품의 위험등급은 해당 산업 위험의 근거로 대체하지 않습니다."
+    structured_only = bool(field_contract or graph_answer or vector_sources) and not document_body
+    if structured_only:
+        response = {"question_id": question_id, "question": question,
+                    "retrieved_context": retrieved_context,
+                    "think_trace": execution_summary,
+                    "answer": "\n\n".join(p for p in [
+                        "제공된 데이터로는 이 질문에 답변할 수 없습니다." if not field_answer and not graph_answer else "",
+                        field_answer, graph_answer,
+                        ("문서 기반 설명 확인 불가: " + ", ".join(narrative_topics) + ". 대응하는 문서 본문을 확보하지 못했습니다.") if narrative_topics else "",
+                        vector_sources, execution_limits] if p)}
+        return {"answer": json.dumps(response, ensure_ascii=False),
+                "trace": ["답변 생성: 요청 항목별 결정론적 출력 (추가 LLM 호출 없음)"]}
 
     # 3. 예외 처리: 데이터가 없는 경우
     if not merged_rows:
@@ -1349,14 +2344,20 @@ def generate_answer_node(state: PipelineState) -> dict:
         # 지목한 엔티티, 대상 도메인, 그리고 조회 기준일과 0건 사실이다.
         # 지어내지 않는다. 전부 이미 state 에 있는 값을 되뇌는 것뿐이다.
         reasons.extend(_describe_abstain_reason(intent, route))
-        reason = f" ({'; '.join(reasons)})" if reasons else ""
+        reason = f" ({'; '.join(reasons)})" if reasons and not execution_limits else ""
         answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
+        if field_answer:
+            answer_text += "\n\n" + field_answer
+        if vector_sources:
+            answer_text += "\n\n" + vector_sources
+        if execution_limits:
+            answer_text += "\n\n" + execution_limits
         
         final_response = {
             "question_id": question_id,
             "question": question,
             "retrieved_context": retrieved_context,
-            "think_trace": "데이터 검색 불가 및 쿼리 플랜 실패로 인한 답변 불가 처리",
+            "think_trace": execution_summary,
             "answer": answer_text
         }
         # FastAPI 등에서 쉽게 리턴하도록 JSON string이나 dict 자체를 반환 구조에 맞춤
@@ -1377,31 +2378,45 @@ def generate_answer_node(state: PipelineState) -> dict:
     # 5. 구조화된 출력(Structured Output)으로 LLM 호출
     structured_llm = _llm_answer.with_structured_output(FINAL_ANSWER_JSON_SCHEMA, method="json_schema")
 
-    response = structured_llm.invoke(
+    response = _invoke_answer_with_field_fallback(structured_llm,
         [
             ("system", ANSWER_SYSTEM_PROMPT),
             (
                 "human",
                 f"[질문]\n{question}\n\n"
                 f"[질문이 요구한 항목] (answer는 이 항목만 다룬다)\n{requested_items}\n\n"
+                f"[요청 항목별 RDB 상태] (값/NULL/미조회/실패를 구별한다. 아래 구조화 항목은 코드가 별도로 출력하므로 answer에는 문서·관계 설명만 작성한다.)\n"
+                f"{json.dumps(field_contract, ensure_ascii=False, default=str)}\n\n"
                 f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
-                f"[이미 SQL로 적용된 조건] (아래 데이터는 이 조건을 전부 만족하는 행만 남은 결과다. "
-                f"이 조건에 쓰인 컬럼이 데이터에 안 보여도 이미 만족된 것이니 다시 확인하지 마라)\n"
+                f"[문서 출처] (문서에 의존한 설명에는 대응 근거ID를 붙인다. 없는 출처는 만들지 않는다.)\n{vector_sources}\n\n"
+                f"[계획의 조건] (실제 적용 여부는 SQL 실행 기록과 조정된 규칙을 따른다. "
+                f"SELECT에 필터 컬럼이 없다는 이유만으로 실행된 필터를 무효로 판단하지 않는다.)\n"
                 f"{applied_conditions}\n\n"
                 f"[SQL 실행 시 실제로 적용되거나 조정된 규칙]\n{sql_assumptions}\n\n"
                 f"[실제 실행 기록] (think_trace는 이 로그를 근거로 요약할 것 - 지어내지 말 것)\n{execution_log}\n\n"
                 f"[검색된 데이터] (전체 {len(merged_rows)}건 중 {len(preview)}건 표시)\n{rows_text}",
             ),
-        ]
+        ], bool(field_answer or vector_sources or graph_answer)
     )
     
     # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
+    answer_text = _sanitize_generated_narrative(response.get("answer"))
+    if field_answer:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), field_answer] if part)
+    if vector_sources:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), vector_sources] if part)
+    if execution_limits:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), execution_limits] if part)
+    if graph_answer:
+        answer_text = "\n\n".join(part for part in [answer_text.strip(), graph_answer] if part)
+    if not answer_text.strip():
+        answer_text = "검색 결과는 있으나 최종 설명을 생성하지 못했습니다. 요청 항목의 근거를 확인해야 합니다."
     final_response = {
         "question_id": question_id,
         "question": question,
         "retrieved_context": retrieved_context,
-        "think_trace": response.get("think_trace", "추론 과정 생성 누락"),
-        "answer": response.get("answer", "답변 생성 누락")
+        "think_trace": execution_summary,
+        "answer": answer_text
     }
     
     # 최종적으로 문자열로 직렬화하여 반환 (FastAPI 라우터단에서 바로 리턴 가능하도록)

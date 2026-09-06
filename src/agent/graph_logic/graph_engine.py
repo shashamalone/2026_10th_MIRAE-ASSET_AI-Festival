@@ -12,13 +12,15 @@ SPARQL이라도 이 게이트를 통과하지 않으면 실행되지 않는다.
 """
 from __future__ import annotations
 import re
-from infrastructure.graph_db.client import OxigraphClient
+from infrastructure.graph_db.client import MAX_ROWS, OxigraphClient
 
 _CLIENT = OxigraphClient()
 
 
-def sparql(query: str) -> bool | list[dict]:
-    return _CLIENT.query(query)
+def sparql(query: str, *, max_rows: int | None = MAX_ROWS) -> bool | list[dict]:
+    """``max_rows=None``은 graph_entity의 인덱스 구축처럼 클래스 전체를 한 번에
+    읽어야 하는 내부 호출 전용이다. 질의 실행 경로는 기본 상한을 유지한다."""
+    return _CLIENT.query(query, max_rows=max_rows)
 
 
 def triple_count() -> int:

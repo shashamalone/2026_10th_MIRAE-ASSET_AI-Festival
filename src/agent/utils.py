@@ -33,10 +33,19 @@ plan_query_db.py가 만든 RDB 단계 하나(step)를 받아서:
 from __future__ import annotations
 
 import os
+import re
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from agent.graph_logic import graph_ids
+from agent.evidence_contract import (
+    GRAPH_FIELD_CONCEPTS,
+    is_document_evidence_field,
+    is_identity_field,
+)
 from tools import rdb_schema
+from tools import catalog_sql
 from agent.prompts import COLUMN_RESOLUTION_SYSTEM_PROMPT
 from tools.rdb_schema import AttributeSpec
 from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
@@ -46,6 +55,459 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 # 0) 판매가능여부 조건 사전 처리 (rdb_schema.DOMAIN_SALE_POLICY 적용)
 # ---------------------------------------------------------------------------
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
+# A provenance request is a set of source-date columns, not one guessed column.
+PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일", "수치갱신일",
+                       "수치기준일", "지표기준일", "수익률기준일", "데이터기준일", "수치의갱신일", "aum기준일"}
+
+
+def is_source_column_request(label: str) -> bool:
+    name = catalog_sql.normalize(label)
+    return (any(s in name for s in ("컬럼", "필드")) and any(s in name for s in ("근거", "출처"))) or name in {"전략원문의출처", "전략원문출처"}
+
+
+def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """A region directly modifying an asset is exposure, not listing venue.
+
+    Accept only catalogue regions and explicit asset grammar, not product names
+    or the broad phrase '미국 ETF' whose venue/exposure is ambiguous.
+    """
+    text = question
+    for entity in intent.get("target_entities") or []:
+        if entity.get("entity_type") == "product_name" and entity.get("surface_form"):
+            text = text.replace(entity["surface_form"], " ")
+    regions = set()
+    for entry in _ontology_labels("InvestmentRegion"):
+        if entry["label"] in {"해외", "국내외", "글로벌"}:
+            # Broad market/exposure terms are not a particular country.
+            continue
+        for alias in entry["aliases"]:
+            if re.search(r"(?<![가-힣A-Za-z])" + re.escape(alias) + r"\s+(?:주식|채권)(?:형|에\s*투자|\s*투자)?", text):
+                regions.add(entry["label"])
+    if len(regions) != 1:
+        return intent, []
+    region = next(iter(regions))
+    conditions = list(intent.get("conditions") or [])
+    added = []
+    for domain in intent.get("product_domain") or []:
+        name = domain.get("domain")
+        if name not in rdb_schema.ETF_CLASSIFICATION_AXES:
+            continue
+        relevant = [c for c in conditions if c.get("domain") in {None, "", name} and
+                    catalog_sql.normalize(c.get("attribute", "")) == "투자지역"]
+        if not relevant:
+            conditions.append({"domain": name, "attribute": "투자지역", "operator": "eq", "value": region, "value_2": ""})
+            added.append(f"'{region} 주식/채권'의 명시적 투자지역 조건 보존: {name}. 상장시장과 구분합니다.")
+    return ({**intent, "conditions": conditions}, added) if added else (intent, [])
+
+
+def preserve_overseas_exposure_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Overseas investment is not itself proof of an overseas listing.
+
+    Keep the original foreign scope, but restore domestic-listed candidates;
+    unsupported FX/period requests in the foreign branch remain explicit.
+    """
+    text = re.sub(r"\s+", "", question)
+    match = re.search(r"해외(주식|채권)에투자", text)
+    if not match or re.search(r"해외ETF|해외상장|외국상장|미국상장", text):
+        return intent, []
+    domains = intent.get("product_domain") or []
+    if len(domains) != 1 or domains[0].get("domain") != "해외ETF":
+        return intent, []
+    conditions = list(intent.get("conditions") or [])
+    domestic = [{**c, "domain": "국내ETF"} for c in conditions if c.get("domain") == "해외ETF"]
+    domestic.extend([{"domain": "국내ETF", "attribute": "투자자산유형", "operator": "eq", "value": match[1], "value_2": ""},
+                     {"domain": "국내ETF", "attribute": "투자지역", "operator": "ne", "value": "국내", "value_2": ""}])
+    sort = dict(intent.get("sort") or {})
+    if sort.get("domains"):
+        sort["domains"] = list(dict.fromkeys([*sort["domains"], "국내ETF"]))
+    fixed = {**intent, "conditions": conditions + domestic, "sort": sort,
+             "product_domain": [*domains, {"domain": "국내ETF", "subtype": list(domains[0].get("subtype") or [])}]}
+    return fixed, ["'해외 자산에 투자'는 해외 상장과 다르므로 국내 상장 ETF 후보도 조회합니다. 해외 상장 범위는 유지하며 통화·수익률 미지원 조건을 숨기지 않습니다."]
+
+
+def restore_shared_theme_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Recover a source-taxonomy topic applied to ETF/fund integrated search.
+
+    This is classification evidence, not an invented holdings relationship.
+    Unknown categories remain invalid; only terms present in TBox themes qualify.
+    """
+    if intent.get("relations"):
+        return intent, []
+    domains = intent.get("product_domain") or []
+    normalized_question = catalog_sql.normalize(question)
+    theme_labels = {catalog_sql.normalize(a) for entry in _ontology_labels("Theme") for a in entry["aliases"]}
+    topics = []
+    for domain in domains:
+        for subtype in domain.get("subtype") or []:
+            key = catalog_sql.normalize(subtype)
+            if (len(key) >= 2 and any(key in label for label in theme_labels)
+                    and key + "에투자" in normalized_question
+                    and rdb_schema.resolve_subtype_condition(domain["domain"], subtype) is None):
+                topics.append(subtype)
+    topics = list(dict.fromkeys(topics))
+    if not topics:
+        return intent, []
+    shared = "통합" in question or bool(re.search(r"ETF(?:와|·|및)(?:공모)?펀드", normalized_question, re.IGNORECASE))
+    relations, conditions, fixed_domains = [], list(intent.get("conditions") or []), []
+    for domain in domains:
+        relevant = topics if shared else [s for s in topics if s in domain.get("subtype", [])]
+        fixed_domains.append({**domain, "subtype": [s for s in domain.get("subtype") or [] if s not in relevant]})
+        for topic in relevant:
+            relations.append({"id": f"theme{len(relations)+1}", "relation": "has_theme", "subject_domain": domain["domain"],
+                              "object_entity": topic, "object_ref": "", "entity_role": "theme"})
+            for region in _ontology_labels("InvestmentRegion"):
+                label = region["label"]
+                if catalog_sql.normalize(label + topic + "에투자") in normalized_question:
+                    conditions.append({"domain": domain["domain"], "attribute": "투자지역", "operator": "eq", "value": label, "value_2": ""})
+    return {**intent, "product_domain": fixed_domains, "conditions": conditions, "relations": relations}, [
+        "원문 투자 주제와 TBox 테마 명칭을 대조하여 각 상품군에 분류 연결 조건을 적용합니다. 분류는 실제 편입을 대신하지 않습니다. 해당 상품군의 연결이 없으면 전체 상품 조회로 확대하지 않습니다."]
+
+
+def lookup_product_identities(names: list[str]) -> list[dict]:
+    """Exact raw names/codes across domains; no ticker whitelist or fuzzy guess."""
+    from tools import schema_snapshot
+    snap = schema_snapshot.get_snapshot()
+    queries = []
+    for name in list(dict.fromkeys(names))[:8]:
+        for domain, columns in rdb_schema.PRODUCT_IDENTITY_COLUMNS.items():
+            table = rdb_schema.get_domain_entry(domain)["table"]
+            catalog = rdb_schema.get_attribute_catalog(domain)
+            code, product_name = catalog["상품코드"].column, catalog["상품명"].column
+            schema_snapshot.assert_contract(column_refs=[(table, c) for c in (*columns, code, product_name)], snapshot=snap)
+            value = catalog_sql.literal(catalog_sql.normalize(name))
+            terms = [f"LOWER(REPLACE({c}::text, ' ', '')) = {value}" for c in columns]
+            queries.append(f"(SELECT {catalog_sql.literal(name)} AS query_name, {catalog_sql.literal(domain)} AS domain, "
+                           f"{code} AS code, {product_name} AS name FROM {table} WHERE "
+                           + " OR ".join(terms) + " LIMIT 2)")
+    if not queries:
+        return []
+    conn = get_pg_connection()
+    try:
+        return run_sql(conn, "SELECT * FROM (" + " UNION ALL ".join(queries) + ") AS identities")
+    finally:
+        conn.close()
+
+
+def resolve_named_product_domains(intent: dict) -> tuple[dict, list[str]]:
+    """Correct a named lookup's model domain only with unambiguous DB evidence.
+
+    Multi-domain matches remain ambiguous. Relational subjects are not changed:
+    an issuer/company mentioned in the query is not itself a requested product.
+    """
+    names = [e.get("surface_form", "") for e in intent.get("target_entities") or []
+             if e.get("entity_type") == "product_name" and e.get("surface_form")]
+    if not names or len(names) > 8 or intent.get("relations"):
+        return intent, []
+    try:
+        evidence = lookup_product_identities(names)
+    except Exception as exc:
+        return intent, [f"상품 도메인 원천 대조 미실행: {type(exc).__name__}; 기존 분석 유지"]
+    domains = []
+    for name in names:
+        matched = {r["domain"] for r in evidence if r.get("query_name") == name}
+        if len(matched) != 1:
+            return intent, [f"상품 '{name}'의 도메인을 유일하게 확인하지 못했습니다(정확 일치 {len(matched)}개 도메인)."]
+        if next(iter(matched)) not in domains:
+            domains.append(next(iter(matched)))
+    previous = [d["domain"] for d in intent.get("product_domain") or []]
+    if set(previous) == set(domains):
+        return intent, []
+    # Do not discard an explicit multi-market comparison merely because a name
+    # has an exact spelling in only one market.
+    if len(previous) > 1:
+        return intent, [f"상품 식별 도메인 {domains}; 명시된 복수 도메인 {previous} 비교는 유지합니다."]
+    fixed = {**intent, "product_domain": [{"domain": d, "subtype": []} for d in domains]}
+    fixed["conditions"] = [{**c, "domain": domains[0]} if len(domains) == 1 and c.get("domain") in previous else dict(c)
+                           for c in intent.get("conditions") or []]
+    sort = dict(intent.get("sort") or {})
+    if sort.get("domains") and set(sort["domains"]) <= set(previous):
+        sort["domains"] = domains
+    fixed["sort"] = sort
+    fixed["identity_evidence"] = evidence
+    return fixed, [f"실제 상품 식별 컬럼의 정확 일치로 도메인 보정: {previous} → {domains}; 임의 하위유형 추론 제거"]
+
+
+def prune_inferred_named_subtypes(intent: dict, question: str) -> tuple[dict, list[str]]:
+    entities = [e.get("surface_form", "") for e in intent.get("target_entities") or [] if e.get("entity_type") == "product_name"]
+    if not entities or intent.get("relations") or intent.get("conditions") or (intent.get("sort") or {}).get("attribute"):
+        return intent, []
+    text = catalog_sql.normalize(question)
+    for name in entities:
+        text = text.replace(catalog_sql.normalize(name), "")
+    domains, removed = [], []
+    for d in intent.get("product_domain") or []:
+        keep = [s for s in d.get("subtype") or [] if catalog_sql.normalize(s) in text]
+        removed.extend(s for s in d.get("subtype") or [] if s not in keep)
+        domains.append({**d, "subtype": keep})
+    return ({**intent, "product_domain": domains}, [f"명명 상품의 원문에 없는 추정 하위유형 제거: {removed}"]) if removed else (intent, [])
+
+
+def validate_issuer_subjects(intent: dict, question: str) -> tuple[dict, list[str]]:
+    if "발행" not in question or not any(d.get("domain") == "채권" for d in intent.get("product_domain") or []):
+        return intent, []
+    names = [e.get("surface_form") for e in intent.get("target_entities") or []
+             if e.get("entity_type") in {"company", "issuer"} and e.get("surface_form")]
+    names += [r.get("object_entity") for r in intent.get("relations") or []
+              if r.get("relation") in {"issued_by", "issues", "발행"} and r.get("object_entity")]
+    names = list(dict.fromkeys(names))[:8]
+    if not names:
+        return intent, []
+    try:
+        matches = lookup_product_identities(names)
+        for name in names:
+            products = [r for r in matches if r.get("query_name") == name]
+            if not products:
+                continue
+            terms = ["LOWER(REPLACE(pd_pbcm,' ',''))=" + catalog_sql.literal(catalog_sql.normalize(v))
+                     for v in graph_ids.expand_organization_aliases(name)]
+            conn = get_pg_connection()
+            try:
+                issuers = run_sql(conn, "SELECT DISTINCT pd_pbcm FROM raw.prbd01n001 WHERE " + " OR ".join(terms) + " LIMIT 5")
+            finally:
+                conn.close()
+            if not issuers:
+                reason = (f"'{name}'은 원천 상품목록에서 {products[0]['domain']} 상품 "
+                          f"{products[0]['name']}({products[0]['code']})으로 확인됐지만 채권 발행사로는 확인되지 않았습니다. "
+                          "상품과 발행기관을 동일시할 수 없습니다. 실제 발행사 이름 또는 보유 채권을 묻는 것인지 확인해 주세요.")
+                return {**intent, "issuer_type_conflict": reason}, [reason]
+    except Exception as exc:
+        return intent, [f"발행 주체와 상품 식별자 대조 미완료: {type(exc).__name__}"]
+    return intent, []
+
+
+def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict, list[str]]:
+    """Recover catalogued noun-list requests, not values inferred from a product.
+
+    Only positive display/request clauses and noun-list boundaries are accepted.
+    Filter mentions ('등급 AA 이상') and product-name substrings are not fields.
+    This supplements the two intent prompts without adding a paid model call.
+    """
+    text = catalog_sql.normalize(question.replace("\n", ";"))
+    for entity in intent.get("target_entities") or []:
+        name = catalog_sql.normalize(entity.get("surface_form") or "")
+        if name:
+            text = re.sub(re.escape(name), " ", text, flags=re.IGNORECASE)
+    names = set(PROVENANCE_CONCEPTS) | GRAPH_FIELD_CONCEPTS
+    for domain in intent.get("product_domain") or []:
+        name = domain.get("domain", "")
+        if name not in rdb_schema.RDB_SCHEMA:
+            continue
+        names.update(rdb_schema.get_attribute_catalog(name))
+        for key, view in rdb_schema.get_output_views(name).items():
+            names.update((key, *view["aliases"]))
+    # Keep the longest known phrase; '원본 신용등급' must not collapse to '신용등급'.
+    normalized_names = {catalog_sql.normalize(name) for name in names}
+    recovered = []
+    for clause in re.split(r"[.!?;\n]", text):
+        normalized = catalog_sql.normalize(clause)
+        if re.search(r"(?:제외|빼고|빼줘|생략|말고|말아|필요없)", normalized):
+            continue
+        request = re.search(r"(?:알려|보여|제시|표시|출력|포함|붙여)", normalized)
+        if not request:
+            continue
+        body = normalized[:request.start()]
+        body = re.sub(r"(?:함께|같이|모두|전부|각각)+$", "", body)
+        for name in sorted(normalized_names, key=lambda n: (-len(n), n)):
+            pattern = re.escape(name) + r"(?=,|，|·|/|과|와|및|을|를|도|$)"
+            if re.search(pattern, body):
+                recovered.append(name)
+                body = re.sub(pattern, " ", body)
+    output = dict(intent.get("output_requirements") or {})
+    fields = []
+    for field in output.get("fields") or []:
+        stripped = re.sub(r"^(?:국내ETF|해외ETF|ETF|채권|펀드)\s+", "", field)
+        parts = [part.strip() for part in re.split(r"[·/]", stripped)]
+        if parts and all(catalog_sql.normalize(part) in normalized_names for part in parts):
+            fields.extend(parts)
+        else:
+            fields.append(field)
+    known = {catalog_sql.normalize(f) for f in fields}
+    added = []
+    for name in recovered:
+        if name not in known:
+            fields.append(name)
+            added.append(name)
+            known.add(name)
+    if not added and fields == list(output.get("fields") or []):
+        return intent, []
+    output["fields"] = fields
+    return {**intent, "output_requirements": output}, [f"원문 요청 항목 복구: {', '.join(added)}"]
+
+
+def _ontology_labels(class_name: str):
+    from rdflib import RDF, RDFS, SKOS, URIRef
+    from tools.graph_schema import FP, catalog
+    graph = catalog().graph
+    for node in graph.subjects(RDF.type, URIRef(FP + class_name)):
+        labels = list(graph.objects(node, RDFS.label))
+        preferred = next((str(v) for v in labels if v.language == "ko"), str(node))
+        aliases = {str(v) for v in labels + list(graph.objects(node, SKOS.altLabel))}
+        yield {"uri": str(node), "label": preferred, "aliases": aliases}
+
+
+def _ontology_match(class_name: str, value: str) -> dict:
+    matches = [entry for entry in _ontology_labels(class_name)
+               if value.strip().casefold() in {a.strip().casefold() for a in entry["aliases"]}]
+    if len(matches) != 1:
+        raise ValueError("온톨로지 분류값이 없거나 여러 개여서 유일하게 확정할 수 없습니다")
+    return matches[0]
+
+
+def categorical_source_values(domain: str, column: str, value: str) -> list[str]:
+    """Translate a category through TBox aliases, intersecting reviewed raw codes.
+
+    Never translate free strategy prose or infer a sector from a product name.
+    """
+    axis = rdb_schema.ETF_CLASSIFICATION_AXES.get(domain, {}).get(column)
+    if column in {"curr_cd", "pd_curr_cd", "pd_trd_ccy"}:
+        axis = "Currency"
+        value = {"원화": "한국 원", "한국원화": "한국 원", "달러": "미국 달러"}.get(value, value)
+    if not axis:
+        return []
+    try:
+        entry = _ontology_match(axis, value)
+    except ValueError:
+        return []
+    specs = [s for s in rdb_schema.get_attribute_catalog(domain).values() if s.column == column]
+    known = {v for s in specs for v in s.known_values}
+    aliases = entry["aliases"]
+    candidates = known if known else aliases
+    return sorted(v for v in candidates if v.strip().casefold() in {a.strip().casefold() for a in aliases})
+
+
+def _source_date(value):
+    text = str(value).strip()
+    if re.fullmatch(r"\d{8}\.0+", text):
+        text = text.split(".")[0]
+    text = text.replace("-", "")
+    if text in {"0", "99991231"}:
+        raise ValueError("미상/영구채 sentinel 날짜로 잔존만기를 계산할 수 없습니다")
+    if not re.fullmatch(r"\d{8}", text):
+        raise ValueError("원천 날짜 형식을 확인할 수 없습니다")
+    return datetime.strptime(text, "%Y%m%d").date()
+
+
+def _maturity_class(days: int) -> tuple[dict, str]:
+    """TBox altLabels supply intervals; the existing days/year contract is 365.
+
+    Lower-inclusive/upper-exclusive intervals; negative days mean matured.
+    Never use duration, product name ('콜/후'), or today's clock as substitutes.
+    """
+    if days < 0:
+        return _ontology_match("MaturityClass", "만기경과"), "만기경과"
+    matches = []
+    years = Decimal(days) / Decimal(365)
+    for entry in _ontology_labels("MaturityClass"):
+        for alias in entry["aliases"]:
+            match = re.fullmatch(r"(\d+)-(\d+)년", alias)
+            less = re.fullmatch(r"(\d+)년미만", alias)
+            more = re.fullmatch(r"(\d+)년이상", alias)
+            accepted = (match and Decimal(match[1]) <= years < Decimal(match[2])) or (
+                less and years < Decimal(less[1])) or (more and years >= Decimal(more[1]))
+            if accepted:
+                matches.append((entry, alias))
+    if len(matches) != 1:
+        raise ValueError("온톨로지 만기 구간이 없거나 중복되어 확정할 수 없습니다")
+    return matches[0]
+
+
+def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
+    """Apply local TBox vocabulary to fetched raw values, not remote ABox claims."""
+    if not views:
+        return rows
+    output = []
+    for source in rows:
+        row, items = dict(source), {}
+        for view in views:
+            columns = view["inputs"]
+            item = {"field": view["attribute"], "column": None, "value": None,
+                    "status": "available", "source_columns": [f"{view.get('source_table', 'raw.prbd01n001')}.{c}" for c in columns]}
+            if view["kind"] == "unsupported":
+                item.update(status="derivation_unavailable", detail=view["reason"])
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "rating_order":
+                order = rdb_schema.get_attribute_catalog("채권")["신용등급"].value_order
+                item.update(value=" < ".join(order), detail="rdb_schema 신용등급 서열(낮음→높음). AA0·A0 등의 0은 원천 중립등급 표기입니다. 신용평가 보고서 원문을 확보했다는 뜻은 아닙니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "return_series":
+                parts = []
+                for column, period in zip(columns, view["periods"]):
+                    value = row.get(column)
+                    status = "미조회" if column not in row else "NULL·확인 불가" if value is None else str(value) + "%"
+                    parts.append(f"{period}: {status} ({column})")
+                item.update(value="; ".join(parts), detail="기간이 지정되지 않은 요청이므로 원천 기간별 수익률을 구분합니다. 임의로 1개월 수익률 하나로 대체하지 않습니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "listing":
+                try:
+                    start, basis = _source_date(row.get("pd_lstg_dt")), _source_date(row.get("cu_upt_dt"))
+                    end_raw = str(row.get("pd_lste_dt", "")).strip()
+                    end = None if end_raw == "99991231" else _source_date(end_raw)
+                    listed = start <= basis and (end is None or basis < end)
+                    item.update(value="상장기간 내" if listed else "상장기간 밖", detail=f"상장일 {start}, 상장종료일 {end_raw}, 원천 갱신일 {basis} 대조. 99991231은 종료일 미정 코드이며 현재 매매 가능 여부를 뜻하지 않습니다.")
+                except ValueError as exc:
+                    item.update(status="derivation_unavailable", detail=str(exc))
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "identity_keys":
+                item.update(value="; ".join(f"{c}={row[c] if row.get(c) is not None else '값 미확보'}" for c in columns),
+                            detail="식별·상장 관련 원천키입니다. 서로 다른 레코드의 동일성은 키를 교차 대조한 결과만으로 판정합니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            if view["kind"] == "classification":
+                # Missing one axis must not erase evidence for the other axes.
+                parts = []
+                for column, axis in view["axes"].items():
+                    raw = row.get(column)
+                    if column not in row or raw is None or str(raw).strip() == "":
+                        parts.append(f"{axis}: {column} 원천값 미확보(분류 확인 불가)")
+                        continue
+                    try:
+                        match = _ontology_match(axis, str(raw))
+                        parts.append(f"{column}={raw} → {match['label']} ({match['uri']})")
+                    except ValueError:
+                        parts.append(f"{column}={raw} → {axis}의 유일한 분류 규칙 미확보")
+                item.update(value="; ".join(parts), detail="원천값과 로컬 TBox label/altLabel의 정확 일치. 원격 GraphDB 관계 조회가 아닙니다.")
+                items[catalog_sql.normalize(view["attribute"])] = item
+                continue
+            missing = [c for c in columns if c not in row]
+            nulls = [c for c in columns if c in row and row[c] is None]
+            empty = [c for c in columns if c in row and isinstance(row[c], str) and not row[c].strip()]
+            if missing or nulls or empty:
+                item["status"] = "not_selected" if missing else "null" if nulls else "empty"
+                item["detail"] = "분류 입력 미확보: " + ", ".join(missing or nulls or empty)
+            else:
+                try:
+                    if view.get("ambiguous"):
+                        raise ValueError("어떤 속성의 온톨로지 분류인지 명확하지 않아 확정할 수 없습니다")
+                    if view["kind"] == "share_class":
+                        match = re.search(r"(?:Class|종류)\s*([A-Za-z][A-Za-z0-9-]*)$", str(row["itm_nm"]), re.IGNORECASE)
+                        if not match:
+                            raise ValueError("원천 상품명에 명시된 클래스 접미사를 확인할 수 없습니다")
+                        item.update(value=match[1], detail=f"원천 상품명 itm_nm={row['itm_nm']}의 명시적 Class/종류 접미사")
+                    elif view["kind"] == "rating":
+                        entry = _ontology_match("CreditRating", str(row["crd_grd"]))
+                        item["value"] = f"{entry['label']} ({entry['uri']})"
+                        item["detail"] = (f"신용등급 분류: 원본 crd_grd={row['crd_grd']}; "
+                                          "ontology/common.ttl의 CreditRating label/altLabel 일치")
+                    else:
+                        maturity, basis = _source_date(row["mat_dt"]), _source_date(row["info_base_dt"])
+                        days = (maturity - basis).days
+                        entry, bucket = _maturity_class(days)
+                        item["value"] = f"{entry['label']} ({bucket}; {entry['uri']})"
+                        item["detail"] = (f"mat_dt={row['mat_dt']} - info_base_dt={row['info_base_dt']} = {days}일; "
+                                          "1년=365일, 하한 포함·상한 미포함; ontology/bond_kr.ttl의 MaturityClass 구간. "
+                                          "상환일자 기준 구분이며 콜 행사·법적 만기 조건을 별도로 확정한 것이 아닙니다.")
+                    if view["kind"] != "share_class":
+                        item["detail"] += " 로컬 온톨로지 규칙 적용 결과이며 원격 GraphDB 조회값이 아닙니다."
+                except Exception as exc:
+                    item.update(status="derivation_unavailable", detail=str(exc))
+            items[catalog_sql.normalize(view["attribute"])] = item
+        row["_derived_fields"] = items
+        output.append(row)
+    return output
 
 
 def apply_sale_policy(step: dict) -> tuple[dict, list[str]]:
@@ -94,13 +556,18 @@ def collect_needed_concepts(step: dict) -> list[str]:
     공모/사모는 다른 컬럼) 개념 이름 하나로 표현이 안 된다. 지금은
     resolve_subtype_conditions가 rdb_schema.resolve_subtype_condition으로
     값 단위로 직접 컬럼을 찾는다(build_resolved_schema에서 호출)."""
-    concepts: list[str] = [c["attribute"] for c in step.get("conditions", [])]
+    concepts: list[str] = [c["attribute"] for c in build_condition_list(step)]
 
     sort = step.get("sort") or {}
     if sort.get("attribute"):
         concepts.append(sort["attribute"])
 
-    concepts.extend(step.get("fields", []))
+    concepts.extend(f for f in step.get("fields", []) if catalog_sql.normalize(f) not in PROVENANCE_CONCEPTS
+                    and not is_source_column_request(f)
+                    and not is_identity_field(f)
+                    and not is_document_evidence_field(f)
+                    and catalog_sql.normalize(f) not in GRAPH_FIELD_CONCEPTS
+                    and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
     # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
     # 쓰였든(product_name_entities) 아니든, 결과 행이 순자산 숫자나
@@ -126,12 +593,25 @@ def build_condition_list(step: dict) -> list[dict]:
 
     subtype은 여기서 다루지 않는다(resolve_subtype_conditions가 별도로
     처리해서 build_resolved_schema가 직접 합친다)."""
-    conditions: list[dict] = [dict(c) for c in step.get("conditions", [])]
+    # Internal OR/identity markers can only be produced below, not by model
+    # output that happens to contain additional JSON properties.
+    conditions: list[dict] = [{key: c[key] for key in ("attribute", "operator", "value", "value_2") if key in c}
+                             for c in step.get("conditions", [])]
 
     for e in step.get("product_name_entities") or []:
         # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
         # contains로 매칭한다.
-        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": ""})
+        conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names", "entity_identity": True})
+        if step.get("domain") == "해외ETF" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.^-]{0,19}", e["surface_form"]):
+            # Tickers and RICs are identifiers, not substrings of a fund's full
+            # legal name. Resolve both via reviewed catalogue concepts.
+            for attribute in ("티커", "상품코드"):
+                conditions.append({"attribute": attribute, "operator": "eq", "value": e["surface_form"],
+                                   "value_2": "", "any_group": "product_names"})
+
+    for name in step.get("issuer_name_entities") or []:
+        conditions.append({"attribute": "발행사", "operator": "eq", "value": name,
+                           "value_2": "", "any_group": "graph_issuer_names"})
 
     return conditions
 
@@ -141,15 +621,38 @@ def resolve_subtype_conditions(domain: str, subtype: list[str]) -> tuple[list[di
     직접 실제 컬럼 조건으로 바꾼다. (이미 컬럼까지 정해진 조건 레코드 목록,
     적용 로그) 튜플을 돌려준다.
 
-    컬럼 매핑이 없는 값(예: 국내ETF "테마형")은 조건을 걸지 않고 로그에만
-    남긴다 - 값 하나가 매핑이 없다고 질문 전체(unresolved_concepts로
-    번져서 RDB 단계 전체가 건너뛰어지는 것)를 막으면 안 된다."""
+    해석하지 못한 subtype도 필터다. 로그만 남기고 버리면 제한 없는
+    전체 상품 조회를 해당 유형의 결과로 오인하므로 invalid로 보존한다."""
     records: list[dict] = []
     notes: list[str] = []
     for value in subtype or []:
+        if not str(value or "").strip():
+            continue
         mapped = rdb_schema.resolve_subtype_condition(domain, value)
+        if domain in {"국내ETF", "해외ETF"} and value.upper() not in {"ETF", "ETN"}:
+            stripped = re.sub(r"\s*(?:ETF|ETN)$", "", value, flags=re.IGNORECASE).strip()
+            mapped = mapped or rdb_schema.resolve_subtype_condition(domain, stripped)
+            value = stripped
+        if domain in {"채권", "펀드"} and value in {"원화", "원화채권", "원화표시"}:
+            mapped = {"column": "curr_cd", "operator": "eq", "value": "KRW"}
+        if domain in {"국내ETF", "해외ETF"} and value.upper() in {"ETF", "ETN"}:
+            mapped = {"column": "pd_grp_no", "operator": "eq", "value": value.upper()}
         if mapped is None:
-            notes.append(f"하위유형 '{value}' 조건은 대응하는 컬럼을 찾지 못해 적용하지 않았습니다.")
+            candidates = [(column, categorical_source_values(domain, column, value))
+                          for column in rdb_schema.ETF_CLASSIFICATION_AXES.get(domain, {})]
+            candidates = [(column, values) for column, values in candidates if values]
+            if len(candidates) == 1:
+                column, values = candidates[0]
+                for raw in values:
+                    records.append({"attribute": f"상품유형({value})", "operator": "eq", "value": raw,
+                                    "value_2": "", "column": column, "spec": None, "valid": True,
+                                    "any_group": f"subtype:{value}:{column}", "invalid_reason": None})
+                notes.append(f"하위유형 '{value}'를 로컬 온톨로지와 원천 범주로 대조: {column} IN {values}")
+                continue
+        if mapped is None:
+            records.append({"attribute": "상품유형", "value": value, "value_2": "", "operator": "eq",
+                            "column": None, "spec": None, "valid": False,
+                            "invalid_reason": f"하위유형 '{value}'에 대응하는 검증된 필터가 없습니다."})
             continue
         records.append(
             {
@@ -202,17 +705,26 @@ def resolve_concepts_for_domain(
         else:
             unresolved.append(concept)
 
+    metadata: dict = {}
+    if unresolved:
+        try:
+            metadata = catalog_sql.domain_metadata(domain)
+            aliases = catalog_sql.description_aliases(domain, metadata)
+            for concept in unresolved:
+                spec = aliases.get(catalog_sql.normalize(concept))
+                if spec is not None:
+                    concept_to_spec[concept] = spec
+            unresolved = [c for c in unresolved if c not in concept_to_spec]
+        except Exception as exc:
+            print(f"[카탈로그 의미 메타 사용 불가] {domain}: {exc}")
+
     if unresolved:
         try:
             fallback = _resolve_unknown_concepts_via_llm(domain, unresolved, question, llm)
         except Exception:
             fallback = {}
         for concept, column in fallback.items():
-            concept_to_spec[concept] = AttributeSpec(
-                column=column,
-                value_type="unknown",
-                note="카탈로그에 없어 LLM 폴백으로 매칭됨. value_type과 정렬 규칙은 사람이 검증해야 함.",
-            )
+            concept_to_spec[concept] = catalog_sql.spec_for_column(domain, column, metadata)
         unresolved = [c for c in unresolved if c not in fallback]
 
     return concept_to_spec, unresolved
@@ -226,7 +738,21 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
     if not concepts:
         return {}
     structured_llm = llm.with_structured_output(COLUMN_RESOLUTION_JSON_SCHEMA, method="json_schema")
-    real_columns = rdb_schema.get_full_column_list(domain)
+    # Live existence, unlike descriptions, is not optional in the LLM fallback.
+    from tools import schema_snapshot
+    snapshot = schema_snapshot.get_snapshot()
+    table = rdb_schema.get_domain_entry(domain)["table"]
+    allowed = set(schema_snapshot.get_columns(table, snapshot))
+    try:
+        metadata = catalog_sql.domain_metadata(domain, snapshot)
+    except Exception:
+        metadata = {}
+    import json
+    real_columns = [json.dumps({"column": col,
+                    "reviewed": rdb_schema.RDB_SCHEMA[domain]["properties"].get(col, {}),
+                    "metadata": {k: metadata.get(col, {}).get(k) for k in
+                                 ("description", "unit", "zero_null_rule", "as_of_column")}},
+                    ensure_ascii=False) for col in sorted(allowed)]
     result = structured_llm.invoke(
         [
             ("system", COLUMN_RESOLUTION_SYSTEM_PROMPT),
@@ -239,7 +765,18 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
             ),
         ]
     )
-    return {r["concept"]: r["column"] for r in result["resolutions"] if r["column"]}
+    # 구조화 출력도 신뢰 경계 밖이다. 요청하지 않은 개념, SQL 표현식,
+    # 다른 테이블의 컬럼 및 지어낸 식별자는 절대 카탈로그로 승격하지 않는다.
+    accepted: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for row in result.get("resolutions", []):
+        concept, column = row.get("concept"), row.get("column")
+        if concept not in concepts or column not in allowed:
+            continue
+        if concept in accepted and accepted[concept] != column:
+            conflicts.add(concept)
+        accepted[concept] = column
+    return {c: col for c, col in accepted.items() if c not in conflicts}
 
 
 def validate_ordinal_value(spec: AttributeSpec, value: str) -> tuple[bool, str | None, str]:
@@ -255,9 +792,9 @@ def validate_ordinal_value(spec: AttributeSpec, value: str) -> tuple[bool, str |
     if spec.value_type == "ordinal" and spec.value_order:
         if value in spec.value_order:
             return True, None, matched_value
-        for valid_val in spec.value_order:
-            if value in valid_val:
-                return True, None, valid_val
+        candidates = [v for v in spec.value_order if value and value in v]
+        if len(candidates) == 1:
+            return True, None, candidates[0]
         return False, f"'{value}'는 {spec.column}의 유효 값 범위에 없습니다 (유효 값: {spec.value_order})", matched_value
     return True, None, matched_value
 
@@ -294,8 +831,14 @@ def resolve_ordinal_matched_values(spec: AttributeSpec, operator: str, value: st
         return [value]
     if operator == "gte":
         return order[idx:]
+    if operator == "gt":
+        return order[idx + 1:]
     if operator == "lte":
         return order[: idx + 1]
+    if operator == "lt":
+        return order[:idx]
+    if operator in {"ne", "neq"}:
+        return [item for item in order if item != value]
     if operator == "between":
         if value_2 not in order:
             return None
@@ -325,10 +868,27 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     # 아래 일반 조건 루프(카탈로그/LLM 폴백 대상)와 섞이지 않게 먼저
     # resolved_conditions에 바로 얹는다.
     subtype_records, subtype_notes = resolve_subtype_conditions(domain, step.get("subtype") or [])
+    unverified_subtypes = []
+    identity_lookup = bool(step.get("product_name_entities")) and not step.get("conditions") and not step.get("sort")
+    if identity_lookup:
+        # The planner sometimes invents a classification of a named product.
+        # We can still return identity-matched source rows, but cannot claim that
+        # an unsupported classification/filter has been verified.
+        unverified_subtypes = [r["value"] for r in subtype_records if not r["valid"]]
+        subtype_records = [r for r in subtype_records if r["valid"]]
+        if unverified_subtypes:
+            notes.append(f"상품식별에 의한 참고 조회입니다. 하위유형 {unverified_subtypes}은 검증되지 않았으며 해당 분류 조건을 충족한다고 판단하면 안 됩니다.")
     resolved_conditions.extend(subtype_records)
+    invalid_conditions.extend(record for record in subtype_records if not record["valid"])
     notes.extend(subtype_notes)
 
     for c in build_condition_list(step):
+        if rdb_schema.get_output_view(domain, c["attribute"]):
+            record = {**c, "column": None, "spec": None, "valid": False,
+                      "invalid_reason": "출력 전용 분류 항목의 필터는 지원하지 않습니다."}
+            invalid_conditions.append(record)
+            resolved_conditions.append(record)
+            continue
         # 방어적 검증: value가 비어 있으면 절대 SQL까지 내려가면 안 된다.
         # 가장 흔한 원인은 질문 분석 단계가 "가장 큰/최고/최소" 같은
         # 최상급 표현을 conditions로 잘못 분류한 경우다(정상적으로는
@@ -336,31 +896,11 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         # 이 조건이 그대로 SQL 생성 LLM에 "attribute eq ''" 형태로
         # 넘어가고, 숫자 컬럼에 빈 문자열을 비교하는 SQL이 만들어져
         # Postgres 실행 단계에서야 알아보기 힘든 타입 오류로 터진다.
-        # if not (c.get("value") or "").strip():
-        #     record = {
-        #         "attribute": c["attribute"],
-        #         "operator": c.get("operator", ""),
-        #         "value": c.get("value", ""),
-        #         "value_2": c.get("value_2", ""),
-        #         "column": None,
-        #         "spec": None,
-        #         "valid": False,
-        #         "invalid_reason": (
-        #             "조건 값이 비어 있습니다. 질문 분석 단계가 최상급 표현(가장 큰/작은, 최고, "
-        #             "최대, 최소 등)을 정렬(sort)이 아니라 조건(conditions)으로 잘못 분류했을 "
-        #             "가능성이 높습니다."
-        #         ),
-        #     }
-        #     invalid_conditions.append(record)
-        #     resolved_conditions.append(record)
-        #     continue
-
-        if not (c.get("value") or "").strip():
-            # [수정된 부분] 
-            # 기존에는 invalid_conditions에 넣어서 전체 쿼리 실행을 중단시켰지만,
-            # LLM이 정렬 조건을 빈 조건으로 중복 생성하는 실수가 잦으므로
-            # 에러를 내지 않고 해당 조건만 조용히 무시(continue)하도록 변경합니다.
-            print(f"  [Warning] 값이 비어있는 조건 무시됨: {c['attribute']}")
+        if c.get("value") is None or not str(c.get("value", "")).strip():
+            record = {**c, "column": None, "spec": None, "valid": False,
+                      "invalid_reason": "조건 값이 비어 있어 필터를 확정할 수 없습니다."}
+            invalid_conditions.append(record)
+            resolved_conditions.append(record)
             continue
 
         spec = concept_to_spec.get(c["attribute"])
@@ -375,8 +915,15 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             "invalid_reason": None,
             "matched_values": None,
             "org_name_variants": None,
+            "any_group": c.get("any_group"),
+            "entity_identity": c.get("entity_identity", False),
         }
         if spec is not None:
+            if c["operator"] in {"eq", "ne", "neq"}:
+                source_values = categorical_source_values(domain, spec.column, str(c["value"]))
+                if source_values:
+                    record["category_values"] = source_values
+                    notes.append(f"'{c['attribute']}'의 범주값 원천 대조: {c['value']} → {source_values}")
             valid, reason, matched_val = validate_ordinal_value(spec, c["value"])
             record["value"] = matched_val
             record["valid"] = valid
@@ -386,10 +933,14 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             elif spec.value_type == "ordinal":
                 # value_2도(between일 때) 같은 방식으로 정식 표기로 맞춘다.
                 value_2_raw = c.get("value_2", "")
-                matched_value_2 = matched_val
-                if value_2_raw:
-                    v2_valid, _, matched_value_2 = validate_ordinal_value(spec, value_2_raw)
-                    if v2_valid:
+                matched_value_2 = ""
+                if c["operator"] == "between":
+                    v2_valid, reason, matched_value_2 = validate_ordinal_value(spec, value_2_raw)
+                    if not v2_valid:
+                        record["valid"] = False
+                        record["invalid_reason"] = reason
+                        invalid_conditions.append(record)
+                    else:
                         record["value_2"] = matched_value_2
                 # "AA- 이상"이 실제로 어떤 문자열 전부를 가리키는지 여기서
                 # 미리 계산해서 못박는다. SQL 생성 LLM은 이 목록을 그대로
@@ -419,8 +970,12 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             "limit": sort_in.get("limit", ""),
             "spec": spec,
         }
+        if rdb_schema.get_output_view(domain, sort_in["attribute"]):
+            invalid_conditions.append({"attribute": sort_in["attribute"], "value": "정렬",
+                                       "invalid_reason": "출력 전용 분류 항목의 정렬은 지원하지 않습니다."})
 
     resolved_fields = []
+    output_views = []
     # "상품명"을 fields 목록 맨 앞에 항상 포함한다(role=target일 때).
     # 질문이 fields에 명시적으로 상품명을 요청하지 않아도(대부분 안 한다
     # - "순자산이 가장 큰 상품"이라고 하지 "상품명과 순자산을"이라고
@@ -447,6 +1002,34 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         blocking_concepts.add("상품명")
 
     for f in field_names:
+        view = rdb_schema.get_output_view(domain, f)
+        if view:
+            if catalog_sql.normalize(f) == "온톨로지분류값":
+                # Do not make a generic classification request silently mean a
+                # credit rating when its subject is a different/unknown axis.
+                anchors = [rdb_schema.get_output_view(domain, n) for n in field_names if n != f]
+                raw_rating = any(v and v["kind"] == "raw_rating" for v in anchors)
+                rating = any(catalog_sql.normalize(n) == "신용등급" for n in field_names)
+                maturity = any(v and v["kind"] == "maturity" for v in anchors)
+                if maturity and not raw_rating and not rating:
+                    view = {**view, "kind": "maturity", "inputs": ("mat_dt", "info_base_dt")}
+                elif not raw_rating and (not rating or maturity):
+                    view = {**view, "ambiguous": True, "inputs": ()}
+            if view["kind"] != "raw_rating":
+                output_views.append({"attribute": f, "source_table": table, **view})
+                notes.append(f"'{f}'는 원천 입력 조회 후 명시된 출력 규칙을 적용해 산출합니다.")
+            for name in view["inputs"]:
+                resolved_fields.append({"attribute": f if view["kind"] == "raw_rating" else f"분류근거({name})",
+                                        "column": name, "spec": catalog_sql.spec_for_column(domain, name, {})})
+            continue
+        if (is_identity_field(f) or is_document_evidence_field(f)
+                or catalog_sql.normalize(f) in GRAPH_FIELD_CONCEPTS):
+            if is_document_evidence_field(f):
+                notes.append(f"'{f}'는 RDB 컬럼으로 추측하지 않고 문서 근거 계층에서 확인합니다.")
+            continue
+        if catalog_sql.normalize(f) in PROVENANCE_CONCEPTS or is_source_column_request(f):
+            notes.append(f"'{f}'는 단일 컬럼으로 추측하지 않고 DB 메타의 원본 기준일 컬럼들을 함께 조회합니다.")
+            continue
         spec = concept_to_spec.get(f)
         if spec is None and f in unresolved and f not in blocking_concepts:
             notes.append(f"요청된 필드 '{f}'는 대응하는 컬럼을 찾지 못해 결과에서 제외했습니다.")
@@ -477,9 +1060,13 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     return {
         "domain": domain,
         "table": table,
+        "subtype": list(step.get("subtype") or []),
+        "unverified_subtypes": unverified_subtypes,
         "conditions": resolved_conditions,
         "sort": resolved_sort,
         "fields": resolved_fields,
+        "output_views": output_views,
+        "class_suffixes": list(step.get("class_suffixes") or []),
         "unresolved_concepts": blocking_unresolved,
         "invalid_conditions": invalid_conditions,
         "notes": notes,

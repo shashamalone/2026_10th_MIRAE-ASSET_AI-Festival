@@ -10,7 +10,7 @@
 
 | 항목 | 버전 |
 |---|---|
-| Python | **3.11** (평가 실행 기준) |
+| Python | **3.11 이상** (현재 개발·회귀 검증: **3.13**) |
 | OS | Windows / Linux / macOS |
 
 의존성은 `requirements.txt`에 고정되어 있다.

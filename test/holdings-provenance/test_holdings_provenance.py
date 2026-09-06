@@ -11,10 +11,12 @@ ETF 편입내역 출처 조회 회귀 테스트.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SRC = _ROOT / "src"
@@ -142,6 +144,22 @@ class CitationTest(unittest.TestCase):
         rows = [{"etfName": "삼성 KODEX 차이나CSI300증권상장지수투자신탁[주식-파생형]"}]
         lines = hp.describe_rows(rows)
         self.assertTrue(lines and all(isinstance(x, str) for x in lines))
+
+    def test_answer_context_uses_public_document_evidence_label(self):
+        with patch.dict(os.environ, {"CLOVASTUDIO_API_KEY": "offline-test-key"}):
+            from agent import nodes
+        state = {
+            "plan": [{"step_id": "g", "engine": "graph", "relation": {
+                "subject_domain": "국내ETF", "relation": "holds", "object_entity": "캠브리콘",
+            }}],
+            "step_results": {"g": {
+                "engine": "graph", "status": "ok",
+                "rows": [{"etf_code": "KR7396520009", "holding_as_of": "2026-07-10"}],
+            }},
+        }
+        context = nodes._build_retrieved_context(state)
+        self.assertIn("편입내역 문서 근거", context)
+        self.assertNotIn("[Graph:", context)
 
 
 class DegradedIndexTest(unittest.TestCase):

@@ -24,12 +24,66 @@ def search_documents(
     # target_entities 경로는 intent가 이미 id를 들고 있던 예전 호출부 호환용이다.
     if not product_ids and target_entities:
         product_ids = [str(entity.get("id")) for entity in target_entities if entity.get("id")]
-    return VectorDBClient().search(
+    chunks = VectorDBClient().search(
         query_vector,
         top_k=top_k,
         product_ids=product_ids or None,
         section_types=section_types or None,
     )
+    ids = list(dict.fromkeys(c.get("document_id") for c in chunks if c.get("document_id")))
+    if not ids:
+        return chunks
+    try:
+        metadata = _read_document_metadata(ids)
+    except Exception:
+        # Valid retrieved chunks remain useful; absent metadata stays absent.
+        return chunks
+    return [{**c, **metadata.get(c.get("document_id"), {})} for c in chunks]
+
+
+def _read_document_metadata(document_ids: list[str]) -> dict[str, dict]:
+    from agent import utils
+    from tools import catalog_sql, schema_snapshot
+    table = "vec.source_document"
+    columns = ("document_id", "title", "publisher", "source_type")
+    schema_snapshot.assert_contract(column_refs=[(table, c) for c in columns])
+    conn = utils.get_pg_connection()
+    try:
+        rows = utils.run_sql(conn, f"SELECT {','.join(columns)} FROM {table} WHERE document_id IN ("
+                            + ",".join(catalog_sql.literal(v) for v in document_ids[:60]) + ")")
+    finally:
+        conn.close()
+    return {r["document_id"]: {"document_title": r.get("title"), "publisher": r.get("publisher"),
+                                "source_type": r.get("source_type")} for r in rows}
+
+
+def search_policy_documents(terms: list[str], limit: int = 10) -> list[dict]:
+    """Official-policy/manager source catalogue route; no product-master fiction.
+
+    Exact subject phrase in title/body plus source type, not global similarity.
+    Unchunked documents can be cited as metadata only, not as policy claims.
+    """
+    from agent import utils
+    from tools import catalog_sql, schema_snapshot
+    terms = list(dict.fromkeys(t.strip() for t in terms if t.strip()))[:5]
+    if not terms:
+        return []
+    columns = {"vec.source_document": ("document_id", "title", "publisher", "published_at", "source_url", "source_type", "as_of"),
+               "vec.document_chunk": ("chunk_id", "document_id", "section_type", "page_number", "heading_path", "chunk_text", "effective_as_of")}
+    schema_snapshot.assert_contract(column_refs=[(t, c) for t, cs in columns.items() for c in cs])
+    terms_sql = " OR ".join("POSITION(" + catalog_sql.literal(catalog_sql.normalize(t))
+                            + " IN LOWER(REPLACE(COALESCE(d.title,'') || ' ' || COALESCE(c.chunk_text,''),' ',''))) > 0"
+                            for t in terms)
+    sql = ("SELECT c.chunk_id,d.document_id,c.section_type,c.page_number,c.heading_path,c.chunk_text,"
+           "c.effective_as_of,d.title AS document_title,d.publisher,d.published_at,d.source_url,d.source_type "
+           "FROM vec.source_document d LEFT JOIN vec.document_chunk c ON c.document_id=d.document_id "
+           "WHERE LOWER(d.source_type) IN ('policy','manager') AND (" + terms_sql + ") "
+           "ORDER BY d.published_at DESC NULLS LAST,d.document_id,c.chunk_id LIMIT " + str(max(1, min(int(limit), 20))))
+    conn = utils.get_pg_connection()
+    try:
+        return utils.run_sql(conn, sql)
+    finally:
+        conn.close()
 
 
 def resolve_product_ids(codes: list[str], names: list[str]) -> list[str]:
