@@ -1,24 +1,5 @@
-/TIL/
-/\[참고\]/
-/data/
-/data_raw/
-/wanggyu/
-/archive/
-
-lseg_static_metadata.json
-theme_list.json
 .env*
 !.env.example
 __pycache__/
-
-ontology/instances_*.ttl
-ontology.zip
-
-artifacts/
-
-
-# git worktree 컨테이너 (nested worktree 가 저장소에 섞이지 않게)
-worktrees/
-
 .cache/
 *.ipynb
