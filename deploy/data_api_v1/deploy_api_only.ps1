@@ -53,11 +53,18 @@ $archive = Join-Path $artifactDir $archiveName
 & git -C $repo archive --format=tar.gz --prefix="financial-agent-api-only-$releaseSha/" --output=$archive HEAD
 if ($LASTEXITCODE -ne 0) { throw 'API-only git archive failed' }
 
+# The working tree can use CRLF on Windows. Bash interprets the trailing CR in
+# `set -Eeuo pipefail` as part of the option name, so create a deterministic
+# LF-only, UTF-8-no-BOM upload artifact instead of uploading the checkout file.
+$installerUpload = Join-Path $artifactDir 'install_api_only_release.sh'
+$installerText = [IO.File]::ReadAllText($installer).Replace("`r`n", "`n").Replace("`r", "`n")
+[IO.File]::WriteAllText($installerUpload, $installerText, [Text.UTF8Encoding]::new($false))
+
 $checksumName = "financial-agent-api-only-$releaseSha-SHA256SUMS"
 $checksumPath = Join-Path $artifactDir $checksumName
 $checksumLines = @(
     "$((Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant())  $archiveName",
-    "$((Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant())  install_api_only_release.sh"
+    "$((Get-FileHash -Algorithm SHA256 -LiteralPath $installerUpload).Hash.ToLowerInvariant())  install_api_only_release.sh"
 )
 [IO.File]::WriteAllText(
     $checksumPath,
@@ -65,7 +72,7 @@ $checksumLines = @(
     [Text.UTF8Encoding]::new($false)
 )
 
-& scp $archive $installer $checksumPath "${SshTarget}:$IncomingDir/"
+& scp $archive $installerUpload $checksumPath "${SshTarget}:$IncomingDir/"
 if ($LASTEXITCODE -ne 0) { throw 'API-only upload failed' }
 
 $remote = "cd '$IncomingDir' && chmod 755 install_api_only_release.sh && bash install_api_only_release.sh '$releaseSha' '$expectedGraphTriples'"

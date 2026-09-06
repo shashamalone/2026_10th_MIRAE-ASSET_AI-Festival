@@ -105,6 +105,9 @@ class ApiOnlyDeploySourceTest(unittest.TestCase):
         self.assertLess(self.local.index("if (-not $Execute)"), self.local.index("& scp"))
         self.assertIn("artifacts\\runs\\$runId\\codex-t154-answer-deploy-0906", self.local)
         self.assertIn("$expectedGraphTriples = 1226698", self.local)
+        self.assertIn("$installerUpload", self.local)
+        self.assertIn('.Replace("`r`n", "`n")', self.local)
+        self.assertIn("[Text.UTF8Encoding]::new($false)", self.local)
 
     def test_forward_and_rollback_touch_only_api(self):
         self.assertIn('compose_release "${release_dir}" up -d --no-deps api', self.remote)

@@ -166,6 +166,8 @@ class DeploymentSourceContractTest(unittest.TestCase):
         self.assertIn('test "$(compose_release "${release_dir}" ps -q db)" = "${old_db_container}"', remote)
         self.assertIn('test "$(compose_release "${release_dir}" ps -q graph)" = "${old_graph_container}"', remote)
         self.assertLess(local.index("--preflight"), local.index("& scp"))
+        self.assertIn("$installerUpload", local)
+        self.assertIn('.Replace("`r`n", "`n")', local)
 
 
 if __name__ == "__main__":
