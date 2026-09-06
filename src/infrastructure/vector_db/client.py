@@ -79,7 +79,6 @@ def _inline(sql: str, params: list[Any]) -> str:
 
 
 class VectorDBClient:
-    """Read-only semantic search over normalized ``vec`` tables."""
 
     def __init__(
         self,
@@ -107,7 +106,6 @@ class VectorDBClient:
         product_ids: list[str] | None = None,
         section_types: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        """Return evidence chunks ordered by cosine similarity."""
         top_k = max(1, min(int(top_k), 20))
         vector = _vector_literal(query_vector)
         if self._has_direct_dsn:
@@ -196,8 +194,6 @@ class VectorDBClient:
               )
             """
             params.append(product_ids)
-        # 자리표시자 순서가 곧 파라미터 순서다(_search_direct가
-        # [vector, *params, vector, top_k]로 넘긴다). 상품 필터 뒤에 붙인다.
         section_filter = ""
         if section_types:
             section_filter = "AND dc.section_type = ANY(%s)"

@@ -55,7 +55,6 @@ from tools.schemas import COLUMN_RESOLUTION_JSON_SCHEMA
 # 0) 판매가능여부 조건 사전 처리 (rdb_schema.DOMAIN_SALE_POLICY 적용)
 # ---------------------------------------------------------------------------
 SALE_AVAILABILITY_CONCEPT = "판매가능여부"
-# A provenance request is a set of source-date columns, not one guessed column.
 PROVENANCE_CONCEPTS = {"기준일", "각수치의기준일", "데이터갱신일", "데이터업데이트일", "수치갱신일",
                        "수치기준일", "지표기준일", "수익률기준일", "데이터기준일", "수치의갱신일", "aum기준일"}
 
@@ -78,7 +77,6 @@ def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[di
     regions = set()
     for entry in _ontology_labels("InvestmentRegion"):
         if entry["label"] in {"해외", "국내외", "글로벌"}:
-            # Broad market/exposure terms are not a particular country.
             continue
         for alias in entry["aliases"]:
             if re.search(r"(?<![가-힣A-Za-z])" + re.escape(alias) + r"\s+(?:주식|채권)(?:형|에\s*투자|\s*투자)?", text):
@@ -101,11 +99,6 @@ def preserve_explicit_investment_region(intent: dict, question: str) -> tuple[di
 
 
 def preserve_overseas_exposure_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
-    """Overseas investment is not itself proof of an overseas listing.
-
-    Keep the original foreign scope, but restore domestic-listed candidates;
-    unsupported FX/period requests in the foreign branch remain explicit.
-    """
     text = re.sub(r"\s+", "", question)
     match = re.search(r"해외(주식|채권)에투자", text)
     if not match or re.search(r"해외ETF|해외상장|외국상장|미국상장", text):
@@ -126,11 +119,6 @@ def preserve_overseas_exposure_scope(intent: dict, question: str) -> tuple[dict,
 
 
 def restore_shared_theme_scope(intent: dict, question: str) -> tuple[dict, list[str]]:
-    """Recover a source-taxonomy topic applied to ETF/fund integrated search.
-
-    This is classification evidence, not an invented holdings relationship.
-    Unknown categories remain invalid; only terms present in TBox themes qualify.
-    """
     if intent.get("relations"):
         return intent, []
     domains = intent.get("product_domain") or []
@@ -164,7 +152,6 @@ def restore_shared_theme_scope(intent: dict, question: str) -> tuple[dict, list[
 
 
 def lookup_product_identities(names: list[str]) -> list[dict]:
-    """Exact raw names/codes across domains; no ticker whitelist or fuzzy guess."""
     from tools import schema_snapshot
     snap = schema_snapshot.get_snapshot()
     queries = []
@@ -189,11 +176,6 @@ def lookup_product_identities(names: list[str]) -> list[dict]:
 
 
 def resolve_named_product_domains(intent: dict) -> tuple[dict, list[str]]:
-    """Correct a named lookup's model domain only with unambiguous DB evidence.
-
-    Multi-domain matches remain ambiguous. Relational subjects are not changed:
-    an issuer/company mentioned in the query is not itself a requested product.
-    """
     names = [e.get("surface_form", "") for e in intent.get("target_entities") or []
              if e.get("entity_type") == "product_name" and e.get("surface_form")]
     if not names or len(names) > 8 or intent.get("relations"):
@@ -212,8 +194,6 @@ def resolve_named_product_domains(intent: dict) -> tuple[dict, list[str]]:
     previous = [d["domain"] for d in intent.get("product_domain") or []]
     if set(previous) == set(domains):
         return intent, []
-    # Do not discard an explicit multi-market comparison merely because a name
-    # has an exact spelling in only one market.
     if len(previous) > 1:
         return intent, [f"상품 식별 도메인 {domains}; 명시된 복수 도메인 {previous} 비교는 유지합니다."]
     fixed = {**intent, "product_domain": [{"domain": d, "subtype": []} for d in domains]}
@@ -276,12 +256,6 @@ def validate_issuer_subjects(intent: dict, question: str) -> tuple[dict, list[st
 
 
 def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict, list[str]]:
-    """Recover catalogued noun-list requests, not values inferred from a product.
-
-    Only positive display/request clauses and noun-list boundaries are accepted.
-    Filter mentions ('등급 AA 이상') and product-name substrings are not fields.
-    This supplements the two intent prompts without adding a paid model call.
-    """
     text = catalog_sql.normalize(question.replace("\n", ";"))
     for entity in intent.get("target_entities") or []:
         name = catalog_sql.normalize(entity.get("surface_form") or "")
@@ -295,7 +269,6 @@ def preserve_explicit_output_requests(intent: dict, question: str) -> tuple[dict
         names.update(rdb_schema.get_attribute_catalog(name))
         for key, view in rdb_schema.get_output_views(name).items():
             names.update((key, *view["aliases"]))
-    # Keep the longest known phrase; '원본 신용등급' must not collapse to '신용등급'.
     normalized_names = {catalog_sql.normalize(name) for name in names}
     recovered = []
     for clause in re.split(r"[.!?;\n]", text):
@@ -354,10 +327,6 @@ def _ontology_match(class_name: str, value: str) -> dict:
 
 
 def categorical_source_values(domain: str, column: str, value: str) -> list[str]:
-    """Translate a category through TBox aliases, intersecting reviewed raw codes.
-
-    Never translate free strategy prose or infer a sector from a product name.
-    """
     axis = rdb_schema.ETF_CLASSIFICATION_AXES.get(domain, {}).get(column)
     if column in {"curr_cd", "pd_curr_cd", "pd_trd_ccy"}:
         axis = "Currency"
@@ -388,11 +357,6 @@ def _source_date(value):
 
 
 def _maturity_class(days: int) -> tuple[dict, str]:
-    """TBox altLabels supply intervals; the existing days/year contract is 365.
-
-    Lower-inclusive/upper-exclusive intervals; negative days mean matured.
-    Never use duration, product name ('콜/후'), or today's clock as substitutes.
-    """
     if days < 0:
         return _ontology_match("MaturityClass", "만기경과"), "만기경과"
     matches = []
@@ -412,7 +376,6 @@ def _maturity_class(days: int) -> tuple[dict, str]:
 
 
 def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
-    """Apply local TBox vocabulary to fetched raw values, not remote ABox claims."""
     if not views:
         return rows
     output = []
@@ -457,7 +420,6 @@ def derive_output_views(rows: list[dict], views: list[dict]) -> list[dict]:
                 items[catalog_sql.normalize(view["attribute"])] = item
                 continue
             if view["kind"] == "classification":
-                # Missing one axis must not erase evidence for the other axes.
                 parts = []
                 for column, axis in view["axes"].items():
                     raw = row.get(column)
@@ -569,12 +531,6 @@ def collect_needed_concepts(step: dict) -> list[str]:
                     and catalog_sql.normalize(f) not in GRAPH_FIELD_CONCEPTS
                     and not rdb_schema.get_output_view(step.get("domain", ""), f))
 
-    # "상품명"은 항상 필요하다(role="target" 조회에 한해). 조건에
-    # 쓰였든(product_name_entities) 아니든, 결과 행이 순자산 숫자나
-    # 신용등급 값만 달랑 있으면 "어느 상품인지" 알 수 없어서 답으로
-    # 쓸모가 없다. "순자산이 가장 큰 상품"처럼 fields에 상품명 자체를
-    # 명시적으로 요청하지 않는 질문이 대부분이라, fields만 믿으면 항상
-    # 빠진다. 그래서 role이 target이면 조건 없이 넣는다.
     if step.get("role", "target") == "target":
         concepts.append("상품명")
 
@@ -593,18 +549,14 @@ def build_condition_list(step: dict) -> list[dict]:
 
     subtype은 여기서 다루지 않는다(resolve_subtype_conditions가 별도로
     처리해서 build_resolved_schema가 직접 합친다)."""
-    # Internal OR/identity markers can only be produced below, not by model
-    # output that happens to contain additional JSON properties.
     conditions: list[dict] = [{key: c[key] for key in ("attribute", "operator", "value", "value_2") if key in c}
                              for c in step.get("conditions", [])]
 
     for e in step.get("product_name_entities") or []:
-        # 정확한 표기가 DB와 다를 수 있어(공백, 접미사 등) eq가 아니라
-        # contains로 매칭한다.
+
         conditions.append({"attribute": "상품명", "operator": "contains", "value": e["surface_form"], "value_2": "", "any_group": "product_names", "entity_identity": True})
         if step.get("domain") == "해외ETF" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.^-]{0,19}", e["surface_form"]):
-            # Tickers and RICs are identifiers, not substrings of a fund's full
-            # legal name. Resolve both via reviewed catalogue concepts.
+
             for attribute in ("티커", "상품코드"):
                 conditions.append({"attribute": attribute, "operator": "eq", "value": e["surface_form"],
                                    "value_2": "", "any_group": "product_names"})
@@ -685,22 +637,17 @@ def resolve_concepts_for_domain(
     concept_to_spec: dict[str, AttributeSpec] = {}
     unresolved: list[str] = []
 
-    # [보편적 방어 로직 1] 카탈로그 키들의 공백을 모두 제거하고 소문자로 만든 매핑을 미리 준비합니다.
-    # 예: "1년 수익률" -> "1년수익률", "ESG 채권" -> "esg채권"
     normalized_attr_map = {
         k.replace(" ", "").lower(): v for k, v in attribute_map.items()
     }
 
     for concept in needed_concepts:
-        # [보편적 방어 로직 2] LLM이 뽑아낸 개념명도 공백을 제거하고 소문자로 만듭니다.
+
         normalized_concept = concept.replace(" ", "").lower()
         
-        # 원본 이름으로 먼저 찾아보고, 없으면 정규화된(공백 제거된) 이름으로 찾습니다.
         spec = attribute_map.get(concept) or normalized_attr_map.get(normalized_concept)
         
         if spec is not None:
-            # 딕셔너리에 저장할 때는 LLM이 만든 '원본 concept 이름'을 그대로 유지해야
-            # 뒤에 이어지는 조건 조립(build_resolved_schema) 단계에서 키가 엇갈리지 않습니다.
             concept_to_spec[concept] = spec
         else:
             unresolved.append(concept)
@@ -738,7 +685,6 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
     if not concepts:
         return {}
     structured_llm = llm.with_structured_output(COLUMN_RESOLUTION_JSON_SCHEMA, method="json_schema")
-    # Live existence, unlike descriptions, is not optional in the LLM fallback.
     from tools import schema_snapshot
     snapshot = schema_snapshot.get_snapshot()
     table = rdb_schema.get_domain_entry(domain)["table"]
@@ -765,8 +711,6 @@ def _resolve_unknown_concepts_via_llm(domain: str, concepts: list[str], question
             ),
         ]
     )
-    # 구조화 출력도 신뢰 경계 밖이다. 요청하지 않은 개념, SQL 표현식,
-    # 다른 테이블의 컬럼 및 지어낸 식별자는 절대 카탈로그로 승격하지 않는다.
     accepted: dict[str, str] = {}
     conflicts: set[str] = set()
     for row in result.get("resolutions", []):
@@ -863,17 +807,10 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
     invalid_conditions = []
     notes: list[str] = []
 
-    # subtype은 개념명 경유가 아니라 값 단위로 직접 컬럼을 찾는다(위
-    # resolve_subtype_conditions 참고). 이미 컬럼까지 정해진 채로 오므로
-    # 아래 일반 조건 루프(카탈로그/LLM 폴백 대상)와 섞이지 않게 먼저
-    # resolved_conditions에 바로 얹는다.
     subtype_records, subtype_notes = resolve_subtype_conditions(domain, step.get("subtype") or [])
     unverified_subtypes = []
     identity_lookup = bool(step.get("product_name_entities")) and not step.get("conditions") and not step.get("sort")
     if identity_lookup:
-        # The planner sometimes invents a classification of a named product.
-        # We can still return identity-matched source rows, but cannot claim that
-        # an unsupported classification/filter has been verified.
         unverified_subtypes = [r["value"] for r in subtype_records if not r["valid"]]
         subtype_records = [r for r in subtype_records if r["valid"]]
         if unverified_subtypes:
@@ -889,13 +826,7 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             invalid_conditions.append(record)
             resolved_conditions.append(record)
             continue
-        # 방어적 검증: value가 비어 있으면 절대 SQL까지 내려가면 안 된다.
-        # 가장 흔한 원인은 질문 분석 단계가 "가장 큰/최고/최소" 같은
-        # 최상급 표현을 conditions로 잘못 분류한 경우다(정상적으로는
-        # sort로 가야 한다). 여기서 걸러서 명확한 이유를 남기지 않으면,
-        # 이 조건이 그대로 SQL 생성 LLM에 "attribute eq ''" 형태로
-        # 넘어가고, 숫자 컬럼에 빈 문자열을 비교하는 SQL이 만들어져
-        # Postgres 실행 단계에서야 알아보기 힘든 타입 오류로 터진다.
+
         if c.get("value") is None or not str(c.get("value", "")).strip():
             record = {**c, "column": None, "spec": None, "valid": False,
                       "invalid_reason": "조건 값이 비어 있어 필터를 확정할 수 없습니다."}
@@ -931,7 +862,6 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
             if not valid:
                 invalid_conditions.append(record)
             elif spec.value_type == "ordinal":
-                # value_2도(between일 때) 같은 방식으로 정식 표기로 맞춘다.
                 value_2_raw = c.get("value_2", "")
                 matched_value_2 = ""
                 if c["operator"] == "between":
@@ -942,18 +872,12 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
                         invalid_conditions.append(record)
                     else:
                         record["value_2"] = matched_value_2
-                # "AA- 이상"이 실제로 어떤 문자열 전부를 가리키는지 여기서
-                # 미리 계산해서 못박는다. SQL 생성 LLM은 이 목록을 그대로
-                # IN(...)에 옮기기만 하면 되고, 순서/방향을 직접 판단할
-                # 필요가 없다.
+
                 record["matched_values"] = resolve_ordinal_matched_values(
                     spec, c["operator"], matched_val, matched_value_2
                 )
             elif spec.is_organization_name:
-                # "SK하이닉스"(질문에서 흔한 통칭) vs "에스케이하이닉스(주)"
-                # (RDB 원본 표기) 같은 표기 차이로 exact match가 0건 되는
-                # 사고를 막는다(실측, 2026-09-02). 검증된 약칭표 안의
-                # 치환만 쓰므로 편집거리/유사도 대체가 아니다.
+
                 variants = graph_ids.expand_organization_aliases(matched_val)
                 if len(variants) > 1:
                     record["org_name_variants"] = variants
@@ -976,25 +900,10 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
 
     resolved_fields = []
     output_views = []
-    # "상품명"을 fields 목록 맨 앞에 항상 포함한다(role=target일 때).
-    # 질문이 fields에 명시적으로 상품명을 요청하지 않아도(대부분 안 한다
-    # - "순자산이 가장 큰 상품"이라고 하지 "상품명과 순자산을"이라고
-    # 묻지 않는다), 결과 행을 식별할 방법이 없으면 답으로 쓸 수 없다.
     field_names = list(step.get("fields", []))
     if step.get("role", "target") == "target" and "상품명" not in field_names:
         field_names = ["상품명"] + field_names
 
-    # conditions/sort에 실제로 쓰이는 개념이 미해결이면 그 단계 전체를
-    # 막아야 한다(필터링 자체가 깨지므로). 반면 output_requirements.fields는
-    # "결과에 곁들여 보여주면 좋은 값" 수준이라, 그중 하나를 컬럼에
-    # 대응시키지 못했다고 질문 전체를 답변불가로 만들면 안 된다 - 실측
-    # (2026-09-02, "SK하이닉스가 발행한 채권과 SK하이닉스를 편입한 ETF"
-    # 질문)으로 확인됐다: LLM이 fields에 "ETF 상세 정보"처럼 실제로
-    # 대응하는 컬럼이 없는 문구를 넣는 사례가 있었는데, 조건(발행사=
-    # SK하이닉스)까지 멀쩡한 단계가 그 필드 하나 때문에 통째로 스킵됐다.
-    # 그래서 fields에서만 쓰이는(조건·정렬에는 안 쓰이는) 미해결 개념은
-    # SELECT에서 조용히 빼고, "이 단계를 막을지" 판단은 blocking_concepts
-    # (조건·정렬·강제 상품명)에 실제로 걸린 미해결 개념만으로 한다.
     blocking_concepts = {c["attribute"] for c in build_condition_list(step)}
     if sort_in.get("attribute"):
         blocking_concepts.add(sort_in["attribute"])
@@ -1005,8 +914,6 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
         view = rdb_schema.get_output_view(domain, f)
         if view:
             if catalog_sql.normalize(f) == "온톨로지분류값":
-                # Do not make a generic classification request silently mean a
-                # credit rating when its subject is a different/unknown axis.
                 anchors = [rdb_schema.get_output_view(domain, n) for n in field_names if n != f]
                 raw_rating = any(v and v["kind"] == "raw_rating" for v in anchors)
                 rating = any(catalog_sql.normalize(n) == "신용등급" for n in field_names)
@@ -1038,10 +945,6 @@ def build_resolved_schema(step: dict, concept_to_spec: dict[str, AttributeSpec],
 
     blocking_unresolved = [c for c in unresolved if c in blocking_concepts]
 
-    # 이 단계가 실제로 쓰는 AttributeSpec 중 join_table이 채워진 것들을
-    # 전부 모아 JOIN 절을 조립한다. 같은 보강 테이블을 여러 조건/필드가
-    # 같이 쓰면(예: 총보수율 조건 + 총보수율 정렬) 중복 JOIN을 만들지
-    # 않도록 join_table 기준으로 한 번만 등록한다.
     joins: list[str] = []
     seen_join_tables: set[str] = set()
 
@@ -1119,11 +1022,7 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
         if spec:
             line += f" (value_type={spec.value_type})"
             if c.get("matched_values") is not None:
-                # ordinal 조건은 "이상/이하가 정확히 어떤 값들을 가리키는지"를
-                # 이미 파이썬이 계산해 뒀다. SQL 작성 LLM은 이 목록을 그대로
-                # IN(...)에 옮기기만 하면 된다 - CASE WHEN으로 순위를 직접
-                # 만들거나 문자열을 그대로 부등호 비교하면 안 된다(알파벳
-                # 순서가 실제 등급 순서와 다르다).
+
                 values_repr = ", ".join(repr(v) for v in c["matched_values"])
                 line += (
                     f"\n    이 조건이 실제로 가리키는 값은 이미 계산되어 있다. "
@@ -1132,11 +1031,6 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
                     f"문자열 알파벳 순서는 실제 등급 순서와 다르다.)"
                 )
             elif c.get("org_name_variants"):
-                # 회사/기관명은 "SK하이닉스"(질문 통칭)와 "에스케이하이닉스(주)"
-                # (원본 표기)처럼 검증된 약칭표 기준으로 다르게 적혀 있을 수
-                # 있다. 이미 계산해 둔 변형 후보 중 하나라도 부분일치하면
-                # 매치되게 한다 - 정확히 일치(=)시키면 법인격 접미사·표기
-                # 차이 때문에 0건이 나올 수 있다(실측 확인).
                 variants_repr = ", ".join(repr(v) for v in c["org_name_variants"])
                 line += (
                     f"\n    이 조직명은 표기가 다를 수 있다(검증된 약칭표 기준 변형 후보: "
@@ -1156,13 +1050,6 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
         s = resolved_schema["sort"]
         sort_column = _qualify(s["column"])
         lines.append(f"정렬: {s['attribute']} -> 컬럼 {sort_column}, {s['order']}")
-        # PostgreSQL은 DESC 정렬에서 NULL을 "가장 큰 값"으로 취급해 맨
-        # 앞으로 보낸다(ASC는 반대로 맨 뒤). 정렬 기준 컬럼에 NULL이
-        # 조금이라도 있으면, LIMIT과 결합했을 때 최댓값/최솟값 대신 NULL
-        # 행이 뽑히는 사고가 난다. note에 결측 언급이 있을 때만이 아니라
-        # sort가 있으면 항상, 조건 없이 이 지시를 내린다 - "최댓값을
-        # 찾으려면 NULL도 봐야 한다"처럼 LLM이 그럴듯하지만 틀리게
-        # 추론하는 경우가 실제로 있었다.
         lines.append(
             f"  주의: PostgreSQL은 DESC 정렬에서 NULL을 가장 큰 값으로 취급해 맨 앞에 "
             f"둔다(ASC는 맨 뒤). {sort_column}에 NULL이 하나라도 있으면 최댓값/최솟값 대신 "
@@ -1196,12 +1083,6 @@ def format_resolved_schema(resolved_schema: dict, apply_limit: bool = True, unio
         )
 
     if union_mode:
-        # §9: 여러 도메인의 서브쿼리를 UNION ALL로 합칠 것이므로, 이
-        # 서브쿼리 하나만 보고는 알 수 없는 별칭 계약을 명시적으로
-        # 강제한다. 도메인마다 실제 컬럼 구성이 다르므로(예: 국내ETF
-        # pd_itm_no vs 펀드 itm_no) SELECT 목록을 4개 고정 별칭으로
-        # 맞추지 않으면 UNION 자체가 "각 SELECT의 열 개수가 달라야
-        # 합니다" 에러로 깨진다.
         code_field = next((f for f in resolved_schema["fields"] if f["attribute"] == "상품코드"), None)
         name_field = next((f for f in resolved_schema["fields"] if f["attribute"] == "상품명"), None)
         sort_column = _qualify(resolved_schema["sort"]["column"]) if resolved_schema["sort"] else None
@@ -1255,21 +1136,7 @@ def get_pg_connection():
     return session
 
 def run_sql(conn, sql: str) -> list[dict]:
-    """conn(=requests.Session)으로 POST /db/sql을 호출해 SQL을 실행하고
-    행을 dict 목록으로 돌려준다. INSERT/UPDATE 없이 SELECT만 실행한다고
-    가정한다.
 
-    [2026-09-02 API 계약 변경 — 담당 팀원 확인] 예전엔 JSON 봉투
-    ({"query":..., "sql":..., "params":{}}, Content-Type: application/json)
-    를 보냈지만, 서버가 이제 Content-Type: text/plain; charset=utf-8로
-    SQL 원문 문자열 그 자체를 요청 바디에 담아 보내야 받는다. 직접 재현해
-    확인했다: json=으로 보내면(Content-Type: application/json) HTTP 415로
-    즉시 거부되고, Content-Type만 text/plain으로 바꾸고 바디를 JSON 봉투로
-    유지해도 서버가 바디를 SQL 원문으로 그대로 읽어버려서 "SELECT/WITH/
-    EXPLAIN만 허용합니다"로 거부한다(봉투의 여는 중괄호 `{`가 SELECT로
-    시작하지 않는다고 판단됨) - 반드시 봉투 없이 SQL 문자열 자체만 보내야
-    한다. 응답 형식은 안 바뀌었다(`rows` 키에 행 목록) - _extract_rows는
-    그대로 쓴다."""
     safe_sql = sql.replace('%', '%%')
 
     print(f"\n[DEBUG] 서버로 전송하는 SQL:\n{sql}\n")
@@ -1301,22 +1168,7 @@ def _extract_rows(payload: Any) -> list[dict]:
     ) 
  
 def describe_api_error(resp) -> str:
-    """API 에러 응답을 사람이 읽을 수 있는 설명으로 만든다.
 
-    지금까지 실측으로 확인된 형식이 세 가지라 전부 처리한다
-    (2026-08-30 확인):
-      1. {"code", "message", "release_id", "details": {"errors": [...]}}
-         - 요청 본문 자체가 pydantic 검증에 실패했을 때(예: 필드 길이
-           부족). errors 안의 개별 항목은 loc/msg/type/input을 갖는다.
-      2. {"detail": "<문자열 하나>"}
-         - 라우트 자체의 비즈니스 규칙 위반(예: sparql 필드를 채워
-           보냈을 때의 "다른 query 종류" 거부). Swagger 문서의 예시와
-           다르게 detail이 배열이 아니라 문자열 하나다.
-      3. {"detail": [...]}
-         - Swagger 문서에 나온 표준 FastAPI 형식. 실제로 관측되지는
-           않았지만 혹시 몰라 남겨 둔다.
-    SQL 실행 자체가 틀렸을 때(문법 오류, 존재하지 않는 컬럼)도 이 중
-    하나를 쓰는지는 아직 확인되지 않았다."""
     parts = [f"HTTP {resp.status_code}"]
     try:
         body = resp.json()
@@ -1344,8 +1196,5 @@ def describe_api_error(resp) -> str:
     return "\n".join(parts)
 
 def describe_pg_error(exc: Exception) -> str:
-    """이전 psycopg2 버전과의 호환용 별칭. run_sql이 던지는 RuntimeError는
-    이미 describe_api_error로 정리된 메시지를 담고 있으므로 str(exc)만
-    돌려주면 된다. 호출부에서 describe_pg_error(exc)를 그대로 쓰고 있다면
-    수정하지 않아도 되게 하려고 이름을 남겨 뒀다."""
+
     return str(exc)

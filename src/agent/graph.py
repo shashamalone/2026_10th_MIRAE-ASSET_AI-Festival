@@ -6,7 +6,6 @@ LangGraph StateGraph 조립. 목표로 준 다이어그램(사용자 질문 입�
 검색 노드 -> 결과 합치기 노드 -> 답변 생성 노드 -> 최종 답변 출력)을
 그대로 구현한다.
 
-[의존관계 기반 웨이브 스케줄러 — 2026-09-02]
 plan_query_db.py가 각 단계에 계산해 두는 depends_on(§4, relation.
 subject_domain 기반 정밀 판정)을 실제 실행 순서에 반영해야 하므로, 예전의
 "needs_rdb/needs_graph/needs_vector가 True면 전부 같은 슈퍼스텝에서 병렬"
@@ -40,18 +39,11 @@ RDB·GraphDB·VectorDB 검색 노드는 각각 tools와 infrastructure adapter�
 결과에 abstain 상태로 남기며, 다른 엔진 결과를 보존한다.
 """
 from __future__ import annotations
-
 from langgraph.graph import END, StateGraph
-
 from agent.nodes import *
 from agent.plan_query_db import plan_query_node
 from agent.state import ChatbotState, ready_step_ids
 
-# dispatch가 고를 수 있는 다음 노드 전부. 각 소스 노드(plan_query, 세 검색
-# 노드)가 전부 같은 목적지 목록을 쓴다 - 자기 자신으로도 다시 돌아갈 수
-# 있어야 한다(같은 엔진이 여러 웨이브에 걸쳐 필요한 경우). LangGraph가
-# 그래프 구조를 정적으로 검증하므로 이론상 가능한 다음 목적지를 전부
-# 선언해 둬야 한다.
 _WAVE_TARGETS = ["graph_search", "rdb_search", "vector_search", "merge_results"]
 
 
@@ -97,10 +89,6 @@ def build_graph():
     graph.add_edge("analyze_intent", "verify_intent")
     graph.add_edge("verify_intent", "plan_query")
 
-    # DB 검색 흐름 결정 노드 -> {RDB, GraphDB, VectorDB} 웨이브 기반 분기.
-    # plan_query와 세 검색 노드 전부 dispatch로 돌아가는 루프 구조다: 한
-    # 웨이브가 끝나면 dispatch가 다음으로 준비된 단계들을 다시 계산해서
-    # 스케줄하고, 더 없으면 merge_results로 수렴한다.
     graph.add_conditional_edges("plan_query", dispatch, _WAVE_TARGETS)
     graph.add_conditional_edges("graph_search", dispatch, _WAVE_TARGETS)
     graph.add_conditional_edges("rdb_search", dispatch, _WAVE_TARGETS)
@@ -116,5 +104,4 @@ app = build_graph()
 
 
 if __name__ == "__main__":
-    # 그래프 구조만 시각화하고 싶을 때: python graph.py
     print(app.get_graph().draw_mermaid())

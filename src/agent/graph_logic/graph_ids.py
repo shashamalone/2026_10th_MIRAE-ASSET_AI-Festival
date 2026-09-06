@@ -22,12 +22,6 @@ _ORGANIZATION_ALIASES = {
 _LEGAL_FORM = re.compile(r"\(주\)|㈜|\(유\)|주식회사|유한회사")
 _SEPARATORS = re.compile(r"[\s·,._\-]+")
 
-# 사용자가 실제로 쓰는 한글 통칭과 관계 원천의 영문 종목명/식별자를 잇는
-# 검토된 별칭이다. 부분 문자열 유사도나 LLM 번역을 실행 시점에 사용하지
-# 않는다. 각 항목은 적재된 원천에서 직접 대조한 label/code만 허용한다.
-#
-# 캠브리콘: relations/etf_holding.csv 및 instances_company.ttl에서
-# Cambricon / 688256 / CNE1000041R8 표기를 확인했다(holding as_of 2026-07-10).
 _REVIEWED_HOLDING_SECURITY_ALIASES = {
     "캠브리콘": {
         "label_contains": ("cambricon",),
