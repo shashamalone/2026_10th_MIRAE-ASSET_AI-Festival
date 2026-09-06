@@ -9,10 +9,9 @@ Graph URI와 사용자 표기를 분리하는 exact-first entity resolver.
 이상이면 ``ambiguous``로 멈추고 호출자에게 넘긴다. 호출자가 사용자 확인 없이
 실행해도 되는 상태는 ``status == "resolved"`` 뿐이다.
 
-[알려진 제약] 2단계(법인격 정규화, `_company_master`)는 `data/enriched/
-company_master.csv`가 이 워크스페이스에 없어 동작하지 않는다 - CSV가 없으면
-`_company_master`가 빈 dict를 돌려주고 그 다음 단계(3단계, 정규형/세그먼트
-완전일치)로 조용히 넘어간다. 1·3단계가 대부분의 표기 흔들림을 이미 커버한다.
+[법인명 보강] 2단계(법인격 정규화, `_company_master`)는
+`data/enriched/company_master.csv`를 읽는다. 파일이 없는 배포 환경에서는
+빈 dict로 폴백하고 다음 단계(정규형/세그먼트 완전일치)를 계속 수행한다.
 
 [성능] 3단계는 첫 호출 때 한 번 만드는 프로세스 내 인덱스(`_entity_index`)로
 조회한다. 원래의 클래스 전체 SPARQL 스캔은 호출당 2.6~6.1s였고(2026-09-05
@@ -524,7 +523,7 @@ ORDER BY""") % {
 # 주지만, 같은 표기가 여러 클래스에 실재할 때는 결과를 바꾼다.
 _ROLE_CLASS_ORDER = {
     "company": ("Company", "Security", "Organization"),
-    "issuer": ("Issuer", "Company", "Organization", "ETF", "ETN", "Product"),
+    "issuer": ("Issuer", "Company", "Organization"),
     "manager": ("AssetManager", "Organization"),
     "product": ("ETF", "PublicFund", "Bond", "ETN", "Product"),
     "share_class": ("ShareClass", "PublicFund"),

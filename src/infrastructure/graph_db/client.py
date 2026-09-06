@@ -1,25 +1,27 @@
 """
 Oxigraph GraphDB 읽기 전용 클라이언트.
 
-원격 VM의 Oxigraph 저장소를 Agent 호스트에 마운트한 경로로 직접 읽고,
-해당 저장소를 사용할 수 없을 때 로컬 저장소, HTTP endpoint 순서로
-조회 대상을 전환한다. GraphDB 연결과 SPARQL 실행을 Agent 노드에서
-분리하기 위한 infrastructure adapter다.
+명시적으로 설정된 파일 저장소를 직접 읽거나 HTTP endpoint를 조회한다.
+GraphDB 연결과 SPARQL 실행을 Agent 노드에서 분리하기 위한 infrastructure
+adapter다.
 
 [구현 상태]
 
 - Oxigraph 직접 조회: pyoxigraph의 ``Store.read_only``로 파일 기반 저장소를
   열어 SELECT/ASK 쿼리를 실행한다.
-- 연결 순서: ``OXIGRAPH_REMOTE_STORE_PATH``(원격 VM 마운트 경로) ->
-  ``OXIGRAPH_LOCAL_STORE_PATH`` 또는 기본 artifacts 경로 ->
-  ``OXIGRAPH_FALLBACK_ENDPOINT``/``OXIGRAPH_ENDPOINT``.
+- 연결 순서: 명시된 ``OXIGRAPH_REMOTE_STORE_PATH``(원격 VM 마운트 경로) ->
+  명시된 ``OXIGRAPH_LOCAL_STORE_PATH`` -> HTTP endpoint. 파일 경로를 하나도
+  지정하지 않고 endpoint만 설정한 운영 환경은 존재하지 않는 기본 로컬 경로를
+  확인하지 않고 곧바로 endpoint를 사용한다. endpoint도 없을 때만 개발용 기본
+  경로 ``artifacts/oxigraph``를 사용한다.
 - 장애 처리: 저장소를 열거나 읽을 수 없는 경우에만 다음 transport로
   failover한다. 잘못된 SPARQL과 정상적인 빈 결과는 장애로 간주하지 않는다.
 - SPARQL 안전성: SERVICE가 없는 SELECT/ASK만 허용하고, INSERT·DELETE·
   UPDATE 계열 키워드는 차단한다. 결과는 기본 최대 10,000행으로 제한하며,
   ``max_rows=None``은 엔티티 인덱스 구축처럼 전체를 읽어야 하는 내부 호출 전용이다.
 - HTTP timeout: ``OXIGRAPH_TIMEOUT``으로 조정할 수 있으며 기본값은 60초다.
-- ``triple_count``: 선택된 GraphDB transport에서 전체 triple 수를 확인한다.
+- ``triple_count``: 프로젝트의 named graph 전체 quad 수를 확인한다. 서버의
+  union-default-graph 설정 때문에 기본 그래프와 named graph를 더하지 않는다.
 
 원격 저장소는 HTTP URL을 파일 경로로 직접 전달하는 방식이 아니라,
 SSHFS/NFS 등으로 Agent 실행 환경에 마운트된 실제 filesystem 경로를
@@ -36,8 +38,8 @@ from pathlib import Path
 from typing import Any
 
 # 저장소 루트: src/infrastructure/graph_db/client.py 기준 3단계 위.
-# kb.config.ARTIFACTS는 src/kb/artifacts를 가리켜 실제 Oxigraph 스토어
-# (저장소 루트의 artifacts/oxigraph)와 다르므로 여기서 쓰지 않는다.
+# kb.config와 같은 기준을 독립적으로 계산해 infrastructure adapter가 kb
+# 패키지에 결합되지 않게 한다.
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 MAX_ROWS = 10_000
@@ -79,7 +81,7 @@ def _validate_query(query: str) -> str:
 
 
 class OxigraphClient:
-    """Query external snapshot, local snapshot, then the HTTP endpoint.
+    """Query explicit file stores first, otherwise use the HTTP endpoint.
 
     The external path must be a filesystem path mounted on the Agent host. It
     is not an HTTP URL.  Only store availability failures trigger failover;
@@ -102,15 +104,22 @@ class OxigraphClient:
             or store_path
             or os.getenv("OXIGRAPH_LOCAL_STORE_PATH")
             or os.getenv("OXIGRAPH_STORE_PATH")
-            or str(REPO_ROOT / "artifacts" / "oxigraph")
         )
-        self.remote_store_path = _anchor(remote_value) if remote_value else None
-        self.local_store_path = _anchor(local_value)
-        self.endpoint = (
+        endpoint_value = (
             endpoint
             or os.getenv("OXIGRAPH_FALLBACK_ENDPOINT")
             or os.getenv("OXIGRAPH_ENDPOINT", "")
         )
+        self.remote_store_path = _anchor(remote_value) if remote_value else None
+        # An endpoint-only deployment must not emit a fake local-store failure
+        # on every query. Keep the historical default only for local development
+        # where no transport was configured at all.
+        self.local_store_path = (
+            _anchor(local_value) if local_value
+            else REPO_ROOT / "artifacts" / "oxigraph"
+        )
+        self._local_store_enabled = bool(local_value) or not endpoint_value
+        self.endpoint = endpoint_value
         self.timeout = float(
             timeout if timeout is not None else os.getenv("OXIGRAPH_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS))
         )
@@ -122,7 +131,7 @@ class OxigraphClient:
 
         for transport, path in (
             ("remote_store", self.remote_store_path),
-            ("local_store", self.local_store_path),
+            ("local_store", self.local_store_path if self._local_store_enabled else None),
         ):
             if path is None:
                 continue
@@ -210,13 +219,23 @@ class OxigraphClient:
         return rows if max_rows is None else rows[:max_rows]
 
     def triple_count(self) -> int:
+        # GRAPH 절만 쓴다. 예전에는 `{ ?s ?p ?o } UNION { GRAPH ?g { ?s ?p ?o } }`
+        # 였는데, HTTP transport(Oxigraph 서버)는 기본 그래프를 네임드 그래프의
+        # 합집합으로 취급하므로 두 분기가 같은 트리플을 각각 한 번씩 잡아
+        # 정확히 2배가 나왔다(2026-09-05 실측: 실제 1,169,374 -> 보고 2,338,748).
+        #
+        # 반대로 `{ ?s ?p ?o }`만 남기면 store transport가 깨진다. pyoxigraph의
+        # Store.query()는 use_default_graph_as_union 기본값이 False라서, 이
+        # 프로젝트처럼 ABox/TBox를 전부 네임드 그래프(http://mafest.ai/graph/...)에
+        # 넣는 구성에서는 0을 돌려준다.
+        #
+        # GRAPH 절은 두 transport 모두에서 같은 값을 준다. 데이터가 전부 네임드
+        # 그래프에 있다는 전제이며, build_graph 파이프라인이 그렇게 적재한다.
         result = self.query(
             """
             SELECT (COUNT(*) AS ?count)
             WHERE {
-              { ?s ?p ?o }
-              UNION
-              { GRAPH ?g { ?s ?p ?o } }
+              GRAPH ?g { ?s ?p ?o }
             }
             """
         )

@@ -81,6 +81,8 @@ wu_ 계열이 한글이고 결측이 없어 기본값으로 삼았다.
 """
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass, field
 
 
@@ -100,6 +102,28 @@ class AttributeSpec:
     # 이 방향을 반대로(내림차순) 넣으면 이상/이하 결과가 뒤집힌다.
     known_values: list[str] = field(default_factory=list)  # categorical일 때 참고용
     true_condition: str = ""  # numeric_flag일 때: "> 0" 같은 조건
+
+    # ------------------------------------------------------------------
+    # 이 컬럼이 raw.* 기본 테이블이 아니라 enriched.* 같은 보강 테이블에
+    # 있을 때만 세 필드를 채운다. 셋 다 비어 있으면(기본값) 예전과 완전히
+    # 같게 동작한다 - 기존 카탈로그 항목은 전부 이 필드들을 안 쓰므로
+    # 하위호환이 깨지지 않는다.
+    #
+    #   join_table: 보강 테이블 전체 이름(스키마 포함). 예: "enriched.product_metric"
+    #               2홉 조인이 필요하면 파생 테이블 "(SELECT ...)"을 그대로 넣어도
+    #               된다 - utils가 "LEFT JOIN {join_table} AS {alias} ON {on}"으로
+    #               펼치기 때문에 서브쿼리도 문법적으로 성립한다("총보수율" 참고).
+    #   join_alias: 그 테이블에 붙일 별칭. 예: "pm"
+    #   join_on:    JOIN 조건. 기본 테이블은 항상 "base"로 별칭이 고정된다.
+    #               예: "pm.pd_itm_no = base.pd_itm_no"
+    #
+    # column 값 자체도 join_table을 쓸 때는 별칭을 붙여서 적는다(예:
+    # "pm.expense_ratio"). 기본 테이블 컬럼은 지금처럼 별칭 없이 적으면
+    # 되고(예: "pd_net_tamt"), utils.format_resolved_schema가 JOIN이 하나
+    # 라도 있는 쿼리에서만 자동으로 "base." 접두어를 붙여 준다.
+    join_table: str = ""
+    join_alias: str = ""
+    join_on: str = ""
 
     # 이 컬럼이 회사/기관 이름을 담는 컬럼이면 True. "SK하이닉스"(질문에서
     # 흔히 쓰는 영문+한글 혼용 약칭)와 "에스케이하이닉스(주)"(원천 데이터의
@@ -134,6 +158,58 @@ DOMAIN_TABLE_INFO: dict[str, dict[str, str]] = {
     "펀드": {"table": "raw.prfd01n001"},
 }
 
+
+# ---------------------------------------------------------------------------
+# 보강(enriched) 테이블 참조 정보. AttributeSpec.join_table에 실제로 쓰이는
+# 값들을 여기 한곳에 모아 문서화한다(코드가 이 딕셔너리를 직접 읽지는
+# 않는다 - AttributeSpec 쪽에 이미 필요한 값이 다 박혀 있다. 이건 어떤
+# 보강 테이블이 왜 존재하는지 사람이 한눈에 보기 위한 참조용이다).
+#
+# [T-115 / 2026-09-05 실측 정정]
+# 이 아래 내용은 2026-08-31 기준으로 쓰였는데, 그때 참조한 두 테이블은
+# 2026-09-05 현재 배포된 DB(information_schema)에 **존재하지 않는다**.
+#
+#   당시 기록                  현재 live
+#   -------------------------  --------------------------------------------
+#   enriched.etf_kr_enriched   없음. enriched.etf_kr (10컬럼) 이 그 자리다.
+#   enriched.bond_kr_enriched  없음. enriched.bond_kr_offer / bond_kr_product
+#
+# 더 중요한 건 이름이 아니라 데이터다. etf_kr_enriched 가 제공하던 LSEG 보강
+# (charge_rt_final)이 현재 배포본에는 없고, enriched.etf_kr 에도 보수 컬럼이
+# 아예 없다. 총보수율은 이제 enriched.product_metric 의 EXPENSE_RATIO 로만
+# 얻을 수 있는데 국내ETF 커버리지가 67/1,235 = 5.4% 다(아래 "총보수율" 참고).
+# 즉 이름 드리프트가 아니라 커버리지 회귀이며, 보강 복원은 데이터 파이프라인
+# 쪽 별도 과제다.
+#
+# 이 딕셔너리는 사람이 읽는 참조용이지만(코드는 AttributeSpec 을 직접 읽는다),
+# 틀린 참조를 남겨 두면 다음 사람이 또 같은 함정에 빠진다. 그래서 live 기준
+# 으로 고쳐 적고, 사라진 것은 사라졌다고 명시한다.
+# ---------------------------------------------------------------------------
+ENRICHED_TABLE_INFO: dict[str, dict[str, str]] = {
+    "국내ETF": {
+        "table": "enriched.etf_kr",
+        "join_key": "product_id (pd_itm_no 로도 조인 가능)",
+        "status": "존재. 단 보수 컬럼 없음 - 총보수율은 product_metric 경유",
+        "note": (
+            "10컬럼(product_id, pd_itm_no, name, ticker, isin, manager, "
+            "base_index, currency, listing_date, delisting_date). "
+            "과거 etf_kr_enriched 가 주던 charge_rt_final/replication/"
+            "base_market/base_asset/hedge_type 보강은 현재 배포본에 없다."
+        ),
+    },
+    "채권": {
+        "table": "enriched.bond_kr_offer, enriched.bond_kr_product",
+        "join_key": "product_id",
+        "status": "존재(이름 변경). 아직 카탈로그 미연결",
+        "note": (
+            "과거 bond_kr_enriched 로 기록됐던 보강이 offer/product 두 테이블로 "
+            "분리됐다. is_sellable/crd_grd_rank 가 현재 스키마에도 있는지는 "
+            "확인하지 않았다 - 연결 전에 information_schema 로 먼저 검증할 것."
+        ),
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # "판매 가능"을 도메인별로 어떻게 처리할지에 대한 방침.
 #
@@ -148,10 +224,9 @@ DOMAIN_SALE_POLICY: dict[str, dict[str, str]] = {
     "채권": {
         "mode": "no_filter",
         "reason": (
-            "buyable_quantity는 주최측이 무효라고 공지한 컬럼이고(21,882행 중 "
-            "634행만 값이 있으며 그중 다수가 0), 이 테이블에는 상장폐지나 "
-            "거래종료를 나타내는 컬럼 자체가 없다. 따라서 채권은 '판매 가능' "
-            "조건을 SQL에 걸지 않고 전 종목을 구매가능으로 간주한다."
+            "주최측 제공 설명에서 buyable_quantity는 판매 판정에 사용할 수 없는 값으로 지정되어 "
+            "판매 가능 필터를 적용하지 않는다. 필터 미적용은 전 종목의 실제 주문 가능 여부가 "
+            "확인됐다는 뜻이 아니다. 명시적으로 요청한 수량 수치 비교와 주문 가능 판정을 구분한다."
         ),
     },
     "국내ETF": {
@@ -564,6 +639,66 @@ RDB_SCHEMA["펀드"] = {
 # 큐레이션된 개념 카탈로그: "개념명 -> 실제 컬럼" + 실 데이터 검증 결과.
 # ---------------------------------------------------------------------------
 
+# Output-only semantic views. These are not physical columns or filter aliases.
+# Dependencies are official raw columns; class membership/labels come from TBox.
+BOND_OUTPUT_VIEWS = {
+    "등급서열규칙": {"kind": "rating_order", "inputs": (), "aliases": ("등급 서열 규칙", "신용등급 서열", "등급 순서")},
+    "원본등급값": {"kind": "raw_rating", "inputs": ("crd_grd",),
+                 "aliases": ("원본 등급값", "원본 신용등급", "원등급", "원시 등급값")},
+    "온톨로지분류값": {"kind": "rating", "inputs": ("crd_grd",),
+                   "aliases": ("온톨로지 분류값", "신용등급 온톨로지 분류값", "정규화 신용등급", "정규화 등급값")},
+    "만기구분": {"kind": "maturity", "inputs": ("mat_dt", "info_base_dt"),
+              "aliases": ("만기 구분", "잔존만기 구분", "만기 분류")},
+}
+
+ETF_CLASSIFICATION_AXES = {
+    "국내ETF": {"wu_inv_ast_type": "AssetType", "wu_inv_rgn": "InvestmentRegion",
+                "cu_strtegy": "ManagementStrategy"},
+    "해외ETF": {"wu_inv_ast_type": "AssetType", "wu_inv_rgn": "InvestmentRegion",
+                "cu_index_repl_mthd": "ReplicationMethod"},
+}
+
+# Raw dataset contract: 0 means normal, 1 means suspended; NULL is unknown.
+BINARY_COLUMN_CONTRACTS = {
+    ("국내ETF", "pd_tr_yn"): {"true": "1", "false": "0", "numeric": True,
+        "true_aliases": ("거래정지", "정지"), "false_aliases": ("거래정지아님", "정지아님", "정상", "거래가능")},
+}
+
+
+def get_output_views(domain: str) -> dict:
+    if domain == "채권":
+        return BOND_OUTPUT_VIEWS
+    if domain == "펀드":
+        return {"상품동일성키": {"kind": "identity_keys", "inputs": ("itm_no", "ksd_itm_no", "mtco_itm_no", "rptt_ksd_itm_no", "or_co_xtn_itt_cd"), "aliases": ()},
+                "상장여부": {"kind": "unsupported", "inputs": (), "aliases": ("상장 상태",),
+                           "reason": "펀드 마스터에는 상장 여부 컬럼이 없습니다. sale_yn은 판매 상태이며 상장 상태로 사용할 수 없습니다. ETF 식별키 연결 결과와 구분합니다."},
+                "수익률": {"kind": "return_series", "inputs": ("fd_mm1_ern_r", "fd_mm3_ern_r", "fd_mm6_ern_r", "fd_yr1_ern_r", "fd_yr2_ern_r", "fd_yr3_ern_r", "fd_yr5_ern_r"), "aliases": (),
+                         "periods": ("1개월", "3개월", "6개월", "1년", "2년", "3년", "5년")},
+                "클래스": {"kind": "share_class", "inputs": ("itm_nm",), "aliases": ("클래스 코드", "클래스 구분")}}
+    axes = ETF_CLASSIFICATION_AXES.get(domain)
+    if axes:
+        views = {"분류근거": {"kind": "classification", "inputs": tuple(axes), "axes": axes,
+                            "aliases": ("분류 근거", "분류 경로", "온톨로지 분류 근거")}}
+        if domain == "국내ETF":
+            views["상품동일성키"] = {"kind": "identity_keys", "inputs": ("pd_itm_no", "pd_lstg_dt", "pd_lste_dt"), "aliases": ()}
+            views["복제방식"] = {"kind": "classification", "inputs": ("cu_strtegy",), "axes": {"cu_strtegy": "ReplicationMethod"}, "aliases": ("복제 방식", "지수 복제 방식")}
+            views["상장여부"] = {"kind": "listing", "inputs": ("pd_lstg_dt", "pd_lste_dt", "cu_upt_dt"), "aliases": ("상장 상태",)}
+            views["수익률"] = {"kind": "return_series", "inputs": ("du_er_1d", "du_er_1m", "du_er_3m", "du_er_6m", "du_er_1y", "du_er_ytd"), "aliases": (), "periods": ("1일", "1개월", "3개월", "6개월", "1년", "연초 대비")}
+        else:
+            views["수익률"] = {"kind": "return_series", "inputs": ("du_er_1d",), "aliases": (), "periods": ("1일",)}
+        return views
+    return {}
+
+
+def get_output_view(domain: str, concept: str) -> dict | None:
+    """Output presentation only; callers must never use it to silently filter."""
+    normalized = "".join(concept.split()).casefold()
+    for name, view in get_output_views(domain).items():
+        if normalized in {"".join(a.split()).casefold() for a in (name, *view["aliases"])}:
+            return {**view, "name": name}
+    return None
+
+
 BOND_ATTRIBUTES: dict[str, AttributeSpec] = {
     "신용등급": AttributeSpec(
         column="crd_grd",
@@ -684,12 +819,10 @@ BOND_ATTRIBUTES: dict[str, AttributeSpec] = {
         value_type="categorical",
         # [2026-09-04 추가] 서버에 직접 SELECT DISTINCT TRIM(bd_knd)로 실측한
         # 32종 전체(예: 위에서 "41종"이라던 것은 부정확한 옛 추정치). 이전엔
-        # known_values가 비어 있어서 verify_intent가 "국고채"(상품소분류
-        # std_pd_scls_nm 쪽 값, SUBTYPE_CONDITION_MAP 참고)를 이 개념의 값으로
-        # 잘못 채워도 아무도 잡아주지 못했다 - 실제 컬럼 값은 "국고채권"이라
-        # TRIM(bd_knd) = '국고채'가 항상 0건으로 실패했다(실측). known_values를
-        # 채워두면 utils.format_resolved_schema가 값 불일치를 SQL 생성 LLM에게
-        # 미리 경고해 준다.
+        # known_values가 비어 있던 탓에 값 도메인을 검토하거나 회귀 테스트로
+        # 고정할 근거가 없었다. 실제 컬럼 값은 "국고채권"이며 "국고채"를
+        # 등호 비교하면 0건이다. 아래 목록은 관측한 원본 값의 정본으로만
+        # 사용하고, 유사값을 가장 가까운 값으로 임의 치환하는 근거로 쓰지 않는다.
         known_values=[
             "Conduit회사채", "MBS", "국고채권", "국민주택1종", "국민주택2종",
             "금융지주회사채", "기업인수목적회사채", "기타금융투자전업회사채",
@@ -757,6 +890,12 @@ BOND_ATTRIBUTES: dict[str, AttributeSpec] = {
     # ISIN 값이다(실측 확인, 예: KR60143NEFC6). Graph가 찾은 엔티티 코드를
     # "상품코드 in (...)" 조건으로 주입할 때 이 개념명을 쓴다.
     "상품코드": AttributeSpec(column="pd_no", value_type="text", note="ISIN. 결측 없음(단 info_seq로 한 종목이 여러 행일 수 있음)."),
+    # "상품번호"는 "상품코드"의 동의어다. 2026-09-05 실측: Q4가 "상품번호와 각
+    # 수치의 기준일을 함께 제시해줘"라고 물었는데 카탈로그에 "상품코드"만 있어
+    # LLM 폴백으로 샜고, 폴백도 "대응하는 컬럼을 찾지 못해 결과에서 제외"하고
+    # 끝났다(golden C1은 pd_itm_no를 요구). "발행사"/"발행기관" 때와 같은
+    # 부류라 같은 방식으로 별칭 항목을 하나 더 등록한다.
+    "상품번호": AttributeSpec(column="pd_no", value_type="text", note="'상품코드'의 동의어. ISIN. 결측 없음(단 info_seq로 한 종목이 여러 행일 수 있음)."),
     # 주의: '판매가능여부'는 의도적으로 넣지 않았다. 주최측이 buyable_quantity를
     # 무효로 공지했고 이 테이블에는 상장폐지 여부 컬럼이 없다. 자세한 이유는
     # DOMAIN_SALE_POLICY["채권"] 참고.
@@ -793,7 +932,19 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
     "순자산": AttributeSpec(
         column="pd_net_tamt",
         value_type="numeric",
-        note="순자산총액(원). 10.2% 결측. du_last_aum도 유사 계열이지만 이 컬럼을 기본으로 쓴다.",
+        note="순자산총액(원). 10.2% 결측. 최종 AUM(du_last_aum)과 별도 원천 항목이며 서로 대체하지 않는다.",
+    ),
+    # AUM은 원천의 최종 AUM을 사용한다(2026-09-05 사용자 확정).
+    # 자체 golden의 기대값에 맞춰 순자산총액으로 치환하지 않는다.
+    "AUM": AttributeSpec(
+        column="du_last_aum",
+        value_type="numeric",
+        note="최종 AUM(원). 일간 갱신일은 du_upt_dt. 순자산총액(pd_net_tamt)으로 대체하지 않는다.",
+    ),
+    "NAV": AttributeSpec(
+        column="du_last_nav",
+        value_type="numeric",
+        note="최종 NAV(주당 순자산가치). 10.2% 결측. '기준가'와 같은 개념이다.",
     ),
     "위험등급": AttributeSpec(
         column="pd_risk_nm",
@@ -883,11 +1034,40 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
         ),
     ),
     "총보수율": AttributeSpec(
-        column="cu_charge_rt",
+        # [T-115 / 2026-09-05] 이전 정의는 enriched.etf_kr_enriched 의
+        # charge_rt_final 을 봤는데 그 테이블이 현재 배포본에 없다. 총보수는
+        # 이제 enriched.product_metric 에 EXPENSE_RATIO 로 정규화돼 있다.
+        #
+        # product_metric 은 product_id 로 붙는데 base(raw.pref01n001)에는
+        # product_id 가 없다. 그래서 enriched.etf_kr 를 거쳐 pd_itm_no 로
+        # 되돌아오는 2홉을 파생 테이블 하나로 접어 넣는다(조인 기계가
+        # LEFT JOIN <table> AS <alias> ON <cond> 한 홉만 지원하므로).
+        #
+        # is_available 이 False 인 행은 값이 신뢰 대상이 아니므로 CASE 로
+        # NULL 처리한다 - "값이 있는데 못 믿는" 상태를 만들지 않는다.
+        column="pm.expense_ratio",
         value_type="numeric",
+        join_table=(
+            "(SELECT e.pd_itm_no, "
+            "CASE WHEN m.is_available THEN m.value END AS expense_ratio, "
+            "m.is_available, m.unavailable_reason "
+            "FROM enriched.etf_kr e "
+            "JOIN enriched.product_metric m ON m.product_id = e.product_id "
+            "WHERE m.metric_code = 'EXPENSE_RATIO')"
+        ),
+        join_alias="pm",
+        join_on="pm.pd_itm_no = base.pd_itm_no",
         note=(
-            "87.8% 결측이라 정렬 기준으로 쓰기는 어렵지만 raw.pref01n001에 "
-            "실재하는 유일한 총보수 컬럼이다."
+            "⚠ 커버리지 5.4%(1,235건 중 67건만 is_available). 정렬·비교의 "
+            "기준으로 쓰면 대부분의 종목이 탈락하므로, 이 값으로 '가장 저렴한 "
+            "ETF' 같은 순위를 내면 표본이 67건뿐이라는 사실을 답변에 반드시 "
+            "밝혀야 한다. "
+            "배경: 원본 cu_charge_rt 자체가 87.8% 결측이고, 그 구멍을 메우던 "
+            "LSEG 보강(charge_rt_final, 결측 38.3%)이 현재 배포본에서 빠졌다. "
+            "남아 있는 67건은 charge_rt_source='RDB'였던 주최측 원본 값이다. "
+            "참고로 해외ETF는 같은 cu_charge_rt 로 93.8%(5,604/5,972)가 나오므로 "
+            "이 결손은 국내ETF 원천 파일(PREF01N001)에 국한된 문제다. "
+            "결측 사유는 파생 테이블의 unavailable_reason 으로 확인할 수 있다."
         ),
     ),
     "기초지수": AttributeSpec(
@@ -936,9 +1116,26 @@ DOMESTIC_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
         value_type="text",
         note="결측 없음. 반도체/2차전지 같은 테마 조건은 이 컬럼에 대한 LIKE 매칭으로만 처리할 수 있다.",
     ),
+    "티커": AttributeSpec(
+        column="etf_ref.ticker",
+        value_type="text",
+        join_table="enriched.etf_kr",
+        join_alias="etf_ref",
+        join_on="etf_ref.pd_itm_no = base.pd_itm_no",
+        note=(
+            "국내 거래 티커. enriched.etf_kr의 정규화 식별자이며 "
+            "원천 ISIN인 pd_itm_no(상품코드)와 서로 바꿔 쓰지 않는다."
+        ),
+    ),
     # §8(Graph->RDB 핸드오프)용: GraphDB의 fp:productCode가 이 컬럼과 같은
     # ISIN 값이다(실측 확인, 예: KR7491510004).
     "상품코드": AttributeSpec(column="pd_itm_no", value_type="text", note="ISIN. 1,780건 전부 유일값. 결측 없음."),
+    # "상품번호"는 "상품코드"의 동의어다. 2026-09-05 실측: Q4가 "상품번호와 각
+    # 수치의 기준일을 함께 제시해줘"라고 물었는데 카탈로그에 "상품코드"만 있어
+    # LLM 폴백으로 샜고, 폴백도 "대응하는 컬럼을 찾지 못해 결과에서 제외"하고
+    # 끝났다(golden C1은 pd_itm_no를 요구). "발행사"/"발행기관" 때와 같은
+    # 부류라 같은 방식으로 별칭 항목을 하나 더 등록한다.
+    "상품번호": AttributeSpec(column="pd_itm_no", value_type="text", note="'상품코드'의 동의어. ISIN. 1,780건 전부 유일값. 결측 없음."),
 }
 
 # 해외ETF: 2026-08-24 배포본(6,037건)으로 다시 검증했다. 위험등급에 대응하는
@@ -1053,6 +1250,12 @@ OVERSEAS_ETF_ATTRIBUTES: dict[str, AttributeSpec] = {
     # RIC 값이다(실측 확인, 예: APRH.K, SMQ — 해외ETF는 ISIN이 아니라 RIC를
     # productCode로 쓴다. pd_isin_cd가 아니라 pd_itm_no로 매핑해야 한다).
     "상품코드": AttributeSpec(column="pd_itm_no", value_type="text", note="RIC. 6,037건 전부 유일값. 결측 없음."),
+    # "상품번호"는 "상품코드"의 동의어다. 2026-09-05 실측: Q4가 "상품번호와 각
+    # 수치의 기준일을 함께 제시해줘"라고 물었는데 카탈로그에 "상품코드"만 있어
+    # LLM 폴백으로 샜고, 폴백도 "대응하는 컬럼을 찾지 못해 결과에서 제외"하고
+    # 끝났다(golden C1은 pd_itm_no를 요구). "발행사"/"발행기관" 때와 같은
+    # 부류라 같은 방식으로 별칭 항목을 하나 더 등록한다.
+    "상품번호": AttributeSpec(column="pd_itm_no", value_type="text", note="'상품코드'의 동의어. RIC. 6,037건 전부 유일값. 결측 없음."),
     # 주의: '판매가능여부'는 넣지 않았다. pd_sale_yn이 전부 1.0, pd_tr_yn이
     # 전부 0.0이라 걸러지는 것이 없다. DOMAIN_SALE_POLICY["해외ETF"] 참고.
 }
@@ -1184,6 +1387,12 @@ FUND_ATTRIBUTES: dict[str, AttributeSpec] = {
     # §8(Graph->RDB 핸드오프)용: GraphDB의 fp:productCode가 이 컬럼과 같은
     # ISIN 값이다(실측 확인, 예: KR5153490900).
     "상품코드": AttributeSpec(column="itm_no", value_type="text", note="ISIN(종목번호). 23,676건 전부 유일값. 결측 없음."),
+    # "상품번호"는 "상품코드"의 동의어다. 2026-09-05 실측: Q4가 "상품번호와 각
+    # 수치의 기준일을 함께 제시해줘"라고 물었는데 카탈로그에 "상품코드"만 있어
+    # LLM 폴백으로 샜고, 폴백도 "대응하는 컬럼을 찾지 못해 결과에서 제외"하고
+    # 끝났다(golden C1은 pd_itm_no를 요구). "발행사"/"발행기관" 때와 같은
+    # 부류라 같은 방식으로 별칭 항목을 하나 더 등록한다.
+    "상품번호": AttributeSpec(column="itm_no", value_type="text", note="'상품코드'의 동의어. ISIN(종목번호). 23,676건 전부 유일값. 결측 없음."),
     # 주의: 이 테이블에는 운용사 '이름' 컬럼이 없다. or_co_xtn_itt_cd(275종)는
     # 코드일 뿐이고 이름 매핑 테이블이 별도로 필요하다. "미래에셋에서 운용하는
     # 펀드" 같은 질문은 itm_nm(종목명)에 운용사명이 들어 있는 경우에만
@@ -1195,6 +1404,39 @@ ATTRIBUTE_CATALOG: dict[str, dict[str, AttributeSpec]] = {
     "국내ETF": DOMESTIC_ETF_ATTRIBUTES,
     "해외ETF": OVERSEAS_ETF_ATTRIBUTES,
     "펀드": FUND_ATTRIBUTES,
+}
+
+# Reviewed semantic aliases stay above the automatically imported DB descriptions.
+# Individual vs corporate after-tax yields must remain distinct.
+BOND_ATTRIBUTES["세후수익률"] = AttributeSpec(
+    column="after_tax_yield", value_type="numeric",
+    note="개인 세후 운용수익률(%). 법인 세후(corp_after_tax_yield)와 구분하며 결측은 보완하지 않는다.",
+)
+DOMESTIC_ETF_ATTRIBUTES["거래정지여부"] = AttributeSpec(
+    column="pd_tr_yn", value_type="boolean", note="원천 0=정상, 1=거래정지. NULL은 미확인.")
+FUND_ATTRIBUTES["대표종목번호"] = AttributeSpec(column="rptt_ksd_itm_no", value_type="text", note="대표예탁원종목번호 원천키. 개별 종목번호와 구분한다.")
+for _catalog in (DOMESTIC_ETF_ATTRIBUTES, OVERSEAS_ETF_ATTRIBUTES):
+    _catalog["보수"] = _catalog["총보수율"]
+    _catalog["현재가"] = AttributeSpec(column="ru_mkt_price", value_type="numeric", note="원천 현재가. 데이터 기준일과 거래통화를 함께 확인한다.")
+OVERSEAS_ETF_ATTRIBUTES["복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
+OVERSEAS_ETF_ATTRIBUTES["지수복제방식"] = OVERSEAS_ETF_ATTRIBUTES["복제방법"]
+SEMANTIC_ALIASES = {
+    "채권": {"잔존일수": "잔존기간", "쿠폰금리": "표면금리", "원신용등급": "신용등급", "만기": "만기일"},
+    "국내ETF": {"총보수": "총보수율", "총보수요율": "총보수율", "판매상태": "판매가능여부", "판매여부": "판매가능여부", "현재AUM": "AUM", "최종AUM": "AUM", "순자산(AUM)": "AUM"},
+    "해외ETF": {"AUM": "순자산", "현재AUM": "순자산", "순자산(AUM)": "순자산", "총보수": "총보수율", "총보수요율": "총보수율"},
+    "펀드": {"판매상태": "판매가능여부", "판매여부": "판매가능여부", "AUM": "순자산"},
+}
+for _domain, _aliases in SEMANTIC_ALIASES.items():
+    for _alias, _canonical in _aliases.items():
+        ATTRIBUTE_CATALOG[_domain][_alias] = ATTRIBUTE_CATALOG[_domain][_canonical]
+
+# Entity names have a different contract from arbitrary substring filters.
+# Prefer an exact official name/abbreviation/code over similarly named products.
+PRODUCT_IDENTITY_COLUMNS = {
+    "채권": ("pd_nm", "pd_abrv_nm", "pd_no"),
+    "국내ETF": ("pd_nm", "pd_abrv_nm", "pd_itm_no", "pd_ticker"),
+    "해외ETF": ("pd_nm", "pd_abrv_nm", "pd_itm_no", "pd_isin_cd"),
+    "펀드": ("itm_nm", "itm_abrv_nm", "itm_no"),
 }
 
 
@@ -1221,18 +1463,62 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
         "수익률 기준 정렬이면 applied_yield(민평수익률, 결측 없음)를 쓴다. "
         "buy_yield는 97.1% 결측이라 정렬에 쓰면 대부분의 종목이 사라진다.",
         "pd_nm을 제외한 이름 계열 컬럼(pd_abrv_nm, pd_pbcm, bd_knd)에는 공백 패딩이 있어 TRIM 비교가 필요하다.",
+        "상품명으로 특정 종목을 찾을 때는 원문과 공백제거본을 OR 로 함께 건다: "
+        "(pd_nm LIKE '%키워드%' OR REPLACE(pd_nm, ' ', '') LIKE '%키워드에서공백뺀것%'). "
+        "REPLACE 를 컬럼에만 걸고 키워드에 공백을 남기면 0건이 된다(실측). 아래 ESG채권 "
+        "기호 규칙은 그대로 지킨다(기호에는 공백이 없어 충돌하지 않는다).",
         "상품명(pd_nm)으로 ESG채권을 검색할 때, '사회적채권'은 반드시 '%(사)%', '녹색채권'은 '%(녹)%', '지속가능채권'은 '%(지)%' 라는 기호 형태로만 검색해야 한다. LIKE '%사회적채권%' 처럼 원본 단어를 그대로 쓰면 데이터가 0건이 되므로 절대 임의로 변형하지 말 것.",
     ],
     "국내ETF": [
         "이 테이블에는 ETN(545건)이 섞여 있다. 질문이 ETF만 요구하면 pd_grp_no = 'ETF' 조건을 건다.",
         "반도체, 2차전지 같은 테마 조건은 등호로 풀 수 없다. pd_nm LIKE '%키워드%' 매칭으로만 가능하다.",
-        "순자산은 pd_net_tamt를 쓴다. du_last_aum도 있지만 값이 미세하게 다르다.",
+        # ⚠ 이 문구에 물리 테이블 이름을 적지 않는다. 2026-09-03 실측 trace 에서
+        # 확인된 사고다: 예전 문구가 "enriched.etf_kr_enriched 의 charge_rt_final
+        # 을 쓴다"고 적혀 있었고, 이 caveat 은 utils.py 가 국내ETF 질의 **전부**에
+        # 주입한다. 그래서 총보수와 아무 상관 없는 질문(Q23 편입기업/테마, Q30
+        # 상품명 검색)에서도 LLM 이 그 테이블명을 배워 JOIN 을 지어냈고,
+        # UndefinedTable 로 3회 재시도를 모두 태웠다(7문항 24회차).
+        # 조인이 필요한 질의에는 [해석된 스키마]가 JOIN 절을 이미 넣어 준다.
+        "총보수율은 [해석된 스키마]에 나온 컬럼으로만 조회한다. JOIN 절이 필요한 "
+        "경우 이미 포함되어 있으므로 직접 JOIN 을 쓰거나 테이블 이름을 지어내지 "
+        "말 것. 원본 cu_charge_rt 는 87.8% 결측이라 직접 쓰지 않는다. "
+        "다만 총보수 값 자체가 1,235건 중 67건(5.4%)에만 있으므로, 총보수 기준 "
+        "정렬·최저가 질의는 표본이 67건이라는 사실을 답변에 함께 밝힌다. "
+        "조건을 만족하는 종목이 없으면 없다고 답하고 다른 컬럼으로 대체하지 않는다.",
+        "AUM·현재 AUM·최종 AUM은 du_last_aum을 쓴다. 순자산총액은 pd_net_tamt를 쓴다. "
+        "두 원천 항목은 값이 다르므로 서로 대체하거나 같은 값으로 설명하지 않는다.",
+        "기초지수는 ref_base_index를 쓴다. cu_base_index는 이름이 비슷하지만 nunique가 "
+        "20뿐이고 대부분 공백이라 SELECT에 넣으면 빈 값이 나온다(2026-09-05 Q4 실측). "
+        "[해석된 스키마]가 지정한 컬럼을 비슷해 보이는 다른 컬럼으로 바꾸지 말 것.",
+        # 2026-09-05 실측 사고. Q4가 "KODEX 200"을 물었는데 LLM이 그대로
+        # LIKE '%KODEX 200%'를 썼다. 정작 본체인 KR7069500007의 표기는
+        # '삼성 KODEX200 증권상장지수투자신탁[주식]'(붙여쓰기)라 안 걸리고,
+        # 띄어쓰기가 있는 파생상품 14건만 걸렸다. 그래서 답변이
+        # "조건에 맞는 상품이 없습니다"로 나갔다 - 데이터는 있는데 못 찾은 것이다.
+        "상품명으로 특정 종목을 찾을 때는 원문과 공백제거본을 **OR 로 함께** 건다. "
+        "맞는 형태: (pd_nm LIKE '%KODEX 200%' OR REPLACE(pd_nm, ' ', '') LIKE '%KODEX200%') "
+        "틀린 형태 1: TRIM(pd_nm) LIKE '%KODEX 200%' (TRIM은 양끝 공백만 지운다) "
+        "틀린 형태 2: REPLACE(pd_nm, ' ', '') LIKE '%KODEX 200%' "
+        "(컬럼만 공백을 지우고 키워드에 공백을 남기면 매칭이 0건이 된다 - 실측 실패). "
+        "OR 형태를 쓰면 둘 중 한쪽만 맞아도 걸리므로 안전하다. "
+        "이 규칙이 없으면 원본 표기가 붙여쓰기인 종목이 결과에서 통째로 빠진다 "
+        "(KR7069500007 '삼성 KODEX200 증권상장지수투자신탁[주식]'이 그렇게 누락되고 "
+        "띄어쓰기가 있는 파생상품 14건만 걸렸다). "
+        "여러 건이 걸리고 질문이 특정 한 종목을 지목한 것이면, 이름이 가장 짧은 "
+        "것이 기본 상품이고 나머지는 접미사가 붙은 파생상품이다. 이때 반드시 "
+        "ORDER BY LENGTH(REPLACE(pd_nm, ' ', '')) ASC 를 붙여 기본 상품이 첫 행에 "
+        "오게 한다. 이 정렬이 없으면 파생상품이 먼저 나와 답변이 엉뚱한 종목부터 "
+        "설명하고, 목록이 길어져 정작 질문한 종목이 잘려 나간다(실측).",
     ],
     "해외ETF": [
         "이 도메인에는 위험등급 컬럼이 아예 없다. 위험등급 조건이 걸리면 답변 불가로 처리한다.",
         "수익률은 du_er_1d(1일)뿐이다. '1년 수익률' 같은 조건은 이 도메인에서 답할 수 없다.",
         "순자산(du_last_aum)은 USD 기준이라 원화 기준인 국내 상품과 직접 비교하면 안 된다.",
         "투자자산유형과 투자지역 값이 영문이라 국내ETF(한글)와 교차질의할 때 값 매핑이 필요하다.",
+        "상품명으로 특정 종목을 찾을 때는 원문과 공백제거본을 OR 로 함께 건다: "
+        "(pd_nm LIKE '%키워드%' OR REPLACE(pd_nm, ' ', '') LIKE '%키워드에서공백뺀것%'). "
+        "REPLACE 를 컬럼에만 걸고 키워드에 공백을 남기면 0건이 된다(실측). OR 형태는 "
+        "한쪽만 맞아도 걸리므로 안전하다.",
     ],
     "펀드": [
         "사모펀드가 8,960건(38%) 섞여 있다. 공모펀드만 대상이면 prvo_pbff_desc = '공모' 조건을 건다.",
@@ -1240,6 +1526,9 @@ DOMAIN_SQL_CAVEATS: dict[str, list[str]] = {
         "총보수 합산 컬럼이 없다. 필요하면 sale_co_rwrd_r + or_co_rwrd_r + trusc_rwrd_r + ofwk_trus_rwrd_r로 직접 더한다.",
         "운용사 이름 컬럼이 없다. or_co_xtn_itt_cd는 코드일 뿐이라 운용사명 조건은 itm_nm LIKE 매칭으로만 근사할 수 있다.",
         "위험등급 값 표기가 '높은 위험'처럼 공백이 들어간 형태라 국내ETF의 '높은위험(2등급)'과 다르다.",
+        "상품명으로 특정 종목을 찾을 때는 원문과 공백제거본을 OR 로 함께 건다: "
+        "(itm_nm LIKE '%키워드%' OR REPLACE(itm_nm, ' ', '') LIKE '%키워드에서공백뺀것%'). "
+        "REPLACE 를 컬럼에만 걸고 키워드에 공백을 남기면 0건이 된다(실측).",
     ],
 }
 
@@ -1409,6 +1698,11 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
         "상각형조건부자본증권": {"column": "pd_nm", "operator": "contains", "value": "(조건상각)"},
     },
     "국내ETF": {
+        "일반": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "정방향": {"column": "cu_lev_fector", "operator": ">", "value": "0"},
+        "일반(정방향)": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "일반(1배)": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
+        "1배": {"column": "cu_lev_fector", "operator": "eq", "value": "1"},
         "실물복제": {"column": "cu_strtegy", "operator": "eq", "value": "실물복제"},
         "합성복제": {"column": "cu_strtegy", "operator": "eq", "value": "합성복제"},
         "액티브": {"column": "cu_strtegy", "operator": "eq", "value": "액티브"},
@@ -1440,6 +1734,175 @@ SUBTYPE_CONDITION_MAP: dict[str, dict[str, dict]] = {
 
 def resolve_subtype_condition(domain: str, subtype_value: str) -> dict | None:
     """subtype 값 하나를 실제 (column, operator, value) 조건으로 매핑한다.
-    매핑이 없으면 None이며, 호출부는 이 경우 조건을 걸지 않고 넘어가야
-    한다(억지로 아무 컬럼에나 끼워 맞추면 조용히 틀린 0건 결과가 나온다)."""
+    매핑이 없으면 None이며 호출부가 조회를 중단한다. 조건을 버리거나
+    임의 컬럼을 사용해서 제한 없는 조회/조용한 오답을 만들지 않는다."""
+    if domain == "펀드":
+        subtype_value = {"공모펀드": "공모", "사모펀드": "사모"}.get(subtype_value, subtype_value)
     return SUBTYPE_CONDITION_MAP.get(domain, {}).get(subtype_value)
+
+
+# ---------------------------------------------------------------------------
+# 스키마 계약 검증 (T-115)
+#
+# 이 카탈로그는 "의미"의 정본이지 "물리적 존재"의 정본이 아니다. 어떤 테이블이
+# 실제로 있는지는 tools.schema_snapshot 이 live information_schema 에서 읽는다.
+# 둘이 어긋난 채로 돌면 SQL 이 실패하고, 실패한 SQL 을 고치는 nodes._fix_sql 이
+# 다시 이 카탈로그를 근거로 삼기 때문에 같은 오답을 반복한다(수렴 불가).
+# 그래서 어긋남은 쿼리 시점이 아니라 기동 시점에 잡는다.
+# ---------------------------------------------------------------------------
+
+# join_table 이 파생 테이블 "(SELECT ...)" 인 경우, 그 서브쿼리가 실제로 읽는
+# 물리 테이블과 컬럼을 여기 적어 둔다. 문자열 파싱으로 추출하면 조용히
+# 틀리므로 손으로 선언하고, 아래 iter_* 가 이걸 같이 검사한다.
+DERIVED_JOIN_PHYSICAL_REFS: dict[str, dict[str, list]] = {
+    "티커": {
+        "tables": ["enriched.etf_kr"],
+        "columns": [
+            ("enriched.etf_kr", "pd_itm_no"),
+            ("enriched.etf_kr", "ticker"),
+        ],
+    },
+    "총보수율": {
+        "tables": ["enriched.etf_kr", "enriched.product_metric"],
+        "columns": [
+            ("enriched.etf_kr", "pd_itm_no"),
+            ("enriched.etf_kr", "product_id"),
+            ("enriched.product_metric", "product_id"),
+            ("enriched.product_metric", "metric_code"),
+            ("enriched.product_metric", "value"),
+            ("enriched.product_metric", "is_available"),
+            ("enriched.product_metric", "unavailable_reason"),
+        ],
+    },
+}
+
+
+def iter_catalog_table_refs() -> set[str]:
+    """카탈로그가 물리적 존재를 전제하는 테이블 전체를 모은다.
+
+    상수를 손으로 나열하지 않고 카탈로그에서 도출한다 - 나열식으로 두면
+    항목이 늘어날 때 검증만 조용히 뒤처진다.
+    """
+    refs: set[str] = set()
+
+    for entry in DOMAIN_TABLE_INFO.values():
+        refs.add(entry["table"])
+
+    for domain_attrs in ATTRIBUTE_CATALOG.values():
+        for concept, spec in domain_attrs.items():
+            if not spec.join_table:
+                continue
+            if spec.join_table.lstrip().startswith("("):
+                # 파생 테이블: 선언된 물리 의존만 검사한다.
+                refs.update(DERIVED_JOIN_PHYSICAL_REFS.get(concept, {}).get("tables", []))
+            else:
+                refs.add(spec.join_table)
+
+    return refs
+
+
+def iter_catalog_column_refs() -> set[tuple[str, str]]:
+    """카탈로그가 존재를 전제하는 (테이블, 컬럼) 쌍 전체를 모은다.
+
+    [SCHEMA-001] 테이블만 검사하면 이번 사고의 절반만 잡는다. 실제로 처음
+    터진 것도 컬럼이었다(enriched.etf_kr 에 charge_rt_final 이 없었다).
+    테이블은 있는데 컬럼이 사라진 경우가 더 조용하고 더 흔하다.
+
+    검사 대상은 세 갈래다.
+      1. RDB_SCHEMA[domain]["properties"] - get_full_column_list 가 그대로
+         LLM 에게 "실제 컬럼 목록"이라고 넘기는 것들.
+      2. AttributeSpec.column 중 별칭이 없는 것 - 기본 테이블 컬럼.
+      3. 파생 조인이 내부에서 읽는 컬럼 - 위 선언에서 가져온다.
+    별칭이 붙은 컬럼(join_alias 소속)은 파생 조인이면 3번이 덮고, 일반
+    조인 테이블이면 그 테이블 기준으로 검사한다.
+    """
+    refs: set[tuple[str, str]] = set()
+
+    for domain, entry in DOMAIN_TABLE_INFO.items():
+        table = entry["table"]
+        for column in RDB_SCHEMA.get(domain, {}).get("properties", {}):
+            refs.add((table, column))
+
+    for domain, domain_attrs in ATTRIBUTE_CATALOG.items():
+        base_table = DOMAIN_TABLE_INFO.get(domain, {}).get("table")
+        for concept, spec in domain_attrs.items():
+            column = spec.column
+            if spec.join_table and spec.join_table.lstrip().startswith("("):
+                declared = DERIVED_JOIN_PHYSICAL_REFS.get(concept, {}).get("columns", [])
+                refs.update((t, c) for t, c in declared)
+                continue
+            if "." in column:
+                alias, _, bare = column.partition(".")
+                if spec.join_table and alias == spec.join_alias:
+                    refs.add((spec.join_table, bare))
+                continue
+            if base_table:
+                refs.add((base_table, column))
+
+    return refs
+
+
+_PHYSICAL_TABLE_PATTERN = re.compile(
+    r"\b(?:raw|enriched|relations|vec|core|meta)\.[a-z_0-9]+"
+)
+
+
+def assert_caveat_hygiene() -> None:
+    """SQL caveat 이 물리 테이블 이름을 언급하지 않는지 확인한다.
+
+    utils 는 도메인 caveat 을 그 도메인의 **모든** 질의 프롬프트에 주입한다.
+    그래서 caveat 에 테이블 이름이 들어 있으면, 그 테이블이 이번 질의의
+    JOIN 에 없더라도 LLM 이 이름을 배워 조인을 지어낸다.
+
+    가설이 아니라 실측이다. 2026-09-03 팀원 trace 에서 예전 caveat
+    ("enriched.etf_kr_enriched 의 charge_rt_final 을 쓴다")이 총보수와 무관한
+    질문까지 오염시켜 UndefinedTable 을 만들었다 - Q5·Q16·Q23·Q24·Q26·Q27·Q30
+    7문항 24회차가 3회 재시도를 모두 태우고 실패했다. 그중 Q30 은 조인만
+    빼면 61행이 정상 반환되는, 원래 답할 수 있던 질문이었다.
+
+    필요한 조인은 [해석된 스키마]가 이미 넣어 주므로 caveat 이 테이블 이름을
+    말할 이유가 없다.
+    """
+    offenders: list[str] = []
+    for domain, caveats in DOMAIN_SQL_CAVEATS.items():
+        for index, text in enumerate(caveats):
+            found = sorted(set(_PHYSICAL_TABLE_PATTERN.findall(text)))
+            if found:
+                offenders.append(f"{domain}[{index}]: {', '.join(found)}")
+    if offenders:
+        raise ValueError(
+            "SQL caveat 에 물리 테이블 이름이 들어 있다. 이 문구는 도메인의 모든 "
+            "질의에 주입되므로 LLM 이 없는 조인을 지어내게 만든다(2026-09-03 "
+            "trace 실측). 개념 이름으로 바꾸고 JOIN 은 해석된 스키마에 맡길 것:\n  - "
+            + "\n  - ".join(offenders)
+        )
+
+
+def assert_schema_contract(snapshot: dict | None = None) -> None:
+    """카탈로그가 참조하는 테이블·컬럼이 live 에 전부 있는지 확인한다.
+
+    없으면 schema_snapshot.SchemaContractError 를 던진다. 삼키지 말 것 -
+    이 예외는 "곧 실패할 것"이 아니라 "이미 틀린 전제로 돌고 있었다"는 뜻이다.
+
+    ENRICHED_TABLE_INFO 는 사람이 읽는 참조용이라(코드가 직접 읽지 않는다)
+    여기서 검사하지 않는다. 실제로 SQL 에 들어가는 것만 검사한다.
+    """
+    from tools import schema_snapshot
+
+    # 프롬프트에 주입되는 문구가 없는 테이블을 가르치지 않는지 먼저 본다.
+    # 네트워크가 필요 없는 검사라 앞에 둔다.
+    assert_caveat_hygiene()
+
+    schema_snapshot.assert_contract(
+        table_refs=sorted(iter_catalog_table_refs()),
+        column_refs=sorted(iter_catalog_column_refs()),
+        snapshot=snapshot,
+    )
+
+
+# 기동 시점 검사는 기본적으로 켜지 않는다. 라이브러리 import 가 네트워크를
+# 요구하면 오프라인 테스트·정적 분석이 전부 깨지기 때문이다. 에이전트
+# 진입점(nodes 쪽, T-116)에서 RDB_SCHEMA_CONTRACT_CHECK=1 을 주거나
+# assert_schema_contract() 를 직접 부른다.
+if os.environ.get("RDB_SCHEMA_CONTRACT_CHECK") == "1":  # pragma: no cover
+    assert_schema_contract()

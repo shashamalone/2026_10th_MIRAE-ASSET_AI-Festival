@@ -1,0 +1,233 @@
+{
+  "id": "Q5",
+  "question": "TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알려줘. 분류 근거와 수치 갱신일을 붙여줘.",
+  "status": "ok",
+  "exception": null,
+  "errors": [],
+  "nodes_executed": [
+    "receive_question",
+    "analyze_intent",
+    "verify_intent",
+    "plan_query",
+    "rdb_search",
+    "merge_results",
+    "generate_answer"
+  ],
+  "intent": {
+    "raw_question": "TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알려줘. 분류 근거와 수치 갱신일을 붙여줘.",
+    "task": "explanation",
+    "product_domain": [
+      {
+        "domain": "국내ETF",
+        "subtype": [
+          "인덱스형",
+          "해외주식"
+        ]
+      }
+    ],
+    "target_entities": [
+      {
+        "surface_form": "TIGER 미국S&P500",
+        "entity_type": "product_name"
+      }
+    ],
+    "conditions": [],
+    "relations": [],
+    "sort": {
+      "attribute": "",
+      "order": "",
+      "limit": "",
+      "domains": []
+    },
+    "output_requirements": {
+      "fields": [
+        "투자자산군",
+        "투자지역",
+        "운용전략",
+        "복제방식",
+        "총보수",
+        "1개월 수익률",
+        "3개월 수익률",
+        "6개월 수익률",
+        "분류 근거",
+        "수치 갱신일"
+      ],
+      "narrative_topics": []
+    },
+    "answer_format": "list"
+  },
+  "verified_intent": {
+    "raw_question": "TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알려줘. 분류 근거와 수치 갱신일을 붙여줘.",
+    "task": "explanation",
+    "product_domain": [
+      {
+        "domain": "국내ETF",
+        "subtype": [
+          "인덱스형",
+          "해외주식"
+        ]
+      }
+    ],
+    "target_entities": [
+      {
+        "surface_form": "TIGER 미국S&P500",
+        "entity_type": "product_name"
+      }
+    ],
+    "conditions": [],
+    "relations": [],
+    "sort": {
+      "attribute": "",
+      "order": "",
+      "limit": "",
+      "domains": []
+    },
+    "output_requirements": {
+      "fields": [
+        "투자자산군",
+        "투자지역",
+        "운용전략",
+        "복제방식",
+        "총보수",
+        "1개월 수익률",
+        "3개월 수익률",
+        "6개월 수익률",
+        "분류 근거",
+        "수치 갱신일"
+      ],
+      "narrative_topics": []
+    },
+    "answer_format": "list"
+  },
+  "plan": [
+    {
+      "step_id": "rdb_국내ETF",
+      "engine": "rdb",
+      "role": "target",
+      "depends_on": [],
+      "domain": "국내ETF",
+      "subtype": [
+        "인덱스형",
+        "해외주식"
+      ],
+      "conditions": [],
+      "sort": null,
+      "fields": [
+        "투자자산군",
+        "투자지역",
+        "운용전략",
+        "복제방식",
+        "총보수",
+        "1개월 수익률",
+        "3개월 수익률",
+        "6개월 수익률",
+        "분류 근거",
+        "수치 갱신일"
+      ],
+      "product_name_entities": [
+        {
+          "surface_form": "TIGER 미국S&P500",
+          "entity_type": "product_name"
+        }
+      ],
+      "triggers": [
+        "출력 필드(투자자산군, 투자지역, 운용전략, 복제방식, 총보수, 1개월 수익률, 3개월 수익률, 6개월 수익률, 분류 근거, 수치 갱신일)",
+        "상품 하위유형(인덱스형, 해외주식)",
+        "상품명 조회(TIGER 미국S&P500)"
+      ]
+    }
+  ],
+  "route": {
+    "needs_graph": false,
+    "needs_rdb": true,
+    "needs_vector": false,
+    "domains": [
+      "국내ETF"
+    ],
+    "supported_domains": [
+      "국내ETF"
+    ],
+    "rdb_required_but_blocked": false,
+    "needs_merge_rank": false,
+    "merge_group_step_ids": [],
+    "sort_limit": "",
+    "used_llm_fallback": false,
+    "llm_fallback_details": [],
+    "llm_fallback_unavailable": false,
+    "blocking_reasons": []
+  },
+  "steps": [
+    {
+      "id": "rdb_국내ETF",
+      "engine": "rdb",
+      "role": "target",
+      "domain": "국내ETF",
+      "status": null,
+      "count": 1,
+      "rows_total": 1,
+      "sql": "SELECT base.pd_nm AS pd_nm, base.wu_inv_ast_type AS wu_inv_ast_type, base.wu_inv_rgn AS wu_inv_rgn, base.cu_strtegy AS cu_strtegy, pm.expense_ratio AS expense_ratio, base.du_er_1m AS du_er_1m, base.du_er_3m AS du_er_3m, base.du_er_6m AS du_er_6m, base.pd_itm_no AS pd_itm_no, base.cu_upt_dt AS cu_upt_dt, base.du_upt_dt AS du_upt_dt, base.fn_base_dt AS fn_base_dt, base.ref_base_dt AS ref_base_dt, base.wu_upt_dt AS wu_upt_dt\nFROM raw.pref01n001 AS base\nLEFT JOIN (SELECT e.pd_itm_no, CASE WHEN m.is_available THEN m.value END AS expense_ratio, m.is_available, m.unavailable_reason FROM enriched.etf_kr e JOIN enriched.product_metric m ON m.product_id = e.product_id WHERE m.metric_code = 'EXPENSE_RATIO') AS pm ON pm.pd_itm_no = base.pd_itm_no\nWHERE ((((LOWER(REPLACE(base.pd_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_abrv_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_itm_no::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_ticker::text, ' ', '')) = E'tiger미국s&p500') OR (NOT EXISTS (SELECT 1 FROM raw.pref01n001 AS identity_probe WHERE LOWER(REPLACE(identity_probe.pd_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_abrv_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_itm_no::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_ticker::text, ' ', '')) = E'tiger미국s&p500') AND POSITION(E'tiger미국s&p500' IN LOWER(REPLACE(base.pd_nm::text, ' ', ''))) > 0))))\n  AND (base.pd_grp_no = E'ETF')",
+      "sql_compiler": "catalog-sql-v1",
+      "sql_attempts": 1,
+      "sql_retry_log": [],
+      "sparql": null,
+      "error": null,
+      "skipped_reason": null,
+      "assumptions": [
+        "상품식별에 의한 참고 조회입니다. 하위유형 ['인덱스형', '해외주식']은 검증되지 않았으며 해당 분류 조건을 충족한다고 판단하면 안 됩니다.",
+        "요청된 필드 '복제방식'는 대응하는 컬럼을 찾지 못해 결과에서 제외했습니다.",
+        "요청된 필드 '분류 근거'는 대응하는 컬럼을 찾지 못해 결과에서 제외했습니다.",
+        "요청된 필드 '수치 갱신일'는 대응하는 컬럼을 찾지 못해 결과에서 제외했습니다.",
+        "국내ETF 상품군 조건: ETF"
+      ],
+      "note": null,
+      "entity": null,
+      "entity_codes": null,
+      "evidence": [],
+      "rows_sample": [
+        {
+          "pd_nm": "미래에셋 TIGER 미국S&P500증권상장지수투자신탁(주식)",
+          "wu_inv_ast_type": "주식",
+          "wu_inv_rgn": "미국",
+          "cu_strtegy": "실물복제",
+          "expense_ratio": null,
+          "du_er_1m": "-3.93",
+          "du_er_3m": "-5.23",
+          "du_er_6m": "6.46",
+          "pd_itm_no": "KR7360750004",
+          "cu_upt_dt": "20260824",
+          "du_upt_dt": "20260821",
+          "fn_base_dt": "20260822",
+          "ref_base_dt": "20260822",
+          "wu_upt_dt": "20260821"
+        }
+      ],
+      "queries": null,
+      "chunks_total": null,
+      "product_scope_counts": {
+        "codes": 1,
+        "names": 1,
+        "coverage": null
+      },
+      "topic_coverage": null
+    }
+  ],
+  "answer": {
+    "question_id": "Q5-r1-9473",
+    "question": "TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알려줘. 분류 근거와 수치 갱신일을 붙여줘.",
+    "retrieved_context": "[RDB:국내ETF] 1건 조회, 기준일 2026-08-24, SQL: SELECT base.pd_nm AS pd_nm, base.wu_inv_ast_type AS wu_inv_ast_type, base.wu_inv_rgn AS wu_inv_rgn, base.cu_strtegy AS cu_strtegy, pm.expense_ratio AS expense_ratio, base.du_er_1m AS du_er_1m, base.du_er_3m AS du_er_3m, base.du_er_6m AS du_er_6m, base.pd_itm_no AS pd_itm_no, base.cu_upt_dt AS cu_upt_dt, base.du_upt_dt AS du_upt_dt, base.fn_base_dt AS fn_base_dt, base.ref_base_dt AS ref_base_dt, base.wu_upt_dt AS wu_upt_dt\nFROM raw.pref01n001 AS base\nLEFT JOIN (SELECT e.pd_itm_no, CASE WHEN m.is_available THEN m.value END AS expense_ratio, m.is_available, m.unavailable_reason FROM enriched.etf_kr e JOIN enriched.product_metric m ON m.product_id = e.product_id WHERE m.metric_code = 'EXPENSE_RATIO') AS pm ON pm.pd_itm_no = base.pd_itm_no\nWHERE ((((LOWER(REPLACE(base.pd_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_abrv_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_itm_no::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(base.pd_ticker::text, ' ', '')) = E'tiger미국s&p500') OR (NOT EXISTS (SELECT 1 FROM raw.pref01n001 AS identity_probe WHERE LOWER(REPLACE(identity_probe.pd_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_abrv_nm::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_itm_no::text, ' ', '')) = E'tiger미국s&p500' OR LOWER(REPLACE(identity_probe.pd_ticker::text, ' ', '')) = E'tiger미국s&p500') AND POSITION(E'tiger미국s&p500' IN LOWER(REPLACE(base.pd_nm::text, ' ', ''))) > 0))))\n  AND (base.pd_grp_no = E'ETF')",
+    "think_trace": "질문 분석 후 RDB에서 TIGER 미국S&P500의 정보를 조회하여 필요한 항목을 추출하였다.",
+    "answer": "투자자산군: 주식\n투자지역: 미국\n운용전략: 실물복제\n총보수: 정보 없음\n1개월 수익률: -3.93%\n3개월 수익률: -5.23%\n6개월 수익률: 6.46%"
+  },
+  "trace_messages": [
+    "질문 수신: TIGER 미국S&P500의 투자자산군, 투자지역, 운용전략, 복제방식, 총보수와 1·3·6개월 수익률을 알려줘. 분류 근거와 수치 갱신일을 붙여줘.",
+    "질의 분석 완료. product_domain=['국내ETF']",
+    "의도 분석 검수 완료: 수정 사항 없음 (원본 유지)",
+    "Plan 수립: 엔진=RDB, 단계=['rdb_국내ETF']",
+    "RDB 검색 [rdb_국내ETF]: 1건 조회",
+    "결과 합치기: 1행",
+    "답변 생성 완료 (1건 기반)"
+  ],
+  "merged_rows_total": 1,
+  "e2e_ms": 10454.4,
+  "source_line": 5
+}
