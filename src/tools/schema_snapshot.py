@@ -90,10 +90,10 @@ SNAPSHOT_MAX_AGE_SECONDS = float(os.environ.get("RDB_SCHEMA_SNAPSHOT_MAX_AGE", "
 RATE_LIMIT_WAIT_SECONDS = float(os.environ.get("RDB_API_RATE_LIMIT_WAIT", "60"))
 RATE_LIMIT_TOTAL_WAIT_BUDGET = float(os.environ.get("RDB_API_RATE_LIMIT_BUDGET", "120"))
 
-# 스냅샷 수집은 테이블 수 + 3 회를 호출한다(실측 48회). 서버 한도가 분당
-# 60이라 초당 5회로 쏘면 수집이 스스로 429 를 만든다(실측). 한도보다 약간
-# 느리게 걸어 자기 자신을 막지 않게 한다.
-DEFAULT_PACE_SECONDS = float(os.environ.get("RDB_SCHEMA_SNAPSHOT_PACE", "1.05"))
+# 운영 API는 같은 컨테이너의 loopback Data API를 사용하므로 기본 대기는 없다.
+# 인증 없는 원격 공개 API에 직접 붙이는 별도 도구만 필요할 때 환경변수로
+# 1.05초 등을 명시한다. 원격 429는 아래의 제한 응답 처리기가 담당한다.
+DEFAULT_PACE_SECONDS = float(os.environ.get("RDB_SCHEMA_SNAPSHOT_PACE", "0"))
 
 
 class SchemaContractError(RuntimeError):
@@ -211,10 +211,9 @@ def fetch_snapshot(
 ) -> dict:
     """live information_schema 를 읽어 스냅샷 dict 를 만든다.
 
-    호출 수는 (version 2회 + tables 1회 + 테이블당 columns 1회)다. 2026-09-05
-    실측 45개 테이블 기준 48회인데 서버 한도가 **분당 60**이라 여유가 거의
-    없다. 그래서 기본 페이싱을 한도에 맞춰 잡는다(초당 1회 미만). 이전에
-    0.2초(초당 5회)로 쏘다가 수집이 스스로 429 를 유발했다.
+    호출 수는 (version 2회 + tables 1회 + 테이블당 columns 1회)다. 운영
+    경로는 같은 컨테이너의 loopback API라 페이싱하지 않는다. 별도의 원격
+    공개 API를 대상으로 수집할 때만 ``RDB_SCHEMA_SNAPSHOT_PACE``를 설정한다.
     """
     session = requests.Session()
     if pace_seconds is None:

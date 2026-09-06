@@ -131,7 +131,7 @@ class ApiOnlyDeploySourceTest(unittest.TestCase):
         self.assertIn('mv -f -- "${pointer_tmp}" "${pointer}"', self.remote)
 
     def test_verifier_is_exact_and_has_no_write_probe(self):
-        self.assertEqual(VERIFIER.EXPECTED_API_VERSION, "4.3.0")
+        self.assertEqual(VERIFIER.EXPECTED_API_VERSION, "4.3.1")
         self.assertEqual(VERIFIER.EXPECTED_VECTOR_RUN, "t108-7902db9a58d66b7f")
         self.assertEqual(len(VERIFIER.EXPECTED_VECTOR_COUNTS), 7)
         self.assertEqual(len(VERIFIER.EXPECTED_ROUTES), 9)

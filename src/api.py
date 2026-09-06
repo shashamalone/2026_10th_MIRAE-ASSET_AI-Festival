@@ -24,7 +24,7 @@ from kb.v2_manifest import (
 from tools.sql_guard import ensure_read_only_sparql, ensure_read_only_sql
 import serve_answer
 
-APP_VERSION = "4.3.0"
+APP_VERSION = "4.3.1"
 MAX_ROWS = int(os.environ.get("API_MAX_ROWS", "100"))
 # 운영 계약의 2초 상한은 환경변수로 완화할 수 없다. 필요하면 더 짧게만 조정한다.
 STATEMENT_TIMEOUT_MS = min(2000, max(1, int(os.environ.get("DB_STATEMENT_TIMEOUT_MS", "2000"))))
@@ -84,6 +84,11 @@ app = FastAPI(
 )
 _RATE_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 _RATE_LOCK = threading.Lock()
+
+
+def _is_loopback_client(host: str) -> bool:
+    """Trust only the socket peer, never forwarded headers, for internal bypass."""
+    return host in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 
 
 @app.on_event("startup")
@@ -158,17 +163,18 @@ async def public_api_guard(request: Request, call_next):
                 content=_problem("PUBLIC_TEST_EXPIRED", "임시 공개 기간이 만료되었습니다"),
             )
         client = request.client.host if request.client else "unknown"
-        now = time.monotonic()
-        with _RATE_LOCK:
-            bucket = _RATE_BUCKETS[client]
-            while bucket and bucket[0] <= now - 60:
-                bucket.popleft()
-            if len(bucket) >= PUBLIC_RATE_LIMIT_PER_MINUTE:
-                return JSONResponse(
-                    status_code=429,
-                    content=_problem("RATE_LIMITED", "분당 요청 한도를 초과했습니다"),
-                )
-            bucket.append(now)
+        if not _is_loopback_client(client):
+            now = time.monotonic()
+            with _RATE_LOCK:
+                bucket = _RATE_BUCKETS[client]
+                while bucket and bucket[0] <= now - 60:
+                    bucket.popleft()
+                if len(bucket) >= PUBLIC_RATE_LIMIT_PER_MINUTE:
+                    return JSONResponse(
+                        status_code=429,
+                        content=_problem("RATE_LIMITED", "분당 요청 한도를 초과했습니다"),
+                    )
+                bucket.append(now)
     response = await call_next(request)
     if PUBLIC_TEST_MODE:
         response.headers["X-Financial-API-Exposure"] = "temporary-public-test"

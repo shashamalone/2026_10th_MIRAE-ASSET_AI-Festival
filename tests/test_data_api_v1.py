@@ -100,7 +100,14 @@ class ApiContractTest(unittest.TestCase):
         self.assertEqual(api.GRAPH_QUERY_TIMEOUT_SECONDS, 10.0)
         self.assertEqual(api.MAX_ROWS, 100)
         self.assertEqual(api.EXPECTED_GRAPH_TRIPLES, 1_226_698)
-        self.assertEqual(api.APP_VERSION, "4.3.0")
+        self.assertEqual(api.APP_VERSION, "4.3.1")
+
+    def test_only_socket_loopback_is_exempt_from_public_rate_limit(self):
+        self.assertTrue(api._is_loopback_client("127.0.0.1"))
+        self.assertTrue(api._is_loopback_client("::1"))
+        self.assertTrue(api._is_loopback_client("::ffff:127.0.0.1"))
+        self.assertFalse(api._is_loopback_client("172.18.0.1"))
+        self.assertFalse(api._is_loopback_client("203.0.113.10"))
 
 
 class VectorAndHealthContractTest(unittest.TestCase):
@@ -168,6 +175,15 @@ class DeploymentSourceContractTest(unittest.TestCase):
         self.assertLess(local.index("--preflight"), local.index("& scp"))
         self.assertIn("$installerUpload", local)
         self.assertIn('.Replace("`r`n", "`n")', local)
+
+    def test_answer_uses_zero_pace_writable_cache_and_300s_budget_margin(self):
+        compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("RDB_SCHEMA_SNAPSHOT_PACE: ${RDB_SCHEMA_SNAPSHOT_PACE:-0}", compose)
+        self.assertIn(
+            "RDB_SCHEMA_SNAPSHOT_PATH: ${RDB_SCHEMA_SNAPSHOT_PATH:-/tmp/schema_snapshot.json}",
+            compose,
+        )
+        self.assertIn("ANSWER_TIMEOUT_SECONDS: ${ANSWER_TIMEOUT_SECONDS:-290}", compose)
 
 
 if __name__ == "__main__":

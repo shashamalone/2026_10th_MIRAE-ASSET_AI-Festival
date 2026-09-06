@@ -23,8 +23,8 @@ FastAPI/uvicorn 을 쓰지 않고 http.server 로 짰다. requirements.txt 는 �
 문항에서는 오히려 정답 처리된다(과제설명 p7).
 
 [타임아웃]
-권장 60초에 대해 기본 55초에서 끊는다(ANSWER_TIMEOUT_SECONDS 로 조정).
-자체 측정 warm E2E p95 가 약 50초라 여유가 크지 않다. 시간이 넘으면 그때까지
+운영측 300초 제한 전에 응답하도록 기본 290초에서 끊는다
+(ANSWER_TIMEOUT_SECONDS 로 조정). 시간이 넘으면 그때까지
 쌓인 trace 를 근거로 5필드를 채워 200 으로 돌려준다. 초과한 작업 스레드는
 결과를 버리고 계속 두는데, 이미 응답한 요청을 되돌릴 수는 없기 때문이다.
 
@@ -50,7 +50,7 @@ LOG = logging.getLogger("serve_answer")
 
 DEFAULT_PORT = int(os.getenv("ANSWER_PORT", "8080"))
 DEFAULT_HOST = os.getenv("ANSWER_HOST", "0.0.0.0")
-TIMEOUT_SECONDS = float(os.getenv("ANSWER_TIMEOUT_SECONDS", "55"))
+TIMEOUT_SECONDS = float(os.getenv("ANSWER_TIMEOUT_SECONDS", "290"))
 MAX_WORKERS = int(os.getenv("ANSWER_MAX_WORKERS", "4"))
 
 # 파이프라인 import 는 기동 시 1회만 시도한다. 실패해도 서버는 뜬다 —
