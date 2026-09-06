@@ -1,58 +1,3 @@
-"""live DB 스키마 실측 스냅샷 (T-115).
-
-이 모듈이 필요한 이유
----------------------
-rdb_schema.py는 도메인 카탈로그를 파이썬 상수로 들고 있는데, 그 상수가
-가리키는 테이블·컬럼이 실제 DB에 있는지는 아무도 검증하지 않았다. 그리고
-2026-09-05 실측 기준으로 실제로 어긋나 있었다:
-
-  카탈로그 주장                      live(information_schema)
-  ---------------------------------  ------------------------------------
-  enriched.etf_kr_enriched           없음 (enriched.etf_kr 은 있음)
-  enriched.bond_kr_enriched          없음 (bond_kr_offer / bond_kr_product)
-  charge_rt_final                    enriched.etf_kr 에 그런 컬럼 없음
-
-이 어긋남이 조용히 넘어가면 SQL 생성 -> 실행 실패 -> nodes._fix_sql 재시도로
-이어진다. 그런데 재시도에 넘기는 "실제 컬럼 목록"까지 같은 상수
-(rdb_schema.get_full_column_list)에서 나오기 때문에, 수리 루프는 방금 실패한
-것과 똑같은 오답을 근거로 다시 쓴다 - 구조적으로 수렴하지 않고 재시도 횟수만
-소진한다. LLM 호출이 실패 1건당 재시도 횟수만큼 증폭되므로 서버의 분당
-한도(기본 60)를 그대로 밀어 올린다.
-
-그래서 역할을 나눈다.
-
-  의미(설명·단위·주의사항·판매정책)  -> rdb_schema.py 의 상수가 정본
-  물리적 존재(테이블·컬럼 목록)       -> 이 모듈의 live 스냅샷이 정본
-
-둘이 어긋나면 쿼리 시점의 UndefinedTable 이 아니라 **기동 시점**에
-SchemaContractError 로 죽인다. 조용한 실패보다 시끄러운 실패가 낫다.
-
-수집 경로
----------
-배포된 데이터 플랫폼 API(`RDB_API_BASE_URL`, 기본 http://40.82.145.44:8000)의
-introspection 엔드포인트를 쓴다. 직접 psycopg 로 붙지 않는 이유는 두 가지다.
-
-  1. `.env` 는 DB_HOST/DB_PORT/... 이름을 주는데 kb.build_data_platform.dsn()
-     은 DATABASE_URL 또는 PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE 를
-     요구한다. 즉 현재 환경에서 DB 직결 경로는 RuntimeError 로 죽는다.
-  2. 에이전트 런타임이 이미 같은 API 로 SQL 을 실행하고 있다. 스키마 진실을
-     같은 출처에서 가져와야 "실행되는 곳"과 "검증하는 곳"이 갈라지지 않는다.
-
-  GET /db/tables   -> information_schema.tables   (실측)
-  GET /db/columns  -> information_schema.columns  (실측)
-  GET /db/catalog  -> meta.column_catalog         (사람이 관리하는 의미 메타)
-
-`/db/catalog` 는 적재된 테이블이라 물리 스키마와 어긋날 수 있다. 그래서
-물리적 존재의 근거로 쓰지 않고, 의미 메타데이터로만 쓴다.
-
-응답 상한
----------
-서버는 모든 응답을 MAX_ROWS(기본 100)행에서 자르고 `truncated` 플래그를
-같이 준다. `/db/columns` 를 필터 없이 부르면 100행에서 잘리므로(실측)
-테이블별로 나눠 받는다. `truncated` 가 True 인 응답은 불완전한 진실이므로
-스냅샷에 넣지 않고 예외를 던진다.
-"""
-
 from __future__ import annotations
 
 import json
@@ -144,11 +89,6 @@ def _request(
             continue
 
         if response.status_code == 429:
-            # [SCHEMA-005] Retry-After 가 있으면 그 값만큼(예산 안에서) 기다린다.
-            # 없으면 기다리지 않고 즉시 실패한다 - 헤더 없는 429 에 60초씩
-            # 멈춰 서면 기동 경로에서 장애와 구분되지 않고, 우리가 얼마나
-            # 기다려야 하는지는 순전히 추측이기 때문이다. 서버가 헤더를 주게
-            # 되면(T-119) 자동으로 대기 경로를 타게 된다.
             retry_after = response.headers.get("Retry-After")
             if retry_after and retry_after.strip().isdigit():
                 wait = float(retry_after)
@@ -484,7 +424,6 @@ def assert_contract(
 
     하나라도 없으면 전부 모아서 SchemaContractError 를 던진다. 첫 번째에서
     끊지 않는 이유는, 드리프트가 보통 한 건이 아니라 무더기로 나기 때문이다
-    (2026-09-05 실측에서도 2개 테이블 + 1개 컬럼이 동시에 어긋나 있었다).
     """
     snap = snapshot if snapshot is not None else get_snapshot()
     problems: list[str] = []
