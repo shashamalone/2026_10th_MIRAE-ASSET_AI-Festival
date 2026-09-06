@@ -358,6 +358,47 @@ def _drop_redundant_theme_conditions(conditions: list[dict], relations: list[dic
         kept.append(c)
     return kept, notes
 
+def _drop_redundant_superlative_conditions(conditions: list[dict], sort: dict) -> tuple[list[dict], list[str]]:
+    """"가장 큰/가장 작은/최고/최소" 같은 최상급 표현은 sort(attribute+order+limit)
+    로만 표현해야 하는데, analyze_intent_node(또는 verify_intent_node의 재검토
+    패스)가 같은 attribute를 conditions에도 값 없이(value="") 중복으로 남기는
+    사례가 실측됐다(2026-09-06, "국내 상장 ETF 중 총보수율이 가장 낮은 상품은?"
+    질문 - sort는 {attribute:"총보수율", order:"asc", limit:"1"}로 정확히
+    들어갔는데 conditions에 {attribute:"총보수율", operator:"lte", value:""}가
+    그대로 남아 있었다).
+
+    INTENT_VERIFICATION_SYSTEM_PROMPT(prompts.py)에 "이런 조건은 지우고 sort로
+    옮기라"는 규칙이 이미 있지만, LLM 검수가 매번 그 규칙을 지키는 건 아니다.
+    utils.build_resolved_schema는 값이 빈 조건을 발견하면(SQL이 깨지는 걸
+    막으려고) invalid_conditions로 등록해 RDB 단계 전체를 차단한다 - sort가
+    이미 같은 attribute를 정확히 담고 있다면 그 빈 조건은 100% 잉여물이므로,
+    LLM 재검토에만 기대지 않고 여기서 확정적으로 제거한다.
+
+    sort.attribute와 다른 attribute, 값이 채워진 조건, sort 자체가 없는 경우는
+    전혀 건드리지 않는다 - "sort와 정확히 같은 attribute + 빈 값"이라는 좁은
+    신호만 보고, 진짜 유효하지 않은 조건(예: 오타)까지 여기서 삼키지 않는다.
+    도메인이 다르게 지정된 조건(예: 비교형 질문에서 sort.domains에 없는
+    도메인의 조건)도 건드리지 않는다."""
+    sort_attribute = ((sort or {}).get("attribute") or "").strip()
+    if not sort_attribute:
+        return conditions, []
+
+    sort_domains = {d for d in ((sort or {}).get("domains") or []) if d}
+
+    kept, notes = [], []
+    for c in conditions:
+        attribute = (c.get("attribute") or "").strip()
+        value = (c.get("value") or "").strip()
+        condition_domain = (c.get("domain") or "").strip()
+        same_scope = not sort_domains or not condition_domain or condition_domain in sort_domains
+        if attribute == sort_attribute and not value and same_scope:
+            notes.append(
+                f"조건 '{attribute}'=''(빈 값): sort.attribute와 동일한 최상급 "
+                f"표현의 잔여물로 판단해 제거 (정렬 limit={sort.get('limit') or '?'}로 이미 표현됨)"
+            )
+            continue
+        kept.append(c)
+    return kept, notes
 
 def _drop_redundant_theme_subtypes(product_domains: list[dict],
                                     relations: list[dict]) -> tuple[list[dict], list[str]]:
@@ -528,8 +569,14 @@ def guard_intent(intent: dict) -> tuple[dict, list[str]]:
     notes.extend(subtype_notes)
 
     fixed_conditions, drop_notes = _drop_redundant_theme_conditions(fixed_conditions, fixed_relations)
-    fixed["conditions"] = fixed_conditions
     notes.extend(drop_notes)
+
+    fixed_conditions, superlative_drop_notes = _drop_redundant_superlative_conditions(
+        fixed_conditions, fixed.get("sort") or {}
+    )
+    notes.extend(superlative_drop_notes)
+
+    fixed["conditions"] = fixed_conditions
 
     output_req = intent.get("output_requirements") or {}
     if output_req:
