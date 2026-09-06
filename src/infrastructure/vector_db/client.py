@@ -330,6 +330,20 @@ class VectorDBClient:
             clauses.append("name IN (" + ",".join(["%s"] * len(names)) + ")")
             params.extend(names)
 
+        # 약칭·티커로 지목하는 질문이 있다("VOO, IVV, SPY 를 비교해줘").
+        # source_key/name 만 보면 해소에 실패하는데, 그러면 nodes.py 의
+        # no_product_match 조기 반환에 걸려 벡터 검색이 통째로 생략된다.
+        # 실측: 해외ETF 5,972종 전부 short_name 이 있고 그중 99.8%(5,961종)가
+        # name 과 다르다. VOO 의 name 은 "Vanguard 500 Index Fund;ETF" 라
+        # 티커로는 한 건도 못 잡는다.
+        # 완전일치라 "유사명 대체 금지" 원칙은 그대로다. 중복 short_name 은
+        # 106건/최대 8종인데 전부 같은 모펀드의 클래스 변형이라 함께 잡히는
+        # 것이 오히려 옳다(모펀드 보고서가 산하 클래스에 공통 적용된다).
+        terms = codes + names
+        if terms:
+            clauses.append("short_name IN (" + ",".join(["%s"] * len(terms)) + ")")
+            params.extend(terms)
+
         sql = (
             "SELECT DISTINCT product_id FROM enriched.product_master"
             f" WHERE {' OR '.join(clauses)} LIMIT 50"
