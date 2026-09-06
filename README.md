@@ -1,4 +1,4 @@
-# 금융상품 Agent — Financial Product Analyst
+# 💰 금융상품 Agent — Financial Product Analyst
 
 미래에셋 AI Festival 2026 제출작. 정형 금융상품 데이터(국내채권·국내ETF·해외ETF·공모펀드)에 대해 자연어 질의를 받아 **RDB · GraphDB · VectorDB를 상황에 맞게 라우팅**하고, 검색된 근거를 인용해 답변한다.
 
