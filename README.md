@@ -4,8 +4,6 @@
 
 제10회 미래에셋증권 AI Festival 제출 프로젝트입니다. 국내채권·국내ETF·해외ETF·공모펀드에 대한 자연어 질문을 분석하고, RDB·GraphDB·VectorDB를 질문에 맞게 조합합니다. 의도 분석과 답변 생성에는 **NCP HyperCLOVA X**를 사용합니다.
 
-> 이 README는 최종 제출본 [`feat/final-0906` · `4075a8c`](https://github.com/shashamalone/2026_10th_MIRAE-ASSET_AI-Festival/tree/4075a8c002f76fadd18048bcd1b92e9d9eaa053e)를 기준으로 작성했습니다. 제출본을 `main`에 병합한 뒤 README를 별도 변경했으며, 개발 브랜치의 추가 개선은 이 기준 버전에 반영하지 않았습니다.
-
 [문제와 접근](#문제와-접근) · [아키텍처](#아키텍처) · [핵심 설계](#핵심-설계) · [실행](#실행) · [검증과 한계](#검증과-한계)
 
 ## 문제와 접근
