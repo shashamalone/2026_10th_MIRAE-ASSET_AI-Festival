@@ -102,16 +102,12 @@ langchain_naver가 설치되어 있지 않거나 애매한 relation이 아예 �
 """
 from __future__ import annotations
 from typing import Any
+import re
 from agent.prompts import RELATION_ORIGIN_SYSTEM_PROMPT
 from agent.get_clova import _llm_plan
 
 PipelineState = dict[str, Any]
 
-# 이 시스템이 실제로 테이블을 가진 도메인. rdb_schema.DOMAIN_TABLE_INFO와
-# 같은 집합이다. rdb_schema를 직접 import하지 않는 이유는 이 노드가
-# "이 도메인이 RDB에 있는가"만 알면 되고 테이블명/컬럼 같은 세부 스키마는
-# 필요 없기 때문이다(그건 다음 노드인 select_table_and_columns_node의
-# 몫이다).
 KNOWN_DOMAINS = {"채권", "국내ETF", "해외ETF", "펀드"}
 
 # ---------------------------------------------------------------------------
@@ -269,20 +265,12 @@ def _resolve_ambiguous_relation_origins(ambiguous_relations: list[dict], intent:
         )
         return {r["relation_id"]: r for r in result["resolutions"]}
     except Exception:
-        # langchain_naver 미설치, API 오류, 타임아웃 등. 이 폴백 자체가
-        # 실패해도 전체 plan 수립이 죽으면 안 되므로 빈 dict로 degrade한다.
+
         return {}
 
 
 # ---------------------------------------------------------------------------
 # Graph -> RDB 의존관계 판정 (relation이 실제로 어느 RDB 도메인에 걸리는가)
-#
-# 예전에는 relation이 하나라도 있으면 모든 RDB target 단계가 무조건 그
-# relation을 기다리도록(depends_on) 뭉뚱그려져 있었다. 이러면 "채권 신용등급
-# A+ 이상 목록이랑, 별개로 에코프로 자회사 목록도 알려줘"처럼 relation과 RDB
-# 조건이 서로 무관한 복합질문도 RDB가 Graph를 기다리는 것으로 잘못 계획된다.
-# relation.subject_domain 값으로 세 가지 경우(독립/특정 도메인/전체 공통)를
-# 구분해서 이 문제를 해결한다.
 # ---------------------------------------------------------------------------
 _NON_PRODUCT_SUBJECTS = {
     "company", "organization", "issuer", "assetmanager", "custodian",
@@ -328,6 +316,27 @@ def plan_query_node(state: PipelineState) -> PipelineState:
               needs_merge_rank / used_llm_fallback 등).
     """
     intent = state["intent"]
+    import re
+    question = state.get("question") or intent.get("raw_question", "")
+    policy_request = ("정책" in question and sum(t in question for t in ("구조", "운용주체", "자금조달", "출자")) >= 2)
+    if policy_request:
+        terms = [e.get("surface_form", "") for e in intent.get("target_entities") or [] if e.get("surface_form")]
+        if not terms:
+            subject = re.match(r"\s*([^.!?]+?)의\s", question)
+            terms = [subject.group(1)] if subject else []
+        req = intent.get("output_requirements") or {}
+        return {"plan": [{"step_id": "vector_policy", "engine": "vector", "depends_on": [],
+                          "document_scope": "policy", "subject_terms": terms,
+                          "topics": req.get("narrative_topics", []), "fields": req.get("fields", [])}],
+                "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": True,
+                          "needs_merge_rank": False, "blocking_reasons": []},
+                "trace": _trace("정책·자금조달 설명: 상품 마스터가 아닌 공식 정책/운용 문서 카탈로그에서 주체를 대조합니다.")}
+    from agent.evidence_contract import request_blockers
+    blockers = request_blockers(intent, state.get("question") or intent.get("raw_question", ""))
+    if blockers:
+        return {"plan": [], "route": {"needs_graph": False, "needs_rdb": False, "needs_vector": False,
+                "needs_merge_rank": False, "blocking_reasons": blockers},
+                "trace": _trace("요청 근거 계약: " + "; ".join(blockers))}
 
     domains = _normalize_domains(intent)
     domain_names = [d["domain"] for d in domains]
@@ -354,11 +363,6 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     except ValueError as e:
         return {"plan": None, "route": None, "trace": _trace(f"Plan 수립 실패: {e}")}
 
-    # -----------------------------------------------------------------
-    # 0.5) 출발점이 불명확한 relation만 골라 LLM에 배치로 묻는다. 규칙
-    # 기반으로 풀리는 relation(object_entity가 있거나 object_ref로
-    # 이어진 것)은 이 단계를 전혀 거치지 않는다.
-    # -----------------------------------------------------------------
     ambiguous_relations = [r for r in relations if _is_ambiguous_relation(r)]
     origin_resolutions = _resolve_ambiguous_relation_origins(ambiguous_relations, intent)
 
@@ -405,22 +409,11 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                 "engine": "graph",
                 "depends_on": depends_on,
                 "relation": r,
-                # 이 relation에 걸린 조건(예: "매출 1조 이상인 자회사")
                 "conditions": [c for c in conditions if c.get("applies_to") == r["id"]],
                 "time_window_relative": r.get("time_window_relative", ""),
             }
         )
 
-    # relations가 서로 독립된(체인으로 안 이어진) 여러 개일 수 있다. 예:
-    # "우주항공 테마와 연결되어 있으면서 록히드마틴을 편입한 ETF"는 R1(테마
-    # 태깅)과 R2(종목 편입)가 서로를 참조하지 않는 별도 조건이다. 이런
-    # 경우 RDB/Vector 단계는 "가장 나중에 처리된 relation 하나"가 아니라
-    # "다른 relation의 object_ref로도 참조되지 않는 모든 leaf relation"
-    # 전부가 끝나야 시작할 수 있다. leaf가 아닌 relation(예: R1이 R2에게
-    # object_ref로 참조되는 경우의 R1)은 이미 R2 안에 결과가 녹아들어가
-    # 있으므로 중복으로 기다릴 필요가 없다. rdb_pre 단계는 이 계산과
-    # 무관하다(그건 relation 체인 자체가 아니라 특정 relation 하나의
-    # 입력을 준비하는 보조 단계일 뿐이다).
     referenced_ids = {r["object_ref"] for r in relations if r.get("object_ref")}
     terminal_graph_step_ids = [f"graph_{r['id']}" for r in relations if r["id"] not in referenced_ids]
 
@@ -452,9 +445,7 @@ def plan_query_node(state: PipelineState) -> PipelineState:
 
     if needs_rdb:
         if not supported_domains:
-            # 테이블을 특정할 수 없으면 RDB 단계를 만들 수 없다. 이것도
-            # intent가 애초에 이 시스템이 다루지 않는 도메인을 가리키고
-            # 있다는 뜻이라 LLM 폴백 대상이 아니다.
+
             if domain_names:
                 blocking_reasons.append(
                     f"RDB 조회가 필요하지만 지원하지 않는 도메인입니다: {unsupported_domains}"
@@ -464,26 +455,11 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                     "RDB 조회가 필요하지만 product_domain이 비어 있어 테이블을 특정할 수 없습니다."
                 )
         else:
-            # 도메인이 여러 개면 테이블이 서로 다르므로 단계를 나눠 만든다.
-            # 이 단계들은 서로 의존하지 않고 같은 Graph 결과(있다면)에만
-            # 의존하므로 서로 독립이다 — "삼성전자를 보유한 국내/해외ETF와
-            # 공모펀드를 1년 수익률 기준 TOP10" 같은 교차질의가 이 경로다.
             for d in supported_domains:
                 step_id = f"rdb_{d['domain']}"
-                # conditions.domain이 채워져 있으면 그 도메인에만 조건을
-                # 적용한다("신용등급 A+ 이상 채권과 위험등급 2등급 이하
-                # ETF를 비교"처럼 도메인마다 다른 조건이 걸리는 경우).
-                # 비어 있으면(대부분의 경우) 모든 도메인에 똑같이 적용한다.
                 domain_conditions = [
                     c for c in target_conditions if not c.get("domain") or c["domain"] == d["domain"]
                 ]
-                # terminal relation(체인의 마지막, 다른 relation의 object_ref로
-                # 참조되지 않는 것) 중 이 도메인에 실제로 걸리는 것만 기다린다
-                # (_relation_target_domains). "채권 목록 + 별개로 에코프로
-                # 자회사"처럼 무관한 relation은 여기 안 걸려서 depends_on이
-                # 비게 되고, "삼성전자를 보유한 국내/해외ETF와 공모펀드"처럼
-                # 여러 도메인에 공통으로 걸리는 relation은 그 도메인들 전부의
-                # depends_on에 들어간다.
                 relevant_graph_steps = [
                     f"graph_{r['id']}" for r in relations
                     if r["id"] not in referenced_ids
@@ -493,18 +469,15 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                     {
                         "step_id": step_id,
                         "engine": "rdb",
-                        "role": "target",  # 이 단계의 결과가 최종 답의 일부다 (entity_lookup과 구분)
+                        "role": "target", 
                         "depends_on": relevant_graph_steps,
                         "domain": d["domain"],
                         "subtype": d["subtype"],
                         "conditions": domain_conditions,
-                        # sort는 attribute/order/limit을 통째로 넘긴다. 여러
-                        # 도메인이 있으면 limit은 이 단계 하나가 아니라
-                        # 도메인별 결과를 전부 합친 뒤 결과 합치기 노드가
-                        # 적용해야 한다(도메인당 N개가 아니라 합쳐서 N개).
                         "sort": sort if sort_attribute else None,
                         "fields": fields,
                         "product_name_entities": product_name_entities,
+                        "class_suffixes": (intent.get("identity_comparison") or {}).get("classes", []),
                         "triggers": rdb_triggers,
                     }
                 )
@@ -514,6 +487,8 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     # 3) Vector 단계: 서술형 답변이 필요하면 마지막에 하나
     # -----------------------------------------------------------------
     needs_vector = bool(narrative_topics) or answer_format in ("narrative", "list_with_narrative")
+    if intent.get("identity_comparison") and not narrative_topics:
+        needs_vector = False
     if needs_vector:
         upstream = rdb_step_ids or terminal_graph_step_ids
         plan.append(
@@ -522,8 +497,6 @@ def plan_query_node(state: PipelineState) -> PipelineState:
                 "engine": "vector",
                 "depends_on": list(upstream),
                 "topics": narrative_topics,
-                # intent가 "투자 위험"/"운용 전략"을 narrative_topics 대신
-                # output_requirements.fields에 넣는 경우가 많아 함께 넘긴다.
                 "fields": fields,
                 "target_entities": target_entities,
             }
@@ -547,6 +520,10 @@ def plan_query_node(state: PipelineState) -> PipelineState:
     else:
         merge_group_ids = []
     needs_merge_rank = len(merge_group_ids) > 1
+    rank_domains = {p.get("domain") for p in plan if p["step_id"] in merge_group_ids}
+    if needs_merge_rank and "해외ETF" in rank_domains and len(rank_domains) > 1 and "".join(sort_attribute.split()).casefold() in {"aum", "순자산", "순자산총액", "순자산규모"}:
+        needs_merge_rank = False
+        blocking_reasons.append("해외ETF의 거래통화 AUM과 국내 상품의 원화 AUM은 환율·환산 기준일 없이 합쳐 순위를 매길 수 없습니다. 각 도메인 안에서만 정렬해 표시합니다.")
 
     # -----------------------------------------------------------------
     # 4) 라우팅 요약
@@ -558,38 +535,39 @@ def plan_query_node(state: PipelineState) -> PipelineState:
         "domains": domain_names,
         "supported_domains": [d["domain"] for d in supported_domains],
         "rdb_required_but_blocked": needs_rdb and not any(s["engine"] == "rdb" for s in plan),
-        # RDB 단계가 2개 이상이고 정렬 기준이 있으면(교차질의 + TOP N), 각
-        # 단계 결과를 단순히 이어붙이는 게 아니라 합친 뒤 다시 정렬하고
-        # limit을 적용해야 한다는 신호. 결과 합치기 노드가 이 플래그를 보고
-        # 병합 방식을 결정한다.
         "needs_merge_rank": needs_merge_rank,
-        # 실제로 하나의 정렬 기준을 공유하는 RDB 단계 id들. needs_merge_rank가
-        # False면 항상 빈 리스트다.
         "merge_group_step_ids": merge_group_ids if needs_merge_rank else [],
         "sort_limit": sort_limit,
-        # 이번 질문에서 LLM 폴백을 실제로 썼는지, 썼다면 어떤 relation에
-        # 어떤 판단을 했는지. 폴백이 필요했는데(애매한 relation이
-        # 있었는데) LLM을 쓸 수 없어서 기본값으로 처리된 경우도 구분한다.
         "used_llm_fallback": bool(llm_fallback_used),
         "llm_fallback_details": llm_fallback_used,
         "llm_fallback_unavailable": llm_fallback_attempted_but_unavailable,
         "blocking_reasons": blocking_reasons,
     }
-
-    # task 기반 안전망: intent.task가 "relation"인데 plan에 Graph 단계가
-    # 하나도 없으면 relations 추출 자체가 누락됐을 가능성이 있다. task도
-    # LLM 산출물이라 100% 신뢰할 수 없으므로 하드 실패로 만들지 않고,
-    # 조용히 넘어가지 않도록 경고만 남긴다(route_after_plan은 이 값을
-    # 보고 라우팅을 바꾸지 않는다 - blocking_reasons는 순수 정보성이다).
+    question = state.get("question", "")
+    by_id = {r["id"]: r for r in relations}
+    for target_step in plan:
+        if target_step.get("engine") != "rdb":
+            continue
+        alternatives = {}
+        for sid in target_step.get("depends_on") or []:
+            relation = by_id.get(sid.removeprefix("graph_"), {})
+            if relation.get("relation") not in {"holds", "holding", "held_by"}:
+                continue
+            chain, seen, root = [], set(), relation
+            while root and root.get("id") not in seen:
+                seen.add(root.get("id")); chain.append(root)
+                if not root.get("object_ref"):
+                    break
+                root = by_id.get(root["object_ref"], {})
+            name = root.get("object_entity", "")
+            if name and re.search(re.escape(name) + r"\s*(?:및|와|과)\s*(?:확인된\s*)?자회사", question):
+                alternatives.setdefault(name, []).append((sid, len(chain) > 1))
+        target_step["graph_any_groups"] = [[sid for sid, _ in group] for group in alternatives.values()
+                                            if {is_child for _, is_child in group} == {True, False}]
     if intent.get("task") == "relation" and not any(s["engine"] == "graph" for s in plan):
         blocking_reasons.append(
             "task=relation인데 plan에 Graph 단계가 없습니다 - relations 추출이 누락됐을 수 있습니다."
         )
-
-    # 계획이 비어 있으면 그 사실을 남겨 둔다. 다음 노드가 답변 불가
-    # 후보로 다루게 된다. 단, "애초에 조회할 게 없었다"와 "조회할 건
-    # 있었는데 라우팅에 실패했다"는 다른 상황이라 구분한다. 후자는 이미
-    # blocking_reasons에 구체적인 이유가 들어 있으므로 덧붙이지 않는다.
     if not plan and not blocking_reasons:
         blocking_reasons.append("조회할 대상이 없습니다(조건, 관계, 서술 요구가 모두 비어 있음).")
     route["blocking_reasons"] = blocking_reasons

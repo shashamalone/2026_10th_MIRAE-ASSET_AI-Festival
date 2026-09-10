@@ -58,7 +58,7 @@ fp:Product a owl:Class ;
 
 fp:Security a owl:Class ;
     rdfs:label "증권"@ko, "Security"@en ;
-    rdfs:comment "ETF·펀드가 편입할 수 있는 증권(주식·채권 등). fp:Holding의 대상이며, fp:issuedByCompany로 발행 기업에 연결된다. 인스턴스는 data/relations/etf_holding.csv(국내ETF 4사 편입종목)에서 생성한다. 해외ETF·펀드 편입분은 미확보(N-PORT·운용보고서 수집 대상)."@ko .
+    rdfs:comment "ETF·펀드가 편입할 수 있는 증권(주식·채권 등). fp:Holding의 대상이며, fp:issuedByCompany로 발행 기업에 연결된다. 국내ETF 인스턴스는 metadata/etf_holdings_provenance.json으로 검증된 4개 운용사 2026-08-21 편입 공시에서 생성한다. 해외ETF·펀드 편입분은 미확보(N-PORT·운용보고서 수집 대상)."@ko .
 
 fp:Bond a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
@@ -69,7 +69,7 @@ fp:ETF a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
     owl:disjointWith fp:Bond ;
     rdfs:label "상장지수펀드"@ko, "Exchange Traded Fund"@en ;
-    rdfs:comment "거래소 상장 지수연동 펀드. 국내(PREF01N001 pd_grp_no='ETF' 1,202건)·해외(PREF02N001 5,587건) 모두 이 클래스다. 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
+    rdfs:comment "거래소 상장 지수연동 펀드. 주최측 2026-08-24 정본에는 국내(PREF01N001 pd_grp_no='ETF') 1,235건이 있다. 국내 ETF 편입관계는 2026-08-21 운용사 공시가 검증된 723종에 적재한다. 편입종목 개념이 있으므로 fp:hasHolding의 domain에 포함된다."@ko .
 
 fp:ETN a owl:Class ;
     rdfs:subClassOf fp:Product, fp:Security ;
@@ -134,7 +134,7 @@ fp:Document a owl:Class ;
 
 fp:Holding a owl:Class ;
     rdfs:label "편입관계"@ko, "Holding"@en ;
-    rdfs:comment "상품이 특정 증권을 편입한 사실을 나타내는 **n-ary 중간 노드**. 편입비중(fp:weight)과 편입기준일(fp:asOf), 근거문서(fp:supportedBy)를 동반해야 하므로 상품→증권 단순 관계로 표현하지 않는다. 인스턴스는 국내ETF 711종 47,016건(data/relations/etf_holding.csv, as_of 2026-07-10)이 적재되어 있다. 해외ETF·펀드 편입분은 미확보."@ko .
+    rdfs:comment "상품이 특정 증권을 편입한 사실을 나타내는 **n-ary 중간 노드**. 편입비중(fp:weight)과 편입기준일(fp:asOf), 근거문서(fp:supportedBy)를 동반해야 하므로 상품→증권 단순 관계로 표현하지 않는다. 인스턴스는 국내ETF 723종 47,244건(4개 운용사 공시, as_of 2026-08-21)이 적재되어 있다. 활성 대상 중 ACE 2종은 해당일 공시가 비어 미확보이며 해외ETF·펀드 편입분도 미확보다."@ko .
 
 fp:MetricSnapshot a owl:Class ;
     rdfs:label "수치 스냅샷"@ko, "Metric Snapshot"@en ;
@@ -315,7 +315,7 @@ fp:hasHolding a owl:ObjectProperty ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( fp:ETF fp:PublicFund ) ] ;
     rdfs:range fp:Holding ;
     rdfs:label "편입관계 보유"@ko, "has holding"@en ;
-    rdfs:comment "상품 → 편입관계 노드(n-ary). 편입비중·기준일·근거문서를 달아야 하므로 상품→증권 직결 관계를 쓰지 않는다. **fp:ETN은 편입종목 개념이 없어 domain에서 제외**한다. 인스턴스는 국내ETF 47,016건이 적재되어 있고, 해외ETF·펀드 편입분은 외부 수집(SEC N-PORT·운용보고서) 대상으로 남아 있다."@ko .
+    rdfs:comment "상품 → 편입관계 노드(n-ary). 편입비중·기준일·근거문서를 달아야 하므로 상품→증권 직결 관계를 쓰지 않는다. **fp:ETN은 편입종목 개념이 없어 domain에서 제외**한다. 인스턴스는 국내ETF 47,244건(as_of 2026-08-21)이 적재되어 있고, 해외ETF·펀드 편입분은 외부 수집(SEC N-PORT·운용보고서) 대상으로 남아 있다."@ko .
 
 fp:holdingSecurity a owl:ObjectProperty ;
     rdfs:domain fp:Holding ;
@@ -562,7 +562,7 @@ fp:weight a owl:DatatypeProperty ;
     rdfs:domain fp:Holding ;
     rdfs:range xsd:decimal ;
     rdfs:label "편입비중"@ko, "weight"@en ;
-    rdfs:comment "편입관계의 비중(%). 반드시 fp:asOf 기준일과 함께 제시한다. 현재 편입 데이터가 0건이라 값 없음."@ko ;
+    rdfs:comment "편입관계의 비중(%). 반드시 fp:asOf 기준일과 함께 제시한다. 현재 국내ETF 723종 47,244건은 2026-08-21 운용사 공시 기준이다."@ko ;
     fp:sourceTable "derived:etf_holding" ; fp:sourceColumn "derived:etf_holding.weight" .
 
 fp:asOf a owl:DatatypeProperty ;
@@ -632,7 +632,7 @@ fp:documentPublishedDate a owl:DatatypeProperty ;
     rdfs:domain fp:Document ;
     rdfs:range xsd:date ;
     rdfs:label "문서 발행일"@ko, "document published date"@en ;
-    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-08-24) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
+    rdfs:comment "근거 문서의 발행일. 데이터 기준일(2026-07-11) 이후 문서는 답변 근거로 쓰지 않는다."@ko ;
     fp:sourceTable "derived:document" ; fp:sourceColumn "derived:document.published_date" .
 
 fp:documentQuote a owl:DatatypeProperty ;

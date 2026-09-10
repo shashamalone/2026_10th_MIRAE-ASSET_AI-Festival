@@ -1,7 +1,6 @@
 """
 타입이 있는 GraphLogicalPlan 검증·SPARQL 컴파일.
 
-팀원의 gragh-test 노트북 `tools/graph_plan.py`(셀 37)를 이식했다.
 `validate_graph_plan`/`compile_graph_plan`/`subsidiary_relation_plan`/
 `subsidiary_holding_etf_plan`만 옮겼다 - `tools/rdb.py`에 의존하는
 `build_etf_rdb_handoff`/`execute_etf_rdb_handoff`/`_order_binding`은 제외했다
@@ -25,9 +24,7 @@ DATA_CUTOFF = "2026-08-24"
 MAX_GRAPH_STEPS = 8
 MAX_QUERY_LIMIT = 500
 _ID = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,39}$")
-# 분류 개체(fp:InvestmentRegion·fp:AssetType·fp:RiskGrade·fp:Theme …)에는 datatype
-# property가 없다. "투자지역은?" 류의 답은 그 개체의 rdfs:label이므로 output property로
-# 허용하되 TBox 애노테이션이 없어 provenance 항목으로는 넣지 않는다.
+
 LABEL_PROPERTY = str(RDFS.label)
 _EVIDENCE_CLASSES = {
     FP + "Holding", FP + "MetricSnapshot", FP + "SubsidiaryRelation", FP + "Risk",
@@ -60,8 +57,6 @@ class CompiledGraphQuery:
     sparql: str
     columns: tuple[str, ...]
     evidence_columns: tuple[str, ...]
-    # (curie, sourceTable, sourceColumn). row-level evidence가 없는 분류형 조회의
-    # 근거는 TBox 애노테이션 + 적재 스냅샷 기준일이다.
     tbox_provenance: tuple[tuple[str, str, str], ...] = ()
 
 
@@ -105,17 +100,15 @@ def validate_graph_plan(plan: dict, entity: dict, fragment: SchemaFragment,
     outputs = plan.get("outputs") or []
     if not nodes:
         errors.append("nodes가 비어 있습니다")
-    # seed 하나의 속성만 묻는 질문(투자지역·위험등급 등)은 관계가 없다. 이 형태에
-    # edge를 요구하면 LLM이 없는 관계를 지어내다 domain 위반으로 끝난다(실측).
+
     if not edges and not (len(nodes) == 1 and outputs):
         errors.append("edges가 비어 있습니다")
     if not outputs:
-        # 투영할 변수가 없으면 SPARQL이 `SELECT WHERE`가 되어 파서에서 터진다(실측).
+
         errors.append("outputs가 비어 있습니다")
     elif all(o.get("node") == "seed" and _uri(o.get("property", "")) == LABEL_PROPERTY
              for o in outputs if isinstance(o, dict)):
-        # seed 이름은 사용자가 이미 말한 값이다. 이것만 돌려주면 답이 아니고 TBox
-        # provenance도 없어 무근거가 된다. 관계형 질문을 seed 1개로 접는 실패 모드.
+
         errors.append("seed의 rdfs:label만으로는 답이 되지 않습니다. "
                       "질문이 요구하는 다른 개체를 node·edge로 잡고 그 값을 outputs에 넣으십시오")
     if len(edges) > MAX_GRAPH_STEPS:
@@ -257,12 +250,6 @@ def compile_graph_plan(plan: dict, entity: dict, fragment: SchemaFragment,
             return "?seed" if seed_variable else _term(seed_uri)
         return f"?{node_id}"
 
-    # 타입은 plan validator가 TBox로 검사한다. 모든 변수에 rdf:type 조인을 넣으면
-    # Oxigraph가 넓은 class scan부터 시작할 수 있다. ETN 혼입을 막아야 하는 상품
-    # 경계만 실행 쿼리에도 명시하고, seed는 해소된 URI 자체를 사용한다.
-    # fp:Bond는 여기 넣지 않는다. 채권은 전부 CorporateBond·SpecialBond·
-    # GovernmentBond로만 적재돼 있어 이 게이트가 정답 plan을 조용히 0행으로
-    # 만든다. Oxigraph는 추론하지 않는다.
     runtime_type_gate = {FP + "ETF", FP + "ETN", FP + "PublicFund"}
     for node_id, cls in node_types.items():
         if node_id != "seed" and cls in runtime_type_gate:
@@ -272,8 +259,7 @@ def compile_graph_plan(plan: dict, entity: dict, fragment: SchemaFragment,
         where.append(f"{ref(edge['subject'])} {_term(_uri(edge['predicate']))} "
                      f"{ref(edge['object'])} .")
     if not edges:
-        # edge 없는 속성 조회는 output이 전부 OPTIONAL일 수 있다. 해소된 class로
-        # seed를 고정해 두지 않으면 미바인딩 1행이 "결과 있음"으로 새어 나간다.
+
         grounding = f"{ref('seed')} a {_term(seed_class)} ."
         if grounding not in where:
             where.append(grounding)
@@ -312,6 +298,10 @@ def compile_graph_plan(plan: dict, entity: dict, fragment: SchemaFragment,
         ])
         evidence_vars.extend(aliases[key] for key in
                              ("as_of", "source", "document", "document_title"))
+        for key in ("document_publisher", "document_date", "document_quote"):
+            where.append(f"OPTIONAL {{ {ref(node_id)} {_term(_EVIDENCE_PROPERTIES['document'])} ?{aliases['document']} . "
+                         f"?{aliases['document']} {_term(_EVIDENCE_PROPERTIES[key])} ?{aliases[key]} . }}")
+            select_vars.append(aliases[key])
 
     projected = select_vars + evidence_vars
     projected = list(dict.fromkeys(projected))
@@ -352,14 +342,7 @@ def subsidiary_relation_plan(limit: int = 100) -> dict:
 
 
 def company_holding_etf_plan(limit: int = 500) -> dict:
-    """"<회사>를 편입/보유한 ETF" - 자회사 체인 없이 회사가 발행한 증권을
-    직접 보유한 ETF를 찾는 결정적 plan. 2026-09-02 실측: "SK하이닉스를
-    편입한 ETF"류 질문에서 HCX가 생성하는 GraphLogicalPlan이 역방향 관계
-    (증권->발행기업, edge subject/object 방향)를 자주 틀려 3회 교정 안에
-    abstain하는 사례가 반복됐다 - 실제로는 이 관계가 그래프에 이미
-    있는데도(직접 SPARQL로 ETF 10건 이상 확인) LLM 생성 경로가 못 찾는
-    것이었다. subsidiary_holding_etf_plan에서 자회사 홉(hasSubsidiary/
-    subsidiaryCompany)만 뺀 것과 같다."""
+
     return {
         "nodes": [
             {"id": "seed", "class_uri": "fp:Company"},

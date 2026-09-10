@@ -9,10 +9,9 @@ Graph URI와 사용자 표기를 분리하는 exact-first entity resolver.
 이상이면 ``ambiguous``로 멈추고 호출자에게 넘긴다. 호출자가 사용자 확인 없이
 실행해도 되는 상태는 ``status == "resolved"`` 뿐이다.
 
-[알려진 제약] 2단계(법인격 정규화, `_company_master`)는 `data/enriched/
-company_master.csv`가 이 워크스페이스에 없어 동작하지 않는다 - CSV가 없으면
-`_company_master`가 빈 dict를 돌려주고 그 다음 단계(3단계, 정규형/세그먼트
-완전일치)로 조용히 넘어간다. 1·3단계가 대부분의 표기 흔들림을 이미 커버한다.
+[법인명 보강] 2단계(법인격 정규화, `_company_master`)는
+`data/enriched/company_master.csv`를 읽는다. 파일이 없는 배포 환경에서는
+빈 dict로 폴백하고 다음 단계(정규형/세그먼트 완전일치)를 계속 수행한다.
 
 [성능] 3단계는 첫 호출 때 한 번 만드는 프로세스 내 인덱스(`_entity_index`)로
 조회한다. 원래의 클래스 전체 SPARQL 스캔은 호출당 2.6~6.1s였고(2026-09-05
@@ -36,11 +35,6 @@ from tools.graph_schema import FP
 
 logger = logging.getLogger(__name__)
 
-
-# ── partial(부분일치) 전용 질의 템플릿 ────────────────────────────────────────
-# resolve_entity(allow_partial=True) 에서만 쓴다. %(...)s 자리는 _class_spec 이
-# 돌려주는 속성명과 LIMIT 으로 채운다. 완전일치 경로는 이 템플릿을 쓰지 않고
-# _exact_candidates 가 UNION 으로 직접 만든다(인덱스 조회가 되도록).
 _ENTITY_QUERY = """
 PREFIX fp: <http://mafest.ai/product#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -58,12 +52,8 @@ ORDER BY ?entity ?name ?label ?alt ?code
 %(window)s
 """
 
-# ABox 인스턴스 네임스페이스. TBox 의 fp:(product#) 와 다르다.
 FPI = "http://mafest.ai/instance/"
 
-# 정규형(공백·구분자 제거) 비교 경로를 태울 클래스.
-# Company 계열은 여기 넣지 않는다 — 법인격 정규화(_company_master)라는
-# 더 강한 전용 경로가 이미 있고, 두 경로가 겹치면 판정 근거가 흐려진다.
 NORMALIZED_CLASSES = {
     "ETF", "ETN", "Product", "Bond", "PublicFund", "ShareClass",
     "Security", "Theme", "Industry", "Document",
@@ -220,18 +210,6 @@ def _segment_match(var: str, literal: str) -> str:
     return (f'(BOUND(?{var}) && CONTAINS('
             f'CONCAT("/", REPLACE(LCASE(STR(?{var})), "[\\\\s_-]+", ""), "/"), '
             f'CONCAT("/", LCASE({literal}), "/")))')
-
-
-# ── 3단계용 정규형·세그먼트 인덱스 ──────────────────────────────────────────
-# _normalized_literal_candidates_sparql 은 클래스 전체를 읽고 FILTER(REPLACE(
-# LCASE(...)))로 거른다. 리터럴 제약이 WHERE 패턴에 없어 색인을 못 타고 호출당
-# 2.6~6.1s 가 걸렸다(2026-09-05 실측). role=product 는 클래스 5개를 돌고 5단계
-# type-suffix 재시도가 그걸 두 번 하므로 seed 하나에 60s 가 나왔다(Q10).
-# 첫 호출 때 한 번 만드는 dict 로 "어느 entity 가 걸릴 수 있는가"만 좁히고,
-# 실제 행은 원래 SPARQL 에 VALUES ?entity 만 얹어 Oxigraph 가 그대로 내게 한다.
-# FILTER 의 행 단위 적용·DISTINCT·행 순서(canonical_name 이 여기에 좌우된다)를
-# Python 으로 흉내 내지 않기 위해서다. 키 규칙은 _segment_match 와 같아야 한다:
-# 값의 LCASE 후 [\s_-] 제거, "/" 로 나눈 세그먼트의 모든 연속 구간(전체 포함).
 
 _PREFIX_IRI = {
     "fp": FP,
@@ -524,7 +502,7 @@ ORDER BY""") % {
 # 주지만, 같은 표기가 여러 클래스에 실재할 때는 결과를 바꾼다.
 _ROLE_CLASS_ORDER = {
     "company": ("Company", "Security", "Organization"),
-    "issuer": ("Issuer", "Company", "Organization", "ETF", "ETN", "Product"),
+    "issuer": ("Issuer", "Company", "Organization"),
     "manager": ("AssetManager", "Organization"),
     "product": ("ETF", "PublicFund", "Bond", "ETN", "Product"),
     "share_class": ("ShareClass", "PublicFund"),
