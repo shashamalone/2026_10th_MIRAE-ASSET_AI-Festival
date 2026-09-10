@@ -4,7 +4,7 @@
 > 정형 금융상품 데이터를 Agent가 스스로 탐색·연산하고, 근거에 기반해 답변하는 Agent RAG·QA 구현
 **금융상품의 수치·관계·문서를 함께 조회하고, 확인된 근거로 답변하는 Agentic RAG · QA 시스템**
 
-제10회 미래에셋증권 AI Festival 제출 프로젝트입니다</br>
+제10회 미래에셋증권 AI Festival 공모전 제출용 프로젝트입니다</br>
 국내채권·국내ETF·해외ETF·공모펀드에 대한 자연어 질문을 분석하고, RDB·GraphDB·VectorDB를 질문에 맞게 조합합니다</br>
 의도 분석과 답변 생성에는 **NCP HyperCLOVA X**를 사용합니다
 
@@ -186,9 +186,8 @@ ARCHITECTURE.md            기존 아키텍처 기록
 
 
 ## 😎 팀원 소개
+| [Server / BackEnd] | [PM / Agent] | [Agent] | 
+| :---: | :---: | :---: |
+| <img src="https://avatars.githubusercontent.com/GarlicCook" width="150px;" alt=""> | <img src="https://avatars.githubusercontent.com/shashamalone" width="150px;" alt=""> | <img src="https://avatars.githubusercontent.com/yoonwanggyu" width="150px;" alt=""> | 
+| [김민섭](https://github.com/GarlicCook) | [김이정](https://github.com/shashamalone) | [윤왕규](https://github.com/yoonwanggyu) | 
 
-| [역할]                  | [역할]                  | [역할]                  |
-
-| :---------------------: | :---------------------: | :---------------------: |
-
-| [팀원 1](GitHub 프로필 링크) | [팀원 2](GitHub 프로필 링크) | [팀원 3](GitHub 프로필 링크) |
