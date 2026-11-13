@@ -160,8 +160,11 @@ def diagnose_claim(case, claim, t):
     if availability == "deprecated_definition":
         forbidden = [x.lower() for x in case.get("forbidden_fields", [])]
         req = case.get("required_definition_tokens", [])
-        if forbidden and contains_any(text, forbidden):
-            res.update(diagnosis="STALE_DEFINITION", severity="CRITICAL", note="폐기 컬럼을 plan/SQL에서 사용")
+        # 폐기 컬럼 "사용"은 실행된 SQL과 반환 행 키로만 본다. sql_builder가 남기는 "buyable_quantity(...)는 무효 컬럼이라
+        # 쓰지 않는다" 메모까지 exec_text로 훑으면 정반대 사실을 위반으로 세게 된다(2026-09-05 Lane C 실측).
+        sql_text = " ".join(str(r.get("sql") or "") for r in steps_of(t, "rdb")).lower()
+        if forbidden and (contains_any(sql_text, forbidden) or any(f in keys for f in forbidden)):
+            res.update(diagnosis="STALE_DEFINITION", severity="CRITICAL", note="폐기 컬럼을 SQL/반환 행에서 사용")
         elif req and not contains_any(ans, req):
             res.update(diagnosis="MISSING_DEFINITION_EXPLANATION", severity="ERROR", note="재정의 사실을 답변에 미명시(§11.5)")
         else:

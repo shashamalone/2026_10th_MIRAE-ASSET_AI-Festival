@@ -400,7 +400,7 @@ intent: task=lookup domain=['etf_gl'] entities=1 constraints=0
 - 1단계가 "사용자의 말"로 남겨둔 것을, 검증된 매핑표를 보고 "실제 컬럼 + 온톨로지 개념"으로 바꿔 물리적 DB와 연결한다. DB에서 찾은 것은 확정, 확정된게 없다면 unresolved에 남겨 LLM이 채워서 답변하지 않도록 한다.
 - 1단계의 intent분석에서 DB를 참조하지않고 Query_frame을 출력하여, 사용자의 intent 를 분석하는데에 집중했다면
 - 2단계의 metadata_context에서는 `etf_kr.expense_ratio`  +  `fp:expenseRatio` 등을 연결하여 "물리 컬럼 + 온톨로지 개념"을 연결해 실제로 물리컬럼을 연결한다.
-- 즉, 1단계가 금지당했던 일(영문 컬럼명·fp: URI 만들기)을 2단계가 검증된 매핑표(metadata/schema_bindings.json)를 보고진행한다. 여기서의 내용에 따라 mapping된 컬럼정보로 인해 SQL,SPARQL의 오류가 줄어든다.
+- 즉, 1단계가 금지당했던 일(영문 컬럼명·fp: URI 만들기)을 2단계가 검증된 매핑표(`test/gragh-test/schema_bindings.json`, 초기 실험 재현용)를 보고진행한다. 여기서의 내용에 따라 mapping된 컬럼정보로 인해 SQL,SPARQL의 오류가 줄어든다.
 
 ```
 intent (1단계)                  metadata_context / plan (2단계)
@@ -415,7 +415,7 @@ intent (1단계)                  metadata_context / plan (2단계)
 핵심 동작:
 
 - ① 근거 있는 물리적 DB 연결
-  - 추측이 아니라 metadata/schema_bindings.json(검증된 logical↔physical 매핑)과 business_rules.json을 조회해서만 컬럼을 붙인다. 
+  - 초기 실험에서는 `test/gragh-test/schema_bindings.json`(검증된 logical↔physical 매핑)과 `metadata/business_rules.json`을 조회해서만 컬럼을 붙인다. 현재 런타임 매핑은 `src/tools/rdb_schema.py`를 사용한다.
   - 1단계가 fp:나 영문 컬럼명을 만드는 걸 금지당했던 이유가 여기서 해소된다.
 - ② 사용자가 말 안 한 안전장치 주입
   - mandatory_filters(ETF에서 ETN 배제), default_order, ID tie-breaker, as_of 실질 기준일을 걸러낸다
@@ -1497,5 +1497,4 @@ LogicalPlan 키별
 | operator 화이트리스트 6개                                  | tools/rdb.py:16                 |
 | CompiledQuery 정의                                    | tools/rdb.py:19                 |
 | 규칙 상수 (max_rows · max_joins · statement_timeout_ms) | metadata/business_rules.json    |
-
 

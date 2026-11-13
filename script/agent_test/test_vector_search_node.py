@@ -331,7 +331,8 @@ class AnswerContextTest(unittest.TestCase):
     def test_generate_answer_node_passes_requested_items_and_vector_status(self):
         mock_llm = mock.Mock()
         mock_llm.with_structured_output.return_value.invoke.return_value = {
-            "think_trace": "t", "answer": "a",
+            # 30자 미만 answer는 빈 답변으로 보고 재시도한다(nodes._is_blank_answer) - 실제 문장으로 둔다
+            "think_trace": "t", "answer": "펀드 X는 존재하나 운용 전략 관련 문서를 확인할 수 없습니다.",
         }
         state = {
             "question_id": "Q1",
@@ -361,7 +362,9 @@ class AnswerContextTest(unittest.TestCase):
         self.assertIn("topic_not_covered", human_message)
 
         final = json.loads(result["answer"])
-        self.assertEqual(final["answer"], "a")
+        self.assertTrue(final["answer"].startswith("펀드 X는 존재하나 운용 전략 관련 문서를 확인할 수 없습니다."))
+        # 미산출 항목은 결정론 footer로도 붙는다(2026-09-05 Lane C)
+        self.assertIn("제공된 데이터로 확인할 수 없는 항목: 운용 전략 — 문서에", final["answer"])
 
 
 if __name__ == "__main__":

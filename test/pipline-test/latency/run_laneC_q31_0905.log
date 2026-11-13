@@ -1,0 +1,6 @@
+[run] 1문항 x 1회차 -> test\pipline-test\latency\traces_laneC_q31_0905.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+
+===== [Q31 r1] tokens=59993 | 신용등급이 AAAA인 매수 가능 채권을 찾아 상품번호와 신용평가 근거를 제시해줘.
+[done] Q31 r1 a1 status=ok e2e=10.7s llm=3 tok=10842 rem=55/43551 | 제공된 데이터로는 이 질문에 답변할 수 없습니다. (RDB 조회 건너뜀: 유효하지 않은 조건: 신용등급='AAAA' ('AAAA'는 crd_grd의 유효 값 범위에 없습니다 (유효
+[run] 완료 -> test\pipline-test\latency\traces_laneC_q31_0905.jsonl

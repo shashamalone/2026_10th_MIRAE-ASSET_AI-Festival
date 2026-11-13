@@ -1,0 +1,180 @@
+[run] 8문항 x 1회차 -> test\pipline-test\latency\traces_laneC_c12_0905.jsonl
+[run] sdk retry mode: {'_llm_plan': 'with_options', '_llm_answer': 'with_options'}
+
+===== [Q11 r1] tokens=59993 | 최신 갱신일 기준 매수가능수량이 0보다 큰 원화채권 중 신용등급이 AA- 이상인 종목을 알려줘. 상품명, 발
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT table_schema || '.' || table_name AS t FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'raw' AND table_name = 'prbd01n001'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_pbcm, crd_grd, mat_dt, buy_yield, sale_yield_base_dt
+FROM raw.prbd01n001
+WHERE curr_cd = 'KRW'
+  AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+
+[done] Q11 r1 a1 status=ok e2e=27.9s llm=4 tok=14807 rem=54/38524 | 다음은 해당 조건을 만족하는 채권들입니다:
+
+1. 퍼스트파이브지제팔십사차유동화전문1-14 - 발행사: 퍼스트파이브지제팔십사차유동화전문, 신용등급: AAA, 만기일: 2027년 2월
+
+===== [Q13 r1] tokens=38517 | 매수 가능한 회사채 중 AA- 이상이고 잔존기간이 3년 이하인 종목을 매수수익률 순으로 상위 10개 알려줘.
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd, remaining_days, buy_yield
+FROM raw.prbd01n001
+WHERE std_pd_mcls_nm = '회사채'
+  AND crd_grd IN ('AA-', 'AA0', 'AA+', 'AAA')
+  AND remaining_days <= 1095
+  AND buy_yield IS NOT NULL
+ORDER BY buy_yield DESC NULLS LAST
+LIMIT 10
+
+[done] Q13 r1 a1 status=ok e2e=24.9s llm=4 tok=14423 rem=48/17321 | 1. 우리은행조건부자본증권(상)2710이(신)영구5갑16(조건상각/콜/후): 등급 서열 규칙 AA-, 잔존일수 787일, 수익률 5.29%, 매수가능수량 정보 없음
+2. NH농협금
+[guard] remaining=47 tokens=17314 -> 6.5s 대기
+
+===== [Q17 r1] tokens=59993 | 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품을 찾아줘. 상품명, 티
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'raw' AND table_name = 'pref02n001'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm, cu_base_index, cu_index_repl_mthd, du_last_aum, cu_charge_rt, pd_curr_cd
+FROM raw.pref02n001
+WHERE wu_inv_ast_type = 'Equity'
+  AND cu_charge_rt <= 0.05
+  AND du_last_aum >= 1e+11
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+
+[done] Q17 r1 a1 status=ok e2e=17.9s llm=4 tok=13559 rem=54/39137 | 다음은 미국 주식형 ETF 중 AUM이 1천억 달러 이상이고 총보수가 0.05% 이하인 상품들입니다:
+
+1. 상품명: Vanguard 500 Index Fund;ETF, 티커: V
+
+===== [Q18 r1] tokens=39130 | 해외 채권 ETF 중 총보수가 0.10% 이하인 상품을 AUM 순으로 10개 정리해줘. 기초지수, 투자지역,
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, cu_base_index, wu_inv_rgn, cu_index_repl_mthd, ru_mkt_price, du_vol_1d
+FROM raw.pref02n001
+WHERE wu_inv_ast_type = 'Bond'
+  AND cu_charge_rt <= 0.1
+  AND du_last_aum IS NOT NULL
+ORDER BY du_last_aum DESC NULLS LAST
+LIMIT 10
+
+[done] Q18 r1 a1 status=ok e2e=22.8s llm=4 tok=13834 rem=48/18407 | 총보수가 0.10% 이하인 해외 채권 ETF 중 AUM 순으로 상위 10개의 상품 정보는 다음과 같습니다:
+
+1. Vanguard Total Bond Market Index Fun
+[guard] remaining=47 tokens=18400 -> 18.5s 대기
+
+===== [Q22 r1] tokens=59993 | 캠브리콘이 실제 편입된 중국 반도체 ETF를 찾아줘. ETF→편입증권→기업 경로를 사용하고, ETF명·티커·
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_abrv_nm
+FROM raw.pref02n001
+
+[done] Q22 r1 a1 status=ok e2e=36.8s llm=4 tok=14212 rem=47/12856 | 조건에 맞는 중국 반도체 ETF에 대한 구체적인 정보(편입비중, 편입기준일, 편입내역 문서명 및 근거 문장)는 제공할 수 없습니다. 다만, 아래는 해외 ETF 중에서 일부 식별된 
+[guard] remaining=46 tokens=12849 -> 23.5s 대기
+
+===== [Q24 r1] tokens=59993 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'raw' AND table_name = 'pref01n001'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_circ_net_tamt, du_base_dt, cu_upt_dt
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+  AND pd_net_tamt IS NOT NULL
+ORDER BY pd_net_tamt DESC NULLS LAST
+LIMIT 1
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "du_base_dt" does not exist
+LINE 1: SELECT pd_nm, pd_circ_net_tamt, du_base_dt, cu_upt_dt
+                                        ^
+HINT:  Perhaps you meant to reference the column "pref01n001.fn_base_dt".
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): column 'du_base_dt' does not exist; perhaps meant 'ref_base_dt'; column name corrected based on available columns
+수정된 SQL:
+SELECT pd_nm, pd_circ_net_tamt, ref_base_dt, cu_upt_dt FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_net_tamt IS NOT NULL ORDER BY pd_net_tamt DESC LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_circ_net_tamt, ref_base_dt, cu_upt_dt FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_net_tamt IS NOT NULL ORDER BY pd_net_tamt DESC LIMIT 1
+
+[done] Q24 r1 a1 status=rate_limited e2e=19.6s llm=6 tok=16806 rem=46/2882 | 검색된 데이터 전체 1건 중 1건입니다.
+1. pd_nm: 삼성 KODEX200 증권상장지수투자신탁[주식], pd_circ_net_tamt: 0.00, ref_base_dt: 20
+[guard] 429 -> 새 창에서 1회 재실행
+[guard] remaining=45 tokens=2875 -> 40.5s 대기
+
+===== [Q24 r1 retry] tokens=59993 | 에코프로의 자회사를 편입한 ETF를 찾고 그중 최신 AUM이 가장 큰 상품의 위험요인을 알려줘. 에코프로→자
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_circ_net_tamt, du_base_dt, cu_upt_dt
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+  AND pd_net_tamt IS NOT NULL
+ORDER BY pd_net_tamt DESC NULLS LAST
+LIMIT 1
+
+
+[❌ SQL 실패] 시도 1/3
+원인(DB 에러):
+HTTP 400
+SQL 실행 실패: UndefinedColumn: column "du_base_dt" does not exist
+LINE 1: SELECT pd_nm, pd_circ_net_tamt, du_base_dt, cu_upt_dt
+                                        ^
+HINT:  Perhaps you meant to reference the column "pref01n001.fn_base_dt".
+
+[🔧 SQL 수정] 시도 1 실패 -> 시도 2 재시도
+수정 이유(LLM 판단): 컬럼명이 잘못 지정되어 있어 올바른 컬럼명으로 변경함
+수정된 SQL:
+SELECT pd_nm, pd_circ_net_tamt, ref_base_dt, cu_upt_dt FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_net_tamt IS NOT NULL ORDER BY pd_net_tamt DESC LIMIT 1
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, pd_circ_net_tamt, ref_base_dt, cu_upt_dt FROM raw.pref01n001 WHERE pd_grp_no = 'ETF' AND pd_net_tamt IS NOT NULL ORDER BY pd_net_tamt DESC LIMIT 1
+
+[done] Q24 r1 a2 status=ok e2e=22.3s llm=6 tok=21577 rem=52/27174 | 검색된 데이터 전체 1건 중 1건입니다.
+1. pd_nm: 삼성 KODEX200 증권상장지수투자신탁[주식], pd_circ_net_tamt: 0.00, ref_base_dt: 20
+[guard] remaining=51 tokens=27167 -> 37.5s 대기
+
+===== [Q25 r1] tokens=59993 | 국민성장펀드의 구조, 운용주체, 자금조달 방식과 최근 투자전략 동향을 정리해줘. 공식 정책자료·운용자료만 사
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'raw' AND table_name = 'prfd01n001'
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT itm_nm
+FROM raw.prfd01n001
+WHERE itm_nm LIKE '%국민성장%'
+
+[done] Q25 r1 a1 status=ok e2e=16.2s llm=4 tok=14068 rem=54/38386 | 국민성장펀드에 대한 구조, 운용주체, 자금조달 방식 및 최근 투자전략 동향에 관한 정보는 현재 제공된 데이터로는 확인할 수 없습니다. 또한 관련된 공식 정책자료나 운용자료 역시 문
+
+===== [Q27 r1] tokens=38379 | LG에너지솔루션 및 확인된 자회사가 발행한 채권과 이 기업들을 편입한 ETF를 찾아줘. 모자회사 관계의 공식
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm, crd_grd
+FROM raw.prbd01n001
+
+
+[DEBUG] 서버로 전송하는 SQL:
+SELECT pd_nm
+FROM raw.pref01n001
+WHERE pd_grp_no = 'ETF'
+
+[done] Q27 r1 a1 status=ok e2e=24.6s llm=5 tok=18360 rem=46/11062 | 모자회사 관계의 공식 근거, 채권 신용등급·만기, ETF 편입비중에 대한 정보는 확인할 수 없었습니다. 또한 배터리산업 위험요인에 대한 정보도 문서를 통해 확인할 수 없었습니다.
+
+[run] 완료 -> test\pipline-test\latency\traces_laneC_c12_0905.jsonl

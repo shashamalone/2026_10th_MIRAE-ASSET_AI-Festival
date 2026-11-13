@@ -32,6 +32,7 @@ LangGraph 노드 함수 모음. plan_query_db.py(DB 검색 흐름 결정)를 뺀
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from agent.get_clova import _llm_answer, _llm_plan
@@ -1282,6 +1283,189 @@ def _build_answer_preview(merged_rows: list[dict], total_budget: int = 20) -> li
 
     return [{k: v for k, v in row.items() if not k.startswith("_")} for row in preview]
 
+# 목록형 답변 예산. 2026-09-05 실측: 20행×6열을 그대로 보이면 답변 LLM이 2,048 출력
+# 토큰을 넘기거나(Q18) 빈 배열 "[]"만 내놓았다(Q17). limit이 없는 목록은 10행이면
+# "전체 M건 중 N건"으로 충분하다.
+ANSWER_DEFAULT_ROWS = 10
+ANSWER_MAX_ROWS = 20
+
+_FIELD_EXCLUDED_RE = re.compile(r"요청된 필드 '(.+?)'[는은]? 대응하는 컬럼을 찾지 못해")
+# sql_builder가 남기는 "buyable_quantity(매수가능수량)는 주최측이 무효로 공지한 컬럼..." 메모
+_DEPRECATED_COLUMN_RE = re.compile(r"(\w+)\((.+?)\)[는은]? 주최측이 무효로 공지한 컬럼")
+_ROW_NAME_KEYS = ("pd_nm", "itm_nm", "상품명", "name", "product_name", "pd_abrv_nm")
+# 관계 종류별로 "어떤 데이터가 있어야 답할 수 있는지"(루브릭 §11.3). intent의 relation 이름은
+# 자유 표기(편입/보유/holds/자회사/subsidiary_of)라 키워드로 종류를 판정한다.
+_RELATION_KIND_WORDS = {
+    "holds": ("편입", "보유", "구성", "hold"),
+    "subsidiary_of": ("자회사", "계열", "지배", "subsidiar"),
+    "tagged_with": ("테마", "tagged", "theme"),
+    "issued_by": ("발행", "issu"),
+}
+_RELATION_DATA_NEEDED = {
+    "holds": "편입내역(보유종목·편입비중·편입기준일) 데이터가 주최측 원천에 없어 외부 데이터가 필요함",
+    "subsidiary_of": "자회사·모자회사 관계(지배구조) 데이터가 주최측 원천에 없어 외부 데이터가 필요함",
+    "tagged_with": "테마 분류 데이터에서 해당 테마를 찾지 못함",
+}
+_RELATION_DEPENDENT_FIELD_WORDS = {
+    "holds": ("편입", "보유", "비중", "구성", "중복률", "집중"),
+    "subsidiary_of": ("자회사", "모자회사", "계열", "지배"),
+}
+_GRAPH_STATUS_KO = {
+    "abstain_entity_not_found": "그래프에서 해당 엔티티를 찾지 못함",
+    "abstain_evidence_missing": "관계를 뒷받침하는 근거 문서(supportedBy)가 없음",
+    "abstain_no_seed_text": "관계 주체 이름이 없어 조회하지 못함",
+    "abstain_exception": "그래프 조회 장애",
+}
+
+
+def _relation_kind(name: str) -> str:
+    low = (name or "").lower()
+    for kind, words in _RELATION_KIND_WORDS.items():
+        if any(w in low for w in words):
+            return kind
+    return ""
+
+
+def _answer_row_budget(intent: dict) -> int:
+    limit = str((intent.get("sort") or {}).get("limit") or "").strip()
+    if limit.isdigit() and int(limit) > 0:
+        return min(int(limit), ANSWER_MAX_ROWS)
+    return ANSWER_DEFAULT_ROWS
+
+
+def _build_item_status(state: PipelineState) -> list[dict]:
+    """요청 항목(output_requirements.fields/narrative_topics)마다 {item, status, reason}.
+
+    미산출은 파이프라인이 남긴 명시적 신호에서만 판정한다 - RDB가 "대응 컬럼 없음"으로
+    제외한 필드와 skipped_reason, Vector의 미확보 주제·비정상 status, Graph abstain
+    (관계 종류별로 필요한 데이터 종류를 사유로 붙인다). 그 외는 산출로 두고 값 인용은
+    답변 LLM에 맡긴다. Q25(2026-09-05)처럼 행이 있어도 요청 항목이 컬럼에 없는 경우와
+    Q22·Q24·Q27처럼 편입·자회사 관계가 원천에 없는 경우를 답변 문장으로 잇는 근거다."""
+    intent = state.get("intent") or {}
+    req = intent.get("output_requirements") or {}
+    items = list(dict.fromkeys((req.get("fields") or []) + (req.get("narrative_topics") or [])))
+    step_results = state.get("step_results") or {}
+    plan_by_id = {s["step_id"]: s for s in state.get("plan") or []}
+    missing: dict[str, str] = {}
+    extra: list[dict] = []
+
+    for step_id, res in step_results.items():
+        engine = res.get("engine")
+        if engine == "rdb":
+            for note in res.get("assumptions") or []:
+                m = _FIELD_EXCLUDED_RE.search(note)
+                if m:
+                    missing.setdefault(m.group(1), f"{res.get('domain', '')} 데이터에 대응 컬럼이 없음")
+                d = _DEPRECATED_COLUMN_RE.search(note)
+                if d:
+                    # 루브릭 §11.5 정의변경: 폐기 컬럼을 쓰지 않았다는 사실과 대체 정의를 답변에 남긴다
+                    missing[d.group(2)] = (f"{d.group(1)} 컬럼은 주최측이 무효로 공지해 사용하지 않음"
+                                           "(구매 가능 여부는 공지대로 상장폐지·리스팅 종료 종목을 제외한 전 종목으로 봄)")
+            if res.get("skipped_reason"):
+                extra.append({"item": f"{res.get('domain', '')} 조회", "status": "미산출", "reason": res["skipped_reason"]})
+        elif engine == "vector":
+            status = res.get("status")
+            for sec, labels in ((res.get("topic_coverage") or {}).get("uncovered") or {}).items():
+                for label in labels:
+                    missing.setdefault(label, f"문서에 {VECTOR_SECTION_LABELS.get(sec, sec)} 섹션이 없어 근거 문서 미확보")
+            if status not in (None, "ok", "low_confidence", "chained"):
+                for label in req.get("narrative_topics") or []:
+                    missing.setdefault(label, f"근거 문서 미확보(문서 검색 {status})")
+        elif engine == "graph":
+            status = str(res.get("status") or "")
+            if not status.startswith("abstain"):
+                continue
+            relation = (plan_by_id.get(step_id) or {}).get("relation") or {}
+            kind = _relation_kind(relation.get("relation"))
+            if kind == "issued_by":
+                continue  # 발행사 관계는 채권 RDB의 발행사 컬럼이 대신 답한다
+            status_ko = _GRAPH_STATUS_KO.get(status, status)
+            reason = _RELATION_DATA_NEEDED.get(kind) or status_ko
+            # 주체 이름이 없는 relation(LLM이 요청 필드를 관계로 잘못 낸 것, 2026-09-05 Q22 R2~R5)은
+            # 항목으로 세지 않는다 - 의존 필드의 사유 매핑만 쓴다.
+            if relation.get("object_entity"):
+                label = f"{relation['object_entity']} {relation.get('relation') or ''} 관계".replace("  ", " ")
+                extra.append({"item": label, "status": "미산출", "reason": f"{reason} ({status_ko})"})
+            for field in items:
+                if any(w in field for w in _RELATION_DEPENDENT_FIELD_WORDS.get(kind, ())):
+                    missing.setdefault(field, reason)
+
+    status_list = [
+        {"item": it, "status": "미산출" if it in missing else "산출", "reason": missing.get(it, "")}
+        for it in items
+    ]
+    return status_list + extra
+
+
+def _describe_item_status(item_status: list[dict]) -> str:
+    if not item_status:
+        return "(요청 항목 없음)"
+    return "\n".join(
+        f"- {x['item']}: {x['status']}" + (f" - {x['reason']}" if x.get("reason") else "")
+        for x in item_status
+    )
+
+
+def _missing_items_footer(item_status: list[dict]) -> str:
+    """미산출 항목을 답변 끝에 결정론으로 붙인다. LLM이 사유 문장을 빠뜨리면 루브릭 §11.2·§11.3의
+    "부족 사유 명시"가 조용히 실패하므로 프롬프트에만 맡기지 않는다."""
+    by_reason: dict[str, list[str]] = {}
+    for x in item_status:
+        if x["status"] == "미산출":
+            by_reason.setdefault(x.get("reason") or "사유 미기록", []).append(x["item"])
+    if not by_reason:
+        return ""
+    return "\n\n제공된 데이터로 확인할 수 없는 항목: " + "; ".join(
+        f"{', '.join(dict.fromkeys(items))} — {reason}" for reason, items in by_reason.items()
+    )
+
+
+def _as_of_footer(step_results: dict) -> str:
+    """행을 낸 RDB 도메인의 실질 기준일(AGENTS.md: 모든 수치에 기준일)을 결정론으로 붙인다."""
+    domains = [r.get("domain") for r in (step_results or {}).values()
+               if r.get("engine") == "rdb" and r.get("rows") and not r.get("merged_into")]
+    domains = list(dict.fromkeys(d for d in domains if d))
+    if not domains:
+        return ""
+    return "\n수치 기준일: " + ", ".join(f"{d} {rdb_schema.get_domain_as_of(d)}" for d in domains) + " (주최측 배포 2026-08-24)"
+
+
+def _row_names(rows: list[dict]) -> list[str]:
+    names = []
+    for row in rows:
+        for k in _ROW_NAME_KEYS:
+            v = row.get(k)
+            if v not in (None, ""):
+                names.append(str(v))
+                break
+    return list(dict.fromkeys(names))
+
+
+def _names_guard(answer: str, merged_rows: list[dict]) -> str:
+    """행이 소수(예산 이내)인데 answer에 상품명이 하나도 없으면 상품명 목록을 앞에 붙인다.
+    Q25(2026-09-05)에서 LLM이 미산출 항목 때문에 존재하는 상품 4건까지 '확인 불가'로 뭉뚱그렸다.
+    행이 예산보다 많은 경우(엔티티 필터가 빠진 100행 덤프)는 상품명을 붙이는 것 자체가 오답이라 제외한다."""
+    if not merged_rows or len(merged_rows) > ANSWER_MAX_ROWS:
+        return answer
+    names = _row_names(merged_rows)
+    if not names or any(n in answer for n in names):
+        return answer
+    return f"검색된 상품 {len(merged_rows)}건: {', '.join(names)}\n\n" + answer
+
+
+def _is_blank_answer(text: Any) -> bool:
+    """"[]"·"["·빈 문자열·"요청하신 정보는 다음과 같습니다."처럼 값 인용이 없는 answer(2026-09-05 Q17·Q23·Q26·Q29 실측)."""
+    s = str(text or "").strip()
+    return len(re.sub(r"[\[\]{}()\"'\s,.:;·\-]", "", s)) == 0 or len(s) < 30
+
+
+def _render_rows_fallback(preview: list[dict], total: int) -> str:
+    lines = [f"검색된 데이터 전체 {total}건 중 {len(preview)}건입니다."]
+    for i, row in enumerate(preview, 1):
+        cells = ", ".join(f"{k}: {'값 없음' if v in (None, '') else v}" for k, v in row.items())
+        lines.append(f"{i}. {cells}")
+    return "\n".join(lines)
+
 
 def generate_answer_node(state: PipelineState) -> dict:
     # 1. State에서 필요한 값 추출 (question_id가 들어온다고 가정)
@@ -1295,6 +1479,8 @@ def generate_answer_node(state: PipelineState) -> dict:
     # 2. retrieved_context (답변 근거) - state["step_results"]에서 엔진별
     # 실제 근거(SQL/건수/Graph 관계·evidence)를 조립한다(§10).
     retrieved_context = _build_retrieved_context(state)
+    item_status = _build_item_status(state)
+    footer = _missing_items_footer(item_status) + _as_of_footer(state.get("step_results") or {})
 
     # 3. 예외 처리: 데이터가 없는 경우
     if not merged_rows:
@@ -1305,9 +1491,11 @@ def generate_answer_node(state: PipelineState) -> dict:
             if result.get("engine") == "vector" and result.get("status") not in (None, "ok"):
                 detail = result.get("note") or result.get("error") or ""
                 reasons.append(f"문서 근거 {result['status']}: {detail}".strip())
+            elif result.get("engine") == "rdb" and result.get("skipped_reason"):
+                reasons.append(f"RDB 조회 건너뜀: {result['skipped_reason']}")
         reason = f" ({'; '.join(reasons)})" if reasons else ""
-        answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}"
-        
+        answer_text = f"제공된 데이터로는 이 질문에 답변할 수 없습니다.{reason}{footer}"
+
         final_response = {
             "question_id": question_id,
             "question": question,
@@ -1317,51 +1505,83 @@ def generate_answer_node(state: PipelineState) -> dict:
         }
         # FastAPI 등에서 쉽게 리턴하도록 JSON string이나 dict 자체를 반환 구조에 맞춤
         return {"answer": json.dumps(final_response, ensure_ascii=False), "trace": ["답변 생성: 데이터 없음 -> 답변불가 처리"]}
- 
+
     # 4. LLM용 데이터 준비
-    preview = _build_answer_preview(merged_rows)
-    rows_text = json.dumps(preview, ensure_ascii=False, default=str, indent=2)
     applied_conditions = _describe_applied_conditions(intent)
     requested_items = _describe_requested_items(intent)
     vector_status = _describe_vector_status(state.get("step_results") or {})
     sql_assumptions = _describe_sql_assumptions(state.get("step_results") or {})
+    item_status_text = _describe_item_status(item_status)
     # §10: think_trace를 LLM이 매번 새로 지어내지 않고, 파이프라인이 각
     # 노드에서 실제로 쌓아 온 실행 기록(질의 분석 -> plan 수립 -> 엔진별
     # 조회 -> 결과 합치기)을 근거로 요약하게 한다.
     execution_log = "\n".join(state.get("trace") or []) or "(기록 없음)"
 
-    # 5. 구조화된 출력(Structured Output)으로 LLM 호출
+    # 5. 구조화된 출력(Structured Output)으로 LLM 호출. 길이 초과·빈 answer면 행 예산을
+    # 절반으로 줄여 1회 재시도하고, 그래도 없으면 행을 결정론으로 정리해 답한다 -
+    # 행이 있는데 answer가 비는 것이 가장 흔한 조용한 오답이었다(2026-09-05).
     structured_llm = _llm_answer.with_structured_output(FINAL_ANSWER_JSON_SCHEMA, method="json_schema")
+    budget = _answer_row_budget(intent)
+    trace_notes: list[str] = []
+    response = None
+    preview: list[dict] = []
+    retry_hint = ""
+    for attempt in (1, 2):
+        preview = _build_answer_preview(merged_rows, budget)
+        rows_text = json.dumps(preview, ensure_ascii=False, default=str, indent=2)
+        try:
+            response = structured_llm.invoke(
+                [
+                    ("system", ANSWER_SYSTEM_PROMPT),
+                    (
+                        "human",
+                        f"[질문]\n{question}\n\n"
+                        f"[질문이 요구한 항목] (answer는 이 항목만 다룬다)\n{requested_items}\n\n"
+                        f"[요청 항목별 산출 상태] (미산출 항목은 사유를 그대로 문장으로 쓸 것)\n{item_status_text}\n\n"
+                        f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
+                        f"[이미 SQL로 적용된 조건] (아래 데이터는 이 조건을 전부 만족하는 행만 남은 결과다. "
+                        f"이 조건에 쓰인 컬럼이 데이터에 안 보여도 이미 만족된 것이니 다시 확인하지 마라)\n"
+                        f"{applied_conditions}\n\n"
+                        f"[SQL 실행 시 실제로 적용되거나 조정된 규칙]\n{sql_assumptions}\n\n"
+                        f"[실제 실행 기록] (think_trace는 이 로그를 근거로 요약할 것 - 지어내지 말 것)\n{execution_log}\n\n"
+                        f"{retry_hint}"
+                        f"[검색된 데이터] (전체 {len(merged_rows)}건 중 {len(preview)}건 표시)\n{rows_text}",
+                    ),
+                ]
+            )
+        except Exception as e:  # noqa: BLE001 - 길이 초과(LengthFinishReasonError) 등. 2회째 실패는 결정론 폴백으로
+            trace_notes.append(f"답변 생성 {attempt}회차 실패: {type(e).__name__}")
+            response = None
+            if "RateLimit" in type(e).__name__:
+                break  # 429는 같은 창에서 다시 불러도 429다(2026-09-05 Q24 실측) - 토큰만 태우지 말고 바로 폴백
+        if response is not None and not _is_blank_answer(response.get("answer")):
+            break
+        if response is not None:
+            trace_notes.append(f"답변 생성 {attempt}회차: answer가 비어 있음")
+            response = None
+        budget = max(3, budget // 2)
+        retry_hint = ("[재시도 안내] 직전 시도의 answer가 비어 있거나 길이 한도를 넘었다. 표시된 행의 상품명과 값을 "
+                      "짧은 문장으로 반드시 인용하고, 행마다 한 줄 이내로 간결하게 써라.\n\n")
 
-    response = structured_llm.invoke(
-        [
-            ("system", ANSWER_SYSTEM_PROMPT),
-            (
-                "human",
-                f"[질문]\n{question}\n\n"
-                f"[질문이 요구한 항목] (answer는 이 항목만 다룬다)\n{requested_items}\n\n"
-                f"[문서 근거 상태] (미확보 주제는 '확인할 수 없음'으로 답할 것)\n{vector_status}\n\n"
-                f"[이미 SQL로 적용된 조건] (아래 데이터는 이 조건을 전부 만족하는 행만 남은 결과다. "
-                f"이 조건에 쓰인 컬럼이 데이터에 안 보여도 이미 만족된 것이니 다시 확인하지 마라)\n"
-                f"{applied_conditions}\n\n"
-                f"[SQL 실행 시 실제로 적용되거나 조정된 규칙]\n{sql_assumptions}\n\n"
-                f"[실제 실행 기록] (think_trace는 이 로그를 근거로 요약할 것 - 지어내지 말 것)\n{execution_log}\n\n"
-                f"[검색된 데이터] (전체 {len(merged_rows)}건 중 {len(preview)}건 표시)\n{rows_text}",
-            ),
-        ]
-    )
-    
+    if response is None:
+        answer_text = _render_rows_fallback(preview, len(merged_rows))
+        think_trace = "답변 LLM이 유효한 answer를 내지 못해 검색된 행을 그대로 정리함"
+        trace_notes.append("답변 생성: 결정론 폴백(행 나열)")
+    else:
+        answer_text = response.get("answer", "답변 생성 누락")
+        think_trace = response.get("think_trace", "추론 과정 생성 누락")
+
     # 6. 대회 요구사항(5개 필드)에 맞춰 최종 응답 객체 생성
     final_response = {
         "question_id": question_id,
         "question": question,
         "retrieved_context": retrieved_context,
-        "think_trace": response.get("think_trace", "추론 과정 생성 누락"),
-        "answer": response.get("answer", "답변 생성 누락")
+        "think_trace": think_trace,
+        "answer": _names_guard(answer_text, merged_rows) + footer,
     }
-    
+
     # 최종적으로 문자열로 직렬화하여 반환 (FastAPI 라우터단에서 바로 리턴 가능하도록)
     return {
-        "answer": json.dumps(final_response, ensure_ascii=False), 
-        "trace": [f"답변 생성 완료 ({len(merged_rows)}건 기반)"]
+        "answer": json.dumps(final_response, ensure_ascii=False),
+        "trace": trace_notes + [f"답변 생성 완료 ({len(merged_rows)}건 기반, {len(preview)}건 표시)"],
     }

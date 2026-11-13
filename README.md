@@ -1,199 +1,166 @@
-# 🏆 금융상품 Agent (Financial Product Analyst)
+# 금융상품 Agent — Financial Product Analyst
 
-> 정형 금융상품 데이터를 Agent가 스스로 탐색·연산하고, 근거에 기반해 답변하는 Agent RAG·QA 구현
+제10회 미래에셋증권 AI Festival 금융상품 Agent 과제. 국내채권·국내ETF·해외ETF·공모펀드에 대한 자연어 질문을 분석하고, **RDB · GraphDB · VectorDB에서 조회한 근거를 바탕으로 답변**합니다.
 
-## 📌 프로젝트 개요
+## 프로젝트 목적과 주요 기능
 
-- **프로젝트명:** 금융상품 Agent (Financial Product Analyst)
-- **개발기간:** [YYYY.MM.DD] ~ [YYYY.MM.DD] ([총 N주/개월])
-- **팀원 구성:** [총 3명] (BE 1인, Agent 2인)
-- **주최:** 제10회 미래에셋증권 AI Festival
-- **필수 사항:** 🔒 LLM은 **HyperCLOVA X만 사용 가능** (다른 LLM 사용 시 평가대상 제외)
+정형 데이터의 상품 속성과 수치만으로는 “삼성전자를 편입한 ETF” 같은 관계 질의나 투자설명서의 서술형 정보까지 답하기 어렵습니다. 금융상품 온톨로지로 개념·관계를 정의하고, 질문에 필요한 저장소를 선택해 조회 결과와 문서 근거를 결합합니다.
 
+| 구성요소 | 역할 |
+|---|---|
+| 데이터 정제·온톨로지 | 상품 개념, 속성, 관계, 출처와 허용값 정의 |
+| 금융상품 Knowledge Base | RDB의 수치·조건 조회, Graph의 관계 탐색, Vector의 문서 검색 |
+| Intent Analysis·Retrieval | 의도 분석·검증, 실행 계획과 검색 단계 간 의존성 처리 |
+| Answer Generator | 검색 결과를 근거로 답변하고, 확인하지 못한 항목과 사유 표시 |
 
+### 데이터·답변 원칙
 
-## 🎯 프로젝트 배경
+- **데이터 기준일은 2026-08-24**이며 외부 데이터도 `as_of ≤ 2026-08-24`만 사용합니다. 답변의 근거에는 배포일과 별개로 테이블·행의 실질 기준일을 표시합니다.
+- 주최측 데이터와 외부 데이터가 상충하면 주최측 값을 우선하고 상충 사실을 근거에 기록합니다.
+- **질의 의도 분석과 답변 생성에는 NCP HyperCLOVA X만 사용**합니다. 그 외 작업의 모델 제약은 [프로젝트 규칙](AGENTS.md)을 따릅니다.
+- 상품명은 완전일치를 우선합니다. 존재하지 않는 등급, 미래 실현값, 상품 부재, 도메인 위반 등은 사유를 구분해 “확인할 수 없음”으로 답해야 합니다.
+- **응답 15초 이내가 평가 목표**입니다. 현재 타임아웃 설정만으로 15초를 보장하지 않으며, 외부 서비스까지 포함한 실측이 필요합니다.
 
-주최 측 RDB 데이터에는 'ETF 구성 종목 정보' 등 관계형 정보가 빠져 있어, "삼성전자 포함된 ETF 알려줘" 같은 질문에 정형 데이터만으로는 답할 수 없습니다.
+## 파이프라인과 현재 구현
 
-이를 해결하기 위해 비정형 데이터에서 온톨로지를 활용해 관계를 추출하고, 근거(Evidence) 없이는 답변하지 않는 Agent를 구현하는 것이 핵심 목표입니다. 특히 데이터로 확인 불가능한 정보(존재하지 않는 신용등급, 기준일 이후 상품 등)에 대한 임의 답변과 근거 없는 수익률 전망은 가장 치명적인 감점 요인이므로, 검증·근거 제시 로직을 파이프라인 전 구간에 내재화합니다.
+```mermaid
+flowchart TD
+    Q[사용자 질문] --> I[HyperCLOVA X 의도 분석]
+    I --> V[의도 검증]
+    V --> P[조회 계획·의존성 스케줄링]
+    P --> R[RDB: 속성·필터·정렬]
+    P --> G[GraphDB: 상품·기업 관계]
+    P --> D[VectorDB: 문서 근거]
+    R --> M[결과 병합]
+    G --> M
+    D --> M
+    M --> A[근거 기반 답변·확인 불가 사유]
+```
 
-**예상 사용자 질의 예시**
+LangGraph가 `depends_on`에 따라 실행 가능한 검색 단계를 묶어 실행합니다. 독립적인 Graph·RDB 조회는 동시에 실행할 수 있고, Graph에서 찾은 상품을 RDB로 조회하는 경우에는 순차 실행합니다. 실제 노드와 분기는 [graph.py](src/agent/graph.py)에 있습니다.
 
-> "미국 증시에 상장된 주식형 ETF 중에서 총보수가 낮고 운용 규모가 큰 상품 3개만 비교해 주세요."
+현재 브랜치의 RDB 경로는 [도메인 카탈로그](src/tools/rdb_schema.py)로 속성·조건을 해소하고, [SQL 빌더](src/agent/sql_builder.py)가 처리 가능한 질의를 결정론적으로 컴파일합니다. 처리할 수 없는 질의는 LLM SQL 생성·수리 경로를 사용합니다. Graph는 pyoxigraph/HTTP 어댑터, Vector는 PostgreSQL·pgvector 어댑터로 연결합니다.
 
-**출력 예시**
+## 환경 설정
 
-- **결론:** 조건에 부합하는 상품 3종
-- **비교 항목:** 상품별 총보수 / 순자산(AUM) / 기초지수 비교
-- **근거:** 해외ETF마스터, 데이터 기준일
-
-**평가 포인트:** 정형 데이터 · 비교·연산 · 조건 해석 · 근거 표시
-
----
-
-## ⚙️ 주요 기능
-
-### Agent의 4대 필수 구성요소
-
-1. **정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology**
-  - [Parsing] PDF, PPT 등 데이터를 Markdown으로 변환
-    - [Ontology] 데이터를 종합하여 상품별 LLM 가이드라인(온톨로지) 제작
-2. **금융상품 KnowledgeBase — RDB + Vector + Graph**
-  - [Extraction] 정제된 데이터를 바탕으로 지식 추출
-    - [EntityResolution] 불필요·모호한 데이터의 판별 및 정리
-3. **Intent Analysis &amp; Retrieval Engine — 질의 의도 분석과 검색 엔진**
-  - [NL2SQL] 자연어 입력을 분석해 질의어(SQL)로 변환
-    - [Retrieval] 우선순위·탐색 순서를 효과적으로 조정
-4. **Answer Generator — 근거 기반 답변 생성**
-  - [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
-    - [환각 방지] 데이터에 없는 내용은 추측하지 않음
-
-### RDB vertical slice (현재 구현 범위)
-
-데이터 구축 현행과 전달용 정의서는 아래 문서를 기준으로 한다.
-
-- [현재 데이터 구축 프로세스와 DB 구조](docs/docs_data_layer/CURRENT_DATA_BUILD_STRUCTURE.md)
-- [DB Table 정의서 v1.0](docs/docs_data_layer/TABLE_DEFINITION_V1_0.md)
-
-현재 RDB와 Schema Vector는 PostgreSQL·pgvector 빌더가 구현돼 있다. Graph는 TBox/ABox
-TTL 생성·검증 단계이며 pyoxigraph runtime은 아직 구현되지 않았다.
-
-평가 질문 중 RDB만으로 답할 수 있는 14문항(`q001~q003`, `q005~q013`,
-`q017~q018`)은 다음 경로로 실행한다.
-
-`HyperCLOVA X QueryFrame → verified metadata grounding → deterministic validation → LogicalPlan → constrained PostgreSQL SELECT → evidence 응답`
-
-- QueryFrame은 의미 후보이며 SQL 컬럼·조인의 권위가 아니다. 실제 매핑은
-`metadata/schema_bindings.json`과 `metadata/business_rules.json`으로 제한한다.
-- 존재하지 않는 등급, 미래 확정값, 도메인 위반, 완전일치 상품 부재 및 실행 오류는
-추측하지 않고 `ABSTAIN`(`확인할 수 없음`)한다.
-- 응답 필드는 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`로 고정한다.
-- 이 단계에서는 Graph/Vector 검색과 자유 생성 NL2SQL을 사용하지 않는다.
+Python 가상환경을 만든 후 [requirements.txt](requirements.txt)의 의존성을 설치합니다. Python 최소 지원 버전과 OS별 호환성은 별도 검증이 필요합니다.
 
 ```bash
-python3 src/kb/build_schema_catalog.py --check
-python3 script/test_rdb_vertical_slice.py
-python3 script/test_rdb_vertical_slice.py --db
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
+Windows PowerShell에서는 가상환경 활성화에 `.venv\Scripts\Activate.ps1`을 사용합니다.
 
+`.env`가 없다면 [.env.example](.env.example)을 복사하고 연결 정보를 채웁니다. 기존 `.env`가 있으면 필요한 항목만 보완합니다. `.env`는 커밋하지 않습니다.
 
-### 실행방법
+| 변수 | 용도 |
+|---|---|
+| `CLOVA_API_KEY` | CLOVA Studio API 키. `CLOVASTUDIO_API_KEY`도 인식 |
+| `CLOVA_EMBEDDING_MODEL` | 기본 `bge-m3`. VectorDB 적재 모델과 일치해야 함 |
+| `RDB_API_BASE_URL` | RDB SQL API 주소. `POST /db/sql` 사용 |
+| `RDB_API_TIMEOUT` | RDB 요청 타임아웃. 기본 30초 |
+| `DATABASE_URL` 또는 `PGHOST`·`PGPORT`·`PGDATABASE`·`PGUSER`·`PGPASSWORD` | VectorDB PostgreSQL 연결 정보 |
+| `VECTOR_SCHEMA` / `VECTOR_DB_TIMEOUT` | 기본 스키마 `vec` / 기본 타임아웃 3초 |
+| `OXIGRAPH_REMOTE_STORE_PATH` | 마운트한 읽기 전용 Graph 저장소 |
+| `OXIGRAPH_LOCAL_STORE_PATH` | 로컬 Graph 저장소. 미설정 시 `artifacts/oxigraph` |
+| `OXIGRAPH_FALLBACK_ENDPOINT` | 파일 저장소를 사용할 수 없을 때 조회할 SPARQL URL. 서버가 제공하는 경로까지 포함 |
+| `OXIGRAPH_TIMEOUT` | Graph 요청 타임아웃. 기본 60초 |
 
+Graph 연결은 원격 마운트 → 로컬 저장소 → HTTP endpoint 순서로 시도합니다. DB와 API 키는 의존성 설치와 별도로 준비해야 합니다. 세부 설정은 `.env.example`과 각 어댑터 구현을 확인하세요.
+
+## 실행
+
+저장소 루트에서 실행하며, `src/`를 import 경로에 포함합니다.
+
+```bash
+PYTHONPATH=src python -c "from agent.graph import app; result = app.invoke({'question': 'VOO의 정식 상품명과 총보수를 알려줘', 'question_id': 'Q-001'}); print(result['answer'])"
 ```
-python3 -c 'from agent.agent_core import ask; print(ask("VOO의 정식 상품명과 총보수를 알려줘"))'
+
+Windows PowerShell:
+
+```powershell
+$env:PYTHONPATH='src'
+$env:PYTHONUTF8='1'
+python -c "from agent.graph import app; print(app.invoke({'question': 'VOO의 정식 상품명과 총보수를 알려줘', 'question_id': 'Q-001'})['answer'])"
 ```
 
-- 하
-  - 현대해상화재보험7(후)(콜/후)의 채권 종류, 발행사, 신용등급, 만기구분, 듀레이션을 알려줘. 원본 등급값과 온톨로지 분류값을 함께 제시해줘.
-  - AA- 이상이면서 잔존기간 3년 이하인 회사채를 매수수익률 순으로 보여줘
-- 중
-  - 우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·판매 여부·순자산·수익률을 비교해줘. 동일 펀드 판정에 사용한 대표종목번호를 근거로 제시해줘.
-- 상
-  - 최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리해줘. 현재 편입 관계와 단순 뉴스 언급을 구분하고, ETF→편입기업→산업/테마→근거문서 경로, 사건일, 문서명과 인용 근거를 제시해줘.
+`app.invoke()`는 파이프라인 상태를 반환합니다. 답변 관련 필드는 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`입니다. 입력의 `max_sql_retries`로 SQL 실패 재시도 횟수를 조정할 수 있으며 기본값은 3입니다.
 
+현재 브랜치에는 평가용 HTTP 서버 `serve_answer`가 없습니다. 위 Python 호출이 실제 진입점이며, 과거 문서의 `agent.agent_core.ask()`도 현재 존재하지 않습니다.
 
+### 질의 예시
 
----
+- “VOO의 정식 상품명과 총보수를 알려줘.”
+- “AA- 이상이면서 잔존기간 3년 이하인 회사채를 매수수익률 순으로 보여줘.”
+- “우리반도체BIG2플러스의 C-P와 C-Pe 클래스가 동일한 모펀드의 클래스인지 확인하고, 클래스별 종목번호·판매 여부·순자산·수익률을 비교해줘.”
+- “최근 6개월 동안 우주항공 테마와 연결된 이력이 있는 ETF를 정리하고, 현재 편입 관계와 뉴스 언급을 구분해 근거를 제시해줘.”
 
-## 🧑‍💻 개발 환경 및 기술 스택
+예시는 조회 요청이며 정답이나 데이터 확보를 보장하지 않습니다. 확보된 데이터·문서로 확인되지 않는 항목은 그 사유를 표시해야 합니다.
 
-### AHyperCLOVA X (필수, 유일 허용 LLM)
+## 온톨로지와 데이터 취급
 
-### Management Tool
+[ontology/](ontology/)의 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl`이 상품 도메인을 정의합니다. 네임스페이스는 `fp: <http://mafest.ai/product#>`입니다.
 
-Git  
+- 편입 관계는 `fp:Holding` 중간 개체로 비중·기준일·근거를 함께 표현합니다.
+- `domain/range`와 신용등급 순위를 선언해 허용되는 질의와 비교 범위를 정의합니다.
+- DatatypeProperty의 `fp:sourceTable`·`fp:sourceColumn`으로 원천을 추적합니다.
 
-&lt;/br&gt;&lt;/br&gt;  
+`data/csv/`는 동결 영역이며 재생성 가능한 산출물은 `artifacts/`에 둡니다. 집계·필터 작성 전 [AGENTS.md의 데이터 함정](AGENTS.md)을 확인해야 합니다. 특히 국내ETF/ETN 구분, 펀드·채권 키, 더미 괴리율, 총보수 결측, 편입종목 미확보를 주의합니다.
 
----
+## 검증
 
-## 🚧 설계
+SQL 컴파일 계약은 외부 LLM·DB 호출 없이 확인할 수 있습니다.
 
-### 📂 BackEnd Directory
+```bash
+python script/agent_test/test_sql_builder.py
+```
 
-[백엔드 폴더 구조를 텍스트로 붙여넣으세요]
+환경 설정 후 관련 회귀 테스트를 실행합니다. 일부 테스트는 import 시점에 CLOVA 객체를 생성하므로 API 키와 설치된 의존성이 필요합니다.
 
+```bash
+python script/agent_test/test_domain_as_of.py
+python script/agent_test/test_vector_search_node.py
+python script/graph_db/test_client_failover.py
+python script/graph_db/test_entity_index.py
+python script/vector_db/test_client_sql.py
+```
 
+골든셋 E2E 실행은 실제 LLM·DB를 호출합니다. 출력 폴더를 준비하고 원시 trace 저장 위치를 지정합니다.
 
----
+```bash
+mkdir -p artifacts/eval/readme-run
+PYTHONPATH=src PYTHONIOENCODING=utf-8 python test/pipline-test/latency/run_latency.py --rounds 2 --out artifacts/eval/readme-run/traces.jsonl
+```
 
+채점기는 `test/pipline-test/latency/analyze.py`입니다. 현재 `--output-dir` 옵션이 없고 결과를 해당 스크립트 폴더의 기존 파일에 쓰므로, 실행 전 산출물 보존 여부를 확인해야 합니다. 기준은 [평가 루브릭](test/pipline-test/golden_set_data_gap_evaluation_rubric.md)과 [골든셋](goldset/golden_answers_20260824.csv)입니다.
 
+## 저장소 구조와 문서
 
-&nbsp;
+```text
+src/
+  agent/           의도 분석·라우팅·검색·답변 생성
+  tools/           도메인 카탈로그·검색 도구
+  infrastructure/  GraphDB·VectorDB 연결
+  kb/              데이터 적재·지식베이스 빌더
+ontology/          도메인 온톨로지
+script/            검증·수집·보조 스크립트
+data/              원천·보강 데이터
+artifacts/         재생성 가능한 산출물
+metadata/          메타데이터
+goldset/           평가용 골든셋
+test/              실험·회귀·지연 측정
+docs/              설계·데이터·비교 문서
+```
 
-## 📋 Task 관리
+| 문서 | 내용 |
+|---|---|
+| [아키텍처](src/ARCHITECTURE.md) | 구성요소와 설계 설명 |
+| [데이터 레이어](docs/docs_data_layer/데이터%20레이어.md) | 계층·파일·출처 규칙 |
+| [컬럼 가이드](docs/docs_data_layer/컬럼%20가이드.md) | 데이터 컬럼 정의 |
+| [DB API](docs/docs_DB_connection/DATA_API_V1.md) | DB 조회 API 규격 |
+| [DB 스키마 인계](docs/docs_DB_connection/AGENT_DB_SCHEMA_HANDOFF.md) | Agent 연결용 스키마 |
+| [브랜치 비교·README 통합 기록](docs/branch_comparison_0906.md) | 현재 브랜치와 final의 차이, README 선택 근거 |
 
-Agent의 4대 필수 구성요소를 기준으로 task를 구성합니다.
-
-### 1. 정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology (`feature/ontology-definition`)
-
-- **필수 제출 요건:**  
-  - 주최 측 Git 레포지토리에 소스 코드와 함께 도메인별 온톨로지가 필수로 포함되어야 함.  
-  - 포맷이 반드시 `.ttl`일 필요는 없으나, 온톨로지 규칙이 정의된 파일이 소스 내에 존재해야 함.
-- **데이터 정합성 확보의 시작점:**  
-  - 주최 측 RDB 데이터에는 'ETF 구성 종목 정보' 등이 빠져 있음. 비정형 데이터에서 온톨로지를 활용해 관계를 추출하는 작업이 최우선으로 선행되어야 함.  
-  - 온톨로지라는 설계도가 Git에 먼저 커밋되어야 이후 지식 그래프 구축과 데이터 적재가 가능함.
-
-### 2. 금융상품 KnowledgeBase — RDB + Vector + Graph (`feature/knowledge-base`)
-
-- Task 1에서 정의한 온톨로지를 기반으로 RDB·Vector·Graph 세 계층에 데이터를 적재하여 지식 그래프를 구축.
-
-### 3. Intent Analysis &amp; Retrieval Engine + 답변 검증 레이어 (`feature/query-validation`)
-
-- **감점 요인 원천 차단:**  
-  - 가장 치명적인 감점 요인은 '데이터로 확인 불가능한 정보에 대해 임의로 대답하는 것'(예: 존재하지 않는 신용등급, 기준일 이후의 상품 등)과 '근거 없는 수익률 전망'임.
-- **기능 구현:**  
-  - LLM(하이퍼클로바X)에 질문을 바로 던지기 전에, 입력된 질문이 기준일(2026-07-11) 이전 데이터 범주에 존재하는지, 없는 상품을 묻고 있는지 검증하여 "확인할 수 없음"을 반환하는 밸리데이션 로직을 최초 파이프라인에 이식해야 함.
-
-### 4. Answer Generator &amp; API Response 규격화 (`feature/api-response-schema`)
-
-- **평가 기준 충족:** API 호출 시 반드시 정답의 근거(출처)가 포함되어 응답해야 함.  
-- **기능 구현:** 쿼리 검색 결과와 원문 데이터 청크 정보를 매핑하여 `evidence` 필드를 포함해 리턴하는 API 인터페이스 규격을 최우선으로 통일해 두어야, 이후 프론트엔드나 평가 서버 연동 시 응답 지연(15초 초과) 문제를 예방하기 수월함.
-
-
-
----
-
-## 😎 팀원 소개
-
-
-| [역할]                  | [역할]                  | [역할]                  |
-| :---------------------: | :---------------------: | :---------------------: |
-| [팀원 1](GitHub 프로필 링크) | [팀원 2](GitHub 프로필 링크) | [팀원 3](GitHub 프로필 링크) |
-
-
----
-
-## 문서
-
-
-| 문서                                                        | 내용                              |
-| --------------------------------------------------------- | ------------------------------- |
-| `EDA/EDA_REPORT.md`                                       | 4개 도메인 실측 분석, 답변 가능/불가 질의       |
-| `docs/docs_data_layer/COLUMN_GUIDE.md`                    | 207컬럼 설명서 + 온톨로지 등급 + enum 값    |
-| `docs/docs_data_layer/DATA_LAYER_PLAN.md`                 | 계층·파일명·출처 규칙의 **단일 기준**         |
-| `docs/docs_data_collection/EXTERNAL_DATA_SOURCES.md`      | **데이터 소스 목록** — 출처·URL·용도·구성·제약 |
-| `docs/docs_data_collection/EXTERNAL_DATA_PLAN.md`         | 외부데이터 우선순위(35문항 blocking 기준)    |
-| `docs/QUERY_COVERAGE_35.md`                               | 35문항 커버리지 매트릭스                  |
-| `docs/docs_data_collection/HOLDINGS_COLLECTION_DESIGN.md` | 편입종목 수집 설계·운용사 비교               |
-| `docs/docs_data_layer/DATA_INVENTORY.md`                  | 자동 생성. 직접 편집 금지                 |
-
-
-
-
-### Agent의 4대 필수 구성요소
-
-1. **정형·비정형 데이터 분석 &amp; 정제 — 상품 도메인 특화 Ontology**
-  - [Parsing] PDF, PPT 등 데이터를 Markdown으로 변환
-  - [Ontology] 데이터를 종합하여 상품별 LLM 가이드라인(온톨로지) 제작
-2. **금융상품 KnowledgeBase — RDB + Vector + Graph**
-  - [Extraction] 정제된 데이터를 바탕으로 지식 추출
-  - [EntityResolution] 불필요·모호한 데이터의 판별 및 정리
-3. **Intent Analysis &amp; Retrieval Engine — 질의 의도 분석과 검색 엔진**
-  - [NL2SQL] 자연어 입력을 분석해 질의어(SQL)로 변환
-  - [Retrieval] 우선순위·탐색 순서를 효과적으로 조정
-4. **Answer Generator — 근거 기반 답변 생성**
-  - [근거기반] 검색된 Evidence를 기반으로 정확한 답변 생성
-  - [환각 방지] 데이터에 없는 내용은 추측하지 않음
+과거 설계·실험 문서는 당시 상태를 설명할 수 있습니다. 실행 경로는 현재 소스와 환경 설정을 기준으로 확인하세요.
